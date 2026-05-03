@@ -1,7 +1,7 @@
 # Graph Report - excell-packaging-erp (29)  (2026-05-03)
 
 ## Corpus Check
-- 18 files · ~46,917 words
+- 18 files · ~46,935 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -74,7 +74,7 @@ Nodes (5): canEditDepartment(), getDepartmentStatus(), getStatusColor(), handleQ
 
 ### Community 7 - "Community 7"
 Cohesion: 1.0
-Nodes (2): clearHint(), onPopState()
+Nodes (2): getNormalizedAssignedDepartments(), parseAssignedDepartments()
 
 ### Community 8 - "Community 8"
 Cohesion: 1.0
@@ -82,7 +82,7 @@ Nodes (2): applyQuickRange(), toIsoDate()
 
 ### Community 9 - "Community 9"
 Cohesion: 1.0
-Nodes (2): getNormalizedAssignedDepartments(), parseAssignedDepartments()
+Nodes (2): clearHint(), onPopState()
 
 ### Community 10 - "Community 10"
 Cohesion: 1.0
@@ -95,11 +95,11 @@ Nodes (2): downloadCsv(), exportCurrentReport()
 ## Knowledge Gaps
 - **Thin community `Community 1`** (20 nodes): `addComponentToSelection()`, `applySortGeneric()`, `getOrderDate()`, `getPageSlice()`, `handleInstallApp()`, `handleNavClick()`, `handleResize()`, `handleSort()`, `isPendingQC()`, `makeLocalId()`, `onAppInstalled()`, `onBeforeInstallPrompt()`, `openComponentManager()`, `openEditorFromPrint()`, `removeComponentFromSelection()`, `SortIcon()`, `sortStatuses()`, `toggleDepartment()`, `updateComponentQty()`, `App.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 7`** (2 nodes): `clearHint()`, `onPopState()`
+- **Thin community `Community 7`** (2 nodes): `getNormalizedAssignedDepartments()`, `parseAssignedDepartments()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 8`** (2 nodes): `applyQuickRange()`, `toIsoDate()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 9`** (2 nodes): `getNormalizedAssignedDepartments()`, `parseAssignedDepartments()`
+- **Thin community `Community 9`** (2 nodes): `clearHint()`, `onPopState()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 10`** (2 nodes): `inRange()`, `parseDate()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.

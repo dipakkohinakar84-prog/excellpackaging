@@ -56,7 +56,7 @@ import {
   Truck
 } from 'lucide-react';
 import { AppView, User, Customer, Item, WorkOrder, Department, WOStatus, ChildItem } from './types';
-import { supabase, supabaseAnonKey, supabaseUrl } from './supabase';
+import { supabase, supabaseAnonKey } from './supabase';
 import { canAccessView, filterWorkOrdersByDepartment, getQCApprovalProgress, sendNotification, normalizeDepartment } from './utils';
 import DepartmentStatusTracker from './DepartmentStatusTracker';
 
@@ -367,7 +367,12 @@ const sendBackgroundPushEvent = async (params: {
 
     if (normalizedDepartments.length === 0) return;
 
-    const pushApiUrl = (import.meta.env.VITE_PUSH_API_URL as string | undefined) || `${supabaseUrl}/api/send-push`;
+    const pushApiUrl = import.meta.env.VITE_PUSH_API_URL as string | undefined;
+    if (!pushApiUrl || pushApiUrl.includes('127.0.0.1') || pushApiUrl.includes('localhost')) {
+      if (import.meta.env.DEV) console.warn('VITE_PUSH_API_URL is not configured for this environment. Background push skipped.');
+      return;
+    }
+
     const response = await fetch(pushApiUrl, {
       method: 'POST',
       headers: {
