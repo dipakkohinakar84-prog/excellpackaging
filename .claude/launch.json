@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "excell-erp-dev",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "node_modules\\.bin\\vite.cmd"],
+      "port": 3000
+    }
+  ]
+}

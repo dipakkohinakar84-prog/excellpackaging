@@ -1,0 +1,43 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# PocketBase local runtime files
+pocketbase
+pocketbase.exe
+pb_data/
+pb_migrations/
+pb_public/
+
+# Supabase local temp files
+supabase/.temp/
+
+# Graphify generated cache
+graphify-out/cache/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.claude/settings.local.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
