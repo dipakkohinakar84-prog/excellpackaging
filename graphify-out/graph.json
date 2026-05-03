@@ -9,7 +9,7 @@
       "source_file": "App.tsx",
       "source_location": "L1",
       "id": "c_users_rct_desktop_excell_packaging_erp_29_app_tsx",
-      "community": 4,
+      "community": 0,
       "norm_label": "app.tsx"
     },
     {
@@ -18,7 +18,7 @@
       "source_file": "App.tsx",
       "source_location": "L75",
       "id": "app_statusbadge",
-      "community": 4,
+      "community": 0,
       "norm_label": "statusbadge()"
     },
     {
@@ -27,7 +27,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L114",
       "id": "app_card",
-      "community": 4,
+      "community": 0,
       "norm_label": "card()"
     },
     {
@@ -36,7 +36,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L118",
       "id": "app_loadingstate",
-      "community": 4,
+      "community": 0,
       "norm_label": "loadingstate()"
     },
     {
@@ -45,7 +45,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L125",
       "id": "app_modal",
-      "community": 4,
+      "community": 0,
       "norm_label": "modal()"
     },
     {
@@ -54,7 +54,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L147",
       "id": "app_parseassigneddepartments",
-      "community": 9,
+      "community": 7,
       "norm_label": "parseassigneddepartments()"
     },
     {
@@ -72,7 +72,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L663",
       "id": "app_fetchcounts",
-      "community": 0,
+      "community": 5,
       "norm_label": "fetchcounts()"
     },
     {
@@ -135,7 +135,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L2002",
       "id": "app_handledepttoggle",
-      "community": 4,
+      "community": 0,
       "norm_label": "handledepttoggle()"
     },
     {
@@ -144,7 +144,7 @@
       "source_file": "App.tsx",
       "source_location": "L793",
       "id": "app_handlechilddepttoggle",
-      "community": 4,
+      "community": 0,
       "norm_label": "handlechilddepttoggle()"
     },
     {
@@ -162,7 +162,7 @@
       "source_file": "App.tsx",
       "source_location": "L968",
       "id": "app_onerror",
-      "community": 0,
+      "community": 5,
       "norm_label": "onerror()"
     },
     {
@@ -171,7 +171,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L2869",
       "id": "app_toggledeptselection",
-      "community": 4,
+      "community": 0,
       "norm_label": "toggledeptselection()"
     },
     {
@@ -198,25 +198,25 @@
       "source_file": "src\\App.tsx",
       "source_location": "L4552",
       "id": "app_handleprint",
-      "community": 4,
+      "community": 0,
       "norm_label": "handleprint()"
     },
     {
       "label": "handleLogin()",
       "file_type": "code",
       "source_file": "src\\App.tsx",
-      "source_location": "L5668",
+      "source_location": "L5698",
       "id": "app_handlelogin",
-      "community": 4,
+      "community": 0,
       "norm_label": "handlelogin()"
     },
     {
       "label": "handleLogout()",
       "file_type": "code",
       "source_file": "src\\App.tsx",
-      "source_location": "L5682",
+      "source_location": "L5712",
       "id": "app_handlelogout",
-      "community": 4,
+      "community": 0,
       "norm_label": "handlelogout()"
     },
     {
@@ -225,7 +225,7 @@
       "source_file": "DepartmentStatusTracker.tsx",
       "source_location": "L1",
       "id": "c_users_rct_desktop_excell_packaging_erp_29_departmentstatustracker_tsx",
-      "community": 5,
+      "community": 4,
       "norm_label": "departmentstatustracker.tsx"
     },
     {
@@ -234,7 +234,7 @@
       "source_file": "src\\DepartmentStatusTracker.tsx",
       "source_location": "L29",
       "id": "departmentstatustracker_getdepartmentstatus",
-      "community": 5,
+      "community": 4,
       "norm_label": "getdepartmentstatus()"
     },
     {
@@ -243,7 +243,7 @@
       "source_file": "src\\DepartmentStatusTracker.tsx",
       "source_location": "L41",
       "id": "departmentstatustracker_getstatuscolor",
-      "community": 5,
+      "community": 4,
       "norm_label": "getstatuscolor()"
     },
     {
@@ -252,7 +252,7 @@
       "source_file": "src\\DepartmentStatusTracker.tsx",
       "source_location": "L53",
       "id": "departmentstatustracker_handlestatuschange",
-      "community": 5,
+      "community": 4,
       "norm_label": "handlestatuschange()"
     },
     {
@@ -261,7 +261,7 @@
       "source_file": "src\\DepartmentStatusTracker.tsx",
       "source_location": "L57",
       "id": "departmentstatustracker_handleqcstatuschange",
-      "community": 5,
+      "community": 4,
       "norm_label": "handleqcstatuschange()"
     },
     {
@@ -270,7 +270,7 @@
       "source_file": "src\\DepartmentStatusTracker.tsx",
       "source_location": "L61",
       "id": "departmentstatustracker_caneditdepartment",
-      "community": 5,
+      "community": 4,
       "norm_label": "caneditdepartment()"
     },
     {
@@ -459,7 +459,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L1",
       "id": "c_users_rct_desktop_excell_packaging_erp_29_src_app_tsx",
-      "community": 1,
+      "community": 2,
       "norm_label": "app.tsx"
     },
     {
@@ -468,7 +468,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L197",
       "id": "app_makelocalid",
-      "community": 1,
+      "community": 2,
       "norm_label": "makelocalid()"
     },
     {
@@ -486,7 +486,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L217",
       "id": "app_sortstatuses",
-      "community": 1,
+      "community": 2,
       "norm_label": "sortstatuses()"
     },
     {
@@ -495,7 +495,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L229",
       "id": "app_getpageslice",
-      "community": 1,
+      "community": 2,
       "norm_label": "getpageslice()"
     },
     {
@@ -504,7 +504,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L725",
       "id": "app_getorderdate",
-      "community": 1,
+      "community": 2,
       "norm_label": "getorderdate()"
     },
     {
@@ -513,7 +513,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L1971",
       "id": "app_opencomponentmanager",
-      "community": 1,
+      "community": 2,
       "norm_label": "opencomponentmanager()"
     },
     {
@@ -522,7 +522,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L2014",
       "id": "app_addcomponenttoselection",
-      "community": 1,
+      "community": 2,
       "norm_label": "addcomponenttoselection()"
     },
     {
@@ -531,7 +531,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L2025",
       "id": "app_updatecomponentqty",
-      "community": 1,
+      "community": 2,
       "norm_label": "updatecomponentqty()"
     },
     {
@@ -540,7 +540,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L2031",
       "id": "app_removecomponentfromselection",
-      "community": 1,
+      "community": 2,
       "norm_label": "removecomponentfromselection()"
     },
     {
@@ -558,7 +558,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L2373",
       "id": "app_toggledepartment",
-      "community": 1,
+      "community": 2,
       "norm_label": "toggledepartment()"
     },
     {
@@ -567,7 +567,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L2739",
       "id": "app_handleresize",
-      "community": 1,
+      "community": 2,
       "norm_label": "handleresize()"
     },
     {
@@ -576,7 +576,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L4184",
       "id": "app_openeditorfromprint",
-      "community": 1,
+      "community": 2,
       "norm_label": "openeditorfromprint()"
     },
     {
@@ -594,7 +594,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L4768",
       "id": "app_fetchreportdata",
-      "community": 0,
+      "community": 5,
       "norm_label": "fetchreportdata()"
     },
     {
@@ -603,7 +603,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L4808",
       "id": "app_parsedate",
-      "community": 7,
+      "community": 10,
       "norm_label": "parsedate()"
     },
     {
@@ -612,7 +612,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L4814",
       "id": "app_inrange",
-      "community": 7,
+      "community": 10,
       "norm_label": "inrange()"
     },
     {
@@ -621,7 +621,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5017",
       "id": "app_handlesort",
-      "community": 1,
+      "community": 2,
       "norm_label": "handlesort()"
     },
     {
@@ -630,7 +630,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5021",
       "id": "app_applysortgeneric",
-      "community": 1,
+      "community": 2,
       "norm_label": "applysortgeneric()"
     },
     {
@@ -639,7 +639,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5045",
       "id": "app_downloadcsv",
-      "community": 10,
+      "community": 8,
       "norm_label": "downloadcsv()"
     },
     {
@@ -648,7 +648,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5071",
       "id": "app_exportcurrentreport",
-      "community": 10,
+      "community": 8,
       "norm_label": "exportcurrentreport()"
     },
     {
@@ -666,7 +666,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5139",
       "id": "app_sorticon",
-      "community": 1,
+      "community": 2,
       "norm_label": "sorticon()"
     },
     {
@@ -675,7 +675,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5490",
       "id": "app_onbeforeinstallprompt",
-      "community": 1,
+      "community": 2,
       "norm_label": "onbeforeinstallprompt()"
     },
     {
@@ -684,7 +684,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5496",
       "id": "app_onappinstalled",
-      "community": 1,
+      "community": 2,
       "norm_label": "onappinstalled()"
     },
     {
@@ -693,7 +693,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5515",
       "id": "app_getnormalizedassigneddepartments",
-      "community": 9,
+      "community": 7,
       "norm_label": "getnormalizedassigneddepartments()"
     },
     {
@@ -711,43 +711,52 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5529",
       "id": "app_ispendingqc",
-      "community": 1,
+      "community": 2,
       "norm_label": "ispendingqc()"
+    },
+    {
+      "label": "getNewlyStartedDepartments()",
+      "file_type": "code",
+      "source_file": "src\\App.tsx",
+      "source_location": "L5534",
+      "id": "app_getnewlystarteddepartments",
+      "community": 2,
+      "norm_label": "getnewlystarteddepartments()"
     },
     {
       "label": "handleNavClick()",
       "file_type": "code",
       "source_file": "src\\App.tsx",
-      "source_location": "L5684",
+      "source_location": "L5714",
       "id": "app_handlenavclick",
-      "community": 1,
+      "community": 2,
       "norm_label": "handlenavclick()"
     },
     {
       "label": "clearHint()",
       "file_type": "code",
       "source_file": "src\\App.tsx",
-      "source_location": "L5701",
+      "source_location": "L5731",
       "id": "app_clearhint",
-      "community": 8,
+      "community": 9,
       "norm_label": "clearhint()"
     },
     {
       "label": "onPopState()",
       "file_type": "code",
       "source_file": "src\\App.tsx",
-      "source_location": "L5702",
+      "source_location": "L5732",
       "id": "app_onpopstate",
-      "community": 8,
+      "community": 9,
       "norm_label": "onpopstate()"
     },
     {
       "label": "handleInstallApp()",
       "file_type": "code",
       "source_file": "src\\App.tsx",
-      "source_location": "L5788",
+      "source_location": "L5818",
       "id": "app_handleinstallapp",
-      "community": 1,
+      "community": 2,
       "norm_label": "handleinstallapp()"
     },
     {
@@ -756,7 +765,7 @@
       "source_file": "src\\DepartmentStatusTracker.tsx",
       "source_location": "L1",
       "id": "c_users_rct_desktop_excell_packaging_erp_29_src_departmentstatustracker_tsx",
-      "community": 5,
+      "community": 4,
       "norm_label": "departmentstatustracker.tsx"
     },
     {
@@ -774,7 +783,7 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L1",
       "id": "c_users_rct_desktop_excell_packaging_erp_29_src_pocketbase_ts",
-      "community": 2,
+      "community": 1,
       "norm_label": "pocketbase.ts"
     },
     {
@@ -783,7 +792,7 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L33",
       "id": "pocketbase_topostgresevent",
-      "community": 2,
+      "community": 1,
       "norm_label": "topostgresevent()"
     },
     {
@@ -792,7 +801,7 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L57",
       "id": "pocketbase_resolvecollectionname",
-      "community": 2,
+      "community": 1,
       "norm_label": "resolvecollectionname()"
     },
     {
@@ -801,7 +810,7 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L83",
       "id": "pocketbase_isvalidlegacyid",
-      "community": 2,
+      "community": 1,
       "norm_label": "isvalidlegacyid()"
     },
     {
@@ -810,7 +819,7 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L87",
       "id": "pocketbase_normalizerecord",
-      "community": 2,
+      "community": 1,
       "norm_label": "normalizerecord()"
     },
     {
@@ -819,7 +828,7 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L98",
       "id": "pocketbase_normalizepayload",
-      "community": 2,
+      "community": 1,
       "norm_label": "normalizepayload()"
     },
     {
@@ -828,7 +837,7 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L109",
       "id": "pocketbase_getnextlegacyid",
-      "community": 2,
+      "community": 1,
       "norm_label": "getnextlegacyid()"
     },
     {
@@ -837,7 +846,7 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L123",
       "id": "pocketbase_ensurelegacyid",
-      "community": 2,
+      "community": 1,
       "norm_label": "ensurelegacyid()"
     },
     {
@@ -846,7 +855,7 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L136",
       "id": "pocketbase_escapefiltervalue",
-      "community": 2,
+      "community": 1,
       "norm_label": "escapefiltervalue()"
     },
     {
@@ -855,7 +864,7 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L142",
       "id": "pocketbase_topocketbasefield",
-      "community": 2,
+      "community": 1,
       "norm_label": "topocketbasefield()"
     },
     {
@@ -864,7 +873,7 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L147",
       "id": "pocketbase_buildfilter",
-      "community": 2,
+      "community": 1,
       "norm_label": "buildfilter()"
     },
     {
@@ -873,7 +882,7 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L166",
       "id": "pocketbase_topocketbasesort",
-      "community": 2,
+      "community": 1,
       "norm_label": "topocketbasesort()"
     },
     {
@@ -882,7 +891,7 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L171",
       "id": "pocketbase_toerror",
-      "community": 2,
+      "community": 1,
       "norm_label": "toerror()"
     },
     {
@@ -891,7 +900,7 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L176",
       "id": "pocketbase_pocketbasequery",
-      "community": 0,
+      "community": 1,
       "norm_label": "pocketbasequery"
     },
     {
@@ -900,7 +909,7 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L184",
       "id": "pocketbase_pocketbasequery_constructor",
-      "community": 0,
+      "community": 1,
       "norm_label": ".constructor()"
     },
     {
@@ -936,7 +945,7 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L204",
       "id": "pocketbase_pocketbasequery_delete",
-      "community": 0,
+      "community": 1,
       "norm_label": ".delete()"
     },
     {
@@ -945,7 +954,7 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L209",
       "id": "pocketbase_pocketbasequery_upsert",
-      "community": 0,
+      "community": 1,
       "norm_label": ".upsert()"
     },
     {
@@ -963,7 +972,7 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L219",
       "id": "pocketbase_pocketbasequery_in",
-      "community": 0,
+      "community": 1,
       "norm_label": ".in()"
     },
     {
@@ -972,7 +981,7 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L224",
       "id": "pocketbase_pocketbasequery_order",
-      "community": 0,
+      "community": 5,
       "norm_label": ".order()"
     },
     {
@@ -981,7 +990,7 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L229",
       "id": "pocketbase_pocketbasequery_limit",
-      "community": 0,
+      "community": 5,
       "norm_label": ".limit()"
     },
     {
@@ -999,7 +1008,7 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L239",
       "id": "pocketbase_pocketbasequery_then",
-      "community": 2,
+      "community": 1,
       "norm_label": ".then()"
     },
     {
@@ -1008,7 +1017,7 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L246",
       "id": "pocketbase_pocketbasequery_execute",
-      "community": 2,
+      "community": 1,
       "norm_label": ".execute()"
     },
     {
@@ -1017,7 +1026,7 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L321",
       "id": "pocketbase_pocketbasechannel",
-      "community": 2,
+      "community": 1,
       "norm_label": "pocketbasechannel"
     },
     {
@@ -1026,7 +1035,7 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L326",
       "id": "pocketbase_pocketbasechannel_constructor",
-      "community": 2,
+      "community": 1,
       "norm_label": ".constructor()"
     },
     {
@@ -1035,7 +1044,7 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L330",
       "id": "pocketbase_pocketbasechannel_on",
-      "community": 2,
+      "community": 1,
       "norm_label": ".on()"
     },
     {
@@ -1044,7 +1053,7 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L335",
       "id": "pocketbase_pocketbasechannel_subscribe",
-      "community": 2,
+      "community": 1,
       "norm_label": ".subscribe()"
     },
     {
@@ -1053,7 +1062,7 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L392",
       "id": "pocketbase_pocketbasechannel_unsubscribe",
-      "community": 2,
+      "community": 1,
       "norm_label": ".unsubscribe()"
     },
     {
@@ -2079,7 +2088,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\App.tsx",
-      "source_location": "L5668",
+      "source_location": "L5698",
       "weight": 1.0,
       "_src": "c_users_rct_desktop_excell_packaging_erp_29_src_app_tsx",
       "_tgt": "app_handlelogin",
@@ -2103,7 +2112,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\App.tsx",
-      "source_location": "L5682",
+      "source_location": "L5712",
       "weight": 1.0,
       "_src": "c_users_rct_desktop_excell_packaging_erp_29_src_app_tsx",
       "_tgt": "app_handlelogout",
@@ -2955,7 +2964,19 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\App.tsx",
-      "source_location": "L5684",
+      "source_location": "L5534",
+      "weight": 1.0,
+      "_src": "c_users_rct_desktop_excell_packaging_erp_29_src_app_tsx",
+      "_tgt": "app_getnewlystarteddepartments",
+      "source": "c_users_rct_desktop_excell_packaging_erp_29_src_app_tsx",
+      "target": "app_getnewlystarteddepartments",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\App.tsx",
+      "source_location": "L5714",
       "weight": 1.0,
       "_src": "c_users_rct_desktop_excell_packaging_erp_29_src_app_tsx",
       "_tgt": "app_handlenavclick",
@@ -2967,7 +2988,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\App.tsx",
-      "source_location": "L5701",
+      "source_location": "L5731",
       "weight": 1.0,
       "_src": "c_users_rct_desktop_excell_packaging_erp_29_src_app_tsx",
       "_tgt": "app_clearhint",
@@ -2979,7 +3000,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\App.tsx",
-      "source_location": "L5702",
+      "source_location": "L5732",
       "weight": 1.0,
       "_src": "c_users_rct_desktop_excell_packaging_erp_29_src_app_tsx",
       "_tgt": "app_onpopstate",
@@ -2991,7 +3012,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\App.tsx",
-      "source_location": "L5788",
+      "source_location": "L5818",
       "weight": 1.0,
       "_src": "c_users_rct_desktop_excell_packaging_erp_29_src_app_tsx",
       "_tgt": "app_handleinstallapp",
@@ -3099,7 +3120,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\App.tsx",
-      "source_location": "L5708",
+      "source_location": "L5738",
       "weight": 1.0,
       "_src": "app_onpopstate",
       "_tgt": "app_clearhint",

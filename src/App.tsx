@@ -5531,6 +5531,26 @@ export default function App() {
       (!departmentStatus?.qc_status || departmentStatus.qc_status === 'Pending QC')
     );
 
+    const getNewlyStartedDepartments = (oldWorkOrder: any, newStatuses: any[]): string[] => {
+      if (!oldWorkOrder?.id) return [];
+
+      const oldStatuses = Array.isArray(oldWorkOrder.department_statuses) ? oldWorkOrder.department_statuses : [];
+      const oldStatusByDepartment = new Map(
+        oldStatuses.map((departmentStatus: any) => [
+          normalizeDepartment(departmentStatus.department),
+          departmentStatus.status,
+        ])
+      );
+
+      return newStatuses
+        .filter((departmentStatus: any) => {
+          const department = normalizeDepartment(departmentStatus.department);
+          return departmentStatus.status === 'Work Started' && oldStatusByDepartment.get(department) !== 'Work Started';
+        })
+        .map((departmentStatus: any) => normalizeDepartment(departmentStatus.department))
+        .filter((department: string) => !!department);
+    };
+
     const channel = supabase
       .channel(`wo-notifications-${loggedInUser.id}`)
       .on(
@@ -5592,6 +5612,16 @@ export default function App() {
               'Order Status Updated',
               `Order #${wo.id} is now ${wo.status}`
             );
+          }
+
+          if (userDept === 'Office') {
+            getNewlyStartedDepartments(oldWo, statuses).forEach((department) => {
+              notifyOnce(
+                `office-dept-started-${wo.id}-${department}`,
+                'Work Started',
+                `Order #${wo.id} - ${department.replace(/_/g, ' ')} started work`
+              );
+            });
           }
 
           if (userDept === 'Quality_Control') {
