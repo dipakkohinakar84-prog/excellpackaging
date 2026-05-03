@@ -30,6 +30,14 @@ type RealtimeHandler = {
   callback: (payload: { eventType: string; new: any; old: any }) => void;
 };
 
+const toPostgresEvent = (action: string) => {
+  const normalized = action.toLowerCase();
+  if (normalized === 'create') return 'INSERT';
+  if (normalized === 'update') return 'UPDATE';
+  if (normalized === 'delete') return 'DELETE';
+  return action.toUpperCase();
+};
+
 const DEFAULT_POCKETBASE_URL = 'http://127.0.0.1:8090';
 
 export const pocketBaseUrl =
@@ -270,6 +278,7 @@ class PocketBaseQuery<T = any> implements PromiseLike<QueryResult<T>> {
 class PocketBaseChannel {
   private handlers: RealtimeHandler[] = [];
   private unsubscribeTasks: Array<() => void> = [];
+  private recordCache = new Map<string, any>();
 
   constructor(private readonly name: string) {
     void this.name;
@@ -287,16 +296,32 @@ class PocketBaseChannel {
       tables.map(async (table) => {
         const pocketBaseTable = resolveCollectionName(table);
 
+        const initialRecords = await pb.collection(pocketBaseTable).getFullList({ requestKey: null }).catch(() => []);
+        initialRecords.forEach((record) => {
+          const normalized = normalizeRecord(record);
+          this.recordCache.set(`${table}:${record.id}`, normalized);
+        });
+
         const unsubscribe = await pb.collection(pocketBaseTable).subscribe('*', (event) => {
+          const action = toPostgresEvent(event.action);
+          const cacheKey = `${table}:${event.record.id}`;
+          const oldRecord = this.recordCache.get(cacheKey) || null;
+          const newRecord = event.action === 'delete' ? null : normalizeRecord(event.record);
+
+          if (newRecord) {
+            this.recordCache.set(cacheKey, newRecord);
+          } else {
+            this.recordCache.delete(cacheKey);
+          }
+
           const matchingHandlers = this.handlers.filter((handler) => {
-            const action = event.action.toUpperCase();
             return handler.table === table && (handler.event === '*' || handler.event.toUpperCase() === action);
           });
 
           const payload = {
-            eventType: event.action.toUpperCase(),
-            new: event.action === 'delete' ? null : normalizeRecord(event.record),
-            old: event.action === 'delete' ? normalizeRecord(event.record) : null,
+            eventType: action,
+            new: newRecord,
+            old: action === 'INSERT' ? null : oldRecord,
           };
 
           matchingHandlers.forEach((handler) => handler.callback(payload));

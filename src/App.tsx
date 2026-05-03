@@ -5521,6 +5521,11 @@ export default function App() {
       sendNotification(title, body);
     };
 
+    const isPendingQC = (departmentStatus: any) => (
+      departmentStatus?.status === 'Ready for QC' &&
+      (!departmentStatus?.qc_status || departmentStatus.qc_status === 'Pending QC')
+    );
+
     const channel = supabase
       .channel(`wo-notifications-${loggedInUser.id}`)
       .on(
@@ -5553,7 +5558,7 @@ export default function App() {
           const wo: any = payload.new;
           const oldWo: any = payload.old || {};
           const statuses = Array.isArray(wo.department_statuses) ? wo.department_statuses : [];
-          const statusChanged = oldWo.status !== wo.status;
+          const statusChanged = !!oldWo.id && oldWo.status !== wo.status;
 
           const oldAssigned = getNormalizedAssignedDepartments(oldWo);
           const newAssigned = getNormalizedAssignedDepartments(wo);
@@ -5585,8 +5590,10 @@ export default function App() {
           }
 
           if (userDept === 'Quality_Control') {
-            const pendingQC = statuses.some((ds: any) => ds.status === 'Ready for QC' && !ds.qc_status);
-            if (pendingQC) {
+            const oldStatuses = Array.isArray(oldWo.department_statuses) ? oldWo.department_statuses : [];
+            const hadPendingQC = oldStatuses.some(isPendingQC);
+            const pendingQC = statuses.some(isPendingQC);
+            if (pendingQC && !hadPendingQC) {
               notifyOnce(
                 `qc-${wo.id}-${wo.status}`,
                 'QC Check Required',
