@@ -68,10 +68,26 @@ const idFieldCollections = new Set([
   'notification_events',
 ]);
 
+const legacyIdStart: Record<string, number> = {
+  users: 1,
+  erp_users: 1,
+  departments: 1,
+  customers: 1,
+  items: 1,
+  work_orders: 1001,
+  dispatch_logs: 1,
+  custom_bom_plans: 1,
+  notification_events: 1,
+};
+
+const isValidLegacyId = (value: any) => (
+  typeof value === 'number' && Number.isFinite(value) && value > 0
+);
+
 const normalizeRecord = <T = any>(record: RecordModel | Record<string, any>): T => {
   const normalized: Record<string, any> = { ...record };
 
-  if (normalized.legacy_id !== undefined && normalized.legacy_id !== null) {
+  if (isValidLegacyId(normalized.legacy_id)) {
     normalized.id = normalized.legacy_id;
   }
 
@@ -85,6 +101,33 @@ const normalizePayload = (collection: string, payload: Record<string, any>) => {
   if (idFieldCollections.has(collection) && normalized.id !== undefined && normalized.legacy_id === undefined) {
     normalized.legacy_id = normalized.id;
     delete normalized.id;
+  }
+
+  return normalized;
+};
+
+const getNextLegacyId = async (collectionName: string) => {
+  const records = await pb.collection(resolveCollectionName(collectionName)).getFullList({
+    fields: 'legacy_id',
+    requestKey: null,
+  });
+
+  const highest = records.reduce((max, record) => {
+    const value = Number(record.legacy_id || 0);
+    return value > max ? value : max;
+  }, 0);
+
+  return highest > 0 ? highest + 1 : (legacyIdStart[collectionName] || 1);
+};
+
+const ensureLegacyId = async (collectionName: string, payload: Record<string, any>) => {
+  const normalized = normalizePayload(collectionName, payload);
+
+  if (
+    idFieldCollections.has(collectionName) &&
+    !isValidLegacyId(normalized.legacy_id)
+  ) {
+    normalized.legacy_id = await getNextLegacyId(collectionName);
   }
 
   return normalized;
@@ -226,7 +269,7 @@ class PocketBaseQuery<T = any> implements PromiseLike<QueryResult<T>> {
       if (mutation.type === 'insert') {
         const created = [];
         for (const row of mutation.payload) {
-          const record = await collection.create(normalizePayload(this.collectionName, row), { requestKey: null });
+          const record = await collection.create(await ensureLegacyId(this.collectionName, row), { requestKey: null });
           created.push(normalizeRecord(record));
         }
 

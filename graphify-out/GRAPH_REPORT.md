@@ -1,12 +1,12 @@
 # Graph Report - excell-packaging-erp (29)  (2026-05-03)
 
 ## Corpus Check
-- 18 files · ~46,935 words
+- 18 files · ~47,058 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 119 nodes · 207 edges · 11 communities detected
-- Extraction: 78% EXTRACTED · 22% INFERRED · 0% AMBIGUOUS · INFERRED: 46 edges (avg confidence: 0.8)
+- 122 nodes · 216 edges · 11 communities detected
+- Extraction: 79% EXTRACTED · 21% INFERRED · 0% AMBIGUOUS · INFERRED: 46 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -49,7 +49,7 @@
 ## Communities
 
 ### Community 0 - "Community 0"
-Cohesion: 0.18
+Cohesion: 0.17
 Nodes (15): async(), fetchAll(), fetchChildren(), fetchCounts(), fetchData(), fetchReportData(), handleAddChild(), handleDeleteUser() (+7 more)
 
 ### Community 1 - "Community 1"
@@ -57,8 +57,8 @@ Cohesion: 0.1
 Nodes (1): openComponentManager()
 
 ### Community 2 - "Community 2"
-Cohesion: 0.15
-Nodes (8): buildFilter(), escapeFilterValue(), normalizePayload(), normalizeRecord(), PocketBaseChannel, resolveCollectionName(), toError(), toPocketBaseSort()
+Cohesion: 0.16
+Nodes (11): buildFilter(), ensureLegacyId(), escapeFilterValue(), getNextLegacyId(), isValidLegacyId(), normalizePayload(), normalizeRecord(), PocketBaseChannel (+3 more)
 
 ### Community 3 - "Community 3"
 Cohesion: 0.31
@@ -74,47 +74,47 @@ Nodes (5): canEditDepartment(), getDepartmentStatus(), getStatusColor(), handleQ
 
 ### Community 7 - "Community 7"
 Cohesion: 1.0
-Nodes (2): getNormalizedAssignedDepartments(), parseAssignedDepartments()
+Nodes (2): inRange(), parseDate()
 
 ### Community 8 - "Community 8"
 Cohesion: 1.0
-Nodes (2): applyQuickRange(), toIsoDate()
+Nodes (2): clearHint(), onPopState()
 
 ### Community 9 - "Community 9"
 Cohesion: 1.0
-Nodes (2): clearHint(), onPopState()
+Nodes (2): getNormalizedAssignedDepartments(), parseAssignedDepartments()
 
 ### Community 10 - "Community 10"
 Cohesion: 1.0
-Nodes (2): inRange(), parseDate()
+Nodes (2): downloadCsv(), exportCurrentReport()
 
 ### Community 11 - "Community 11"
 Cohesion: 1.0
-Nodes (2): downloadCsv(), exportCurrentReport()
+Nodes (2): applyQuickRange(), toIsoDate()
 
 ## Knowledge Gaps
 - **Thin community `Community 1`** (20 nodes): `addComponentToSelection()`, `applySortGeneric()`, `getOrderDate()`, `getPageSlice()`, `handleInstallApp()`, `handleNavClick()`, `handleResize()`, `handleSort()`, `isPendingQC()`, `makeLocalId()`, `onAppInstalled()`, `onBeforeInstallPrompt()`, `openComponentManager()`, `openEditorFromPrint()`, `removeComponentFromSelection()`, `SortIcon()`, `sortStatuses()`, `toggleDepartment()`, `updateComponentQty()`, `App.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 7`** (2 nodes): `getNormalizedAssignedDepartments()`, `parseAssignedDepartments()`
+- **Thin community `Community 7`** (2 nodes): `inRange()`, `parseDate()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 8`** (2 nodes): `applyQuickRange()`, `toIsoDate()`
+- **Thin community `Community 8`** (2 nodes): `clearHint()`, `onPopState()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 9`** (2 nodes): `clearHint()`, `onPopState()`
+- **Thin community `Community 9`** (2 nodes): `getNormalizedAssignedDepartments()`, `parseAssignedDepartments()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 10`** (2 nodes): `inRange()`, `parseDate()`
+- **Thin community `Community 10`** (2 nodes): `downloadCsv()`, `exportCurrentReport()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 11`** (2 nodes): `downloadCsv()`, `exportCurrentReport()`
+- **Thin community `Community 11`** (2 nodes): `applyQuickRange()`, `toIsoDate()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `PocketBaseQuery` connect `Community 0` to `Community 2`?**
-  _High betweenness centrality (0.150) - this node is a cross-community bridge._
+  _High betweenness centrality (0.163) - this node is a cross-community bridge._
 - **Why does `sendNotification()` connect `Community 3` to `Community 0`, `Community 2`, `Community 5`?**
   _High betweenness centrality (0.112) - this node is a cross-community bridge._
 - **Why does `normalizeDepartment()` connect `Community 3` to `Community 0`, `Community 4`, `Community 5`?**
-  _High betweenness centrality (0.100) - this node is a cross-community bridge._
+  _High betweenness centrality (0.096) - this node is a cross-community bridge._
 - **Are the 4 inferred relationships involving `fetchData()` (e.g. with `.order()` and `.select()`) actually correct?**
   _`fetchData()` has 4 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 5 inferred relationships involving `normalizeDepartment()` (e.g. with `fetchData()` and `handleLogin()`) actually correct?**
