@@ -318,6 +318,10 @@ class PocketBaseChannel {
             return handler.table === table && (handler.event === '*' || handler.event.toUpperCase() === action);
           });
 
+          if (import.meta.env.DEV && matchingHandlers.length === 0) {
+            console.debug('PocketBase realtime event had no matching handler:', { table, action, rawAction: event.action });
+          }
+
           const payload = {
             eventType: action,
             new: newRecord,
@@ -330,8 +334,14 @@ class PocketBaseChannel {
         this.unsubscribeTasks.push(unsubscribe);
       }),
     )
-      .then(() => callback?.('SUBSCRIBED'))
-      .catch(() => callback?.('CHANNEL_ERROR'));
+      .then(() => {
+        if (import.meta.env.DEV) console.debug('PocketBase realtime subscribed:', tables);
+        callback?.('SUBSCRIBED');
+      })
+      .catch((error) => {
+        console.error('PocketBase realtime subscription failed:', error);
+        callback?.('CHANNEL_ERROR');
+      });
 
     return this;
   }

@@ -71,11 +71,6 @@ export const playNotificationSound = () => {
 export const sendNotification = (title: string, body: string, departments?: string[]) => {
   playNotificationSound();
 
-  if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-    if (import.meta.env.DEV) console.log('Foreground notification suppressed:', title, body, departments);
-    return;
-  }
-
   if ('Notification' in window && Notification.permission === 'granted') {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.ready

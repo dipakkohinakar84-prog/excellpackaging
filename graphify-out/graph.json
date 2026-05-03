@@ -54,7 +54,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L147",
       "id": "app_parseassigneddepartments",
-      "community": 10,
+      "community": 9,
       "norm_label": "parseassigneddepartments()"
     },
     {
@@ -349,7 +349,7 @@
       "label": "requestNotificationPermission()",
       "file_type": "code",
       "source_file": "src\\utils.ts",
-      "source_location": "L100",
+      "source_location": "L95",
       "id": "utils_requestnotificationpermission",
       "community": 3,
       "norm_label": "requestnotificationpermission()"
@@ -358,7 +358,7 @@
       "label": "canAccessView()",
       "file_type": "code",
       "source_file": "src\\utils.ts",
-      "source_location": "L107",
+      "source_location": "L102",
       "id": "utils_canaccessview",
       "community": 3,
       "norm_label": "canaccessview()"
@@ -367,7 +367,7 @@
       "label": "getAllowedStatuses()",
       "file_type": "code",
       "source_file": "src\\utils.ts",
-      "source_location": "L154",
+      "source_location": "L149",
       "id": "utils_getallowedstatuses",
       "community": 3,
       "norm_label": "getallowedstatuses()"
@@ -376,7 +376,7 @@
       "label": "canEditWorkOrder()",
       "file_type": "code",
       "source_file": "src\\utils.ts",
-      "source_location": "L173",
+      "source_location": "L168",
       "id": "utils_caneditworkorder",
       "community": 3,
       "norm_label": "caneditworkorder()"
@@ -385,7 +385,7 @@
       "label": "filterWorkOrdersByDepartment()",
       "file_type": "code",
       "source_file": "src\\utils.ts",
-      "source_location": "L218",
+      "source_location": "L213",
       "id": "utils_filterworkordersbydepartment",
       "community": 3,
       "norm_label": "filterworkordersbydepartment()"
@@ -603,7 +603,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L4803",
       "id": "app_parsedate",
-      "community": 7,
+      "community": 10,
       "norm_label": "parsedate()"
     },
     {
@@ -612,7 +612,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L4809",
       "id": "app_inrange",
-      "community": 7,
+      "community": 10,
       "norm_label": "inrange()"
     },
     {
@@ -639,7 +639,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5040",
       "id": "app_downloadcsv",
-      "community": 9,
+      "community": 11,
       "norm_label": "downloadcsv()"
     },
     {
@@ -648,7 +648,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5066",
       "id": "app_exportcurrentreport",
-      "community": 9,
+      "community": 11,
       "norm_label": "exportcurrentreport()"
     },
     {
@@ -693,7 +693,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5510",
       "id": "app_getnormalizedassigneddepartments",
-      "community": 10,
+      "community": 9,
       "norm_label": "getnormalizedassigneddepartments()"
     },
     {
@@ -729,7 +729,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5696",
       "id": "app_clearhint",
-      "community": 11,
+      "community": 7,
       "norm_label": "clearhint()"
     },
     {
@@ -738,7 +738,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5697",
       "id": "app_onpopstate",
-      "community": 11,
+      "community": 7,
       "norm_label": "onpopstate()"
     },
     {
@@ -1024,7 +1024,7 @@
       "label": ".unsubscribe()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L339",
+      "source_location": "L349",
       "id": "pocketbase_pocketbasechannel_unsubscribe",
       "community": 2,
       "norm_label": ".unsubscribe()"
@@ -1060,7 +1060,7 @@
       "label": "getQCApprovalProgress()",
       "file_type": "code",
       "source_file": "src\\utils.ts",
-      "source_location": "L191",
+      "source_location": "L186",
       "id": "utils_getqcapprovalprogress",
       "community": 3,
       "norm_label": "getqcapprovalprogress()"
@@ -2352,7 +2352,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\utils.ts",
-      "source_location": "L111",
+      "source_location": "L106",
       "weight": 1.0,
       "_src": "utils_canaccessview",
       "_tgt": "utils_normalizedepartment",
@@ -2364,7 +2364,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\utils.ts",
-      "source_location": "L155",
+      "source_location": "L150",
       "weight": 1.0,
       "_src": "utils_getallowedstatuses",
       "_tgt": "utils_normalizedepartment",
@@ -2376,7 +2376,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\utils.ts",
-      "source_location": "L174",
+      "source_location": "L169",
       "weight": 1.0,
       "_src": "utils_caneditworkorder",
       "_tgt": "utils_normalizedepartment",
@@ -2388,7 +2388,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\utils.ts",
-      "source_location": "L219",
+      "source_location": "L214",
       "weight": 1.0,
       "_src": "utils_filterworkordersbydepartment",
       "_tgt": "utils_normalizedepartment",
@@ -2484,7 +2484,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\utils.ts",
-      "source_location": "L100",
+      "source_location": "L95",
       "weight": 1.0,
       "_src": "c_users_rct_desktop_excell_packaging_erp_29_src_utils_ts",
       "_tgt": "utils_requestnotificationpermission",
@@ -2496,7 +2496,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\utils.ts",
-      "source_location": "L107",
+      "source_location": "L102",
       "weight": 1.0,
       "_src": "c_users_rct_desktop_excell_packaging_erp_29_src_utils_ts",
       "_tgt": "utils_canaccessview",
@@ -2508,7 +2508,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\utils.ts",
-      "source_location": "L154",
+      "source_location": "L149",
       "weight": 1.0,
       "_src": "c_users_rct_desktop_excell_packaging_erp_29_src_utils_ts",
       "_tgt": "utils_getallowedstatuses",
@@ -2520,7 +2520,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\utils.ts",
-      "source_location": "L173",
+      "source_location": "L168",
       "weight": 1.0,
       "_src": "c_users_rct_desktop_excell_packaging_erp_29_src_utils_ts",
       "_tgt": "utils_caneditworkorder",
@@ -2532,7 +2532,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\utils.ts",
-      "source_location": "L218",
+      "source_location": "L213",
       "weight": 1.0,
       "_src": "c_users_rct_desktop_excell_packaging_erp_29_src_utils_ts",
       "_tgt": "utils_filterworkordersbydepartment",
@@ -3540,7 +3540,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L339",
+      "source_location": "L349",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasechannel",
       "_tgt": "pocketbase_pocketbasechannel_unsubscribe",
@@ -3552,7 +3552,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\utils.ts",
-      "source_location": "L191",
+      "source_location": "L186",
       "weight": 1.0,
       "_src": "c_users_rct_desktop_excell_packaging_erp_29_src_utils_ts",
       "_tgt": "utils_getqcapprovalprogress",
