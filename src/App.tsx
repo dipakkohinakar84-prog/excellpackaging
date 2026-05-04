@@ -4648,7 +4648,6 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
       const { data, error } = await supabase
         .from('notification_events')
         .select('*')
-        .order('created', { ascending: false })
         .limit(200);
 
       if (error?.code === '42P01') {
@@ -4656,7 +4655,13 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
         return;
       }
 
-      setEvents(data || []);
+      const sortedEvents = [...(data || [])].sort((a: any, b: any) => {
+        const aTime = new Date(a.created || a.created_at || 0).getTime();
+        const bTime = new Date(b.created || b.created_at || 0).getTime();
+        return bTime - aTime;
+      });
+
+      setEvents(sortedEvents);
     } catch (_e) {
       onError();
     }
