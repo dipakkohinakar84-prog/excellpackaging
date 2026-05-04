@@ -130,6 +130,7 @@ app.post('/api/send-push', async (req, res) => {
         actor,
         departments,
         work_order_id: workOrderId || null,
+        event_time: new Date().toISOString(),
         sent,
         failed,
         targets: subscriptions.length,

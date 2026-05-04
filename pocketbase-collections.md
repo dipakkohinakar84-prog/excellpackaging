@@ -126,6 +126,7 @@ Fields:
 - `actor`: text
 - `departments`: json
 - `work_order_id`: number
+- `event_time`: date
 - `sent`: number
 - `failed`: number
 - `targets`: number

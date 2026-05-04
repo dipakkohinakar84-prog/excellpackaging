@@ -4642,6 +4642,20 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
+  const getEventTimestamp = (ev: any) => {
+    const rawTime = ev.event_time || ev.created || ev.created_at || null;
+    if (!rawTime) return 0;
+
+    const timestamp = new Date(rawTime).getTime();
+    return Number.isFinite(timestamp) ? timestamp : 0;
+  };
+
+  const formatEventTime = (ev: any) => {
+    const timestamp = getEventTimestamp(ev);
+    if (!timestamp) return 'No time';
+    return new Date(timestamp).toLocaleString();
+  };
+
   const fetchEvents = useCallback(async () => {
     setLoading(true);
     try {
@@ -4656,9 +4670,7 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
       }
 
       const sortedEvents = [...(data || [])].sort((a: any, b: any) => {
-        const aTime = new Date(a.created || a.created_at || 0).getTime();
-        const bTime = new Date(b.created || b.created_at || 0).getTime();
-        return bTime - aTime;
+        return getEventTimestamp(b) - getEventTimestamp(a);
       });
 
       setEvents(sortedEvents);
@@ -4725,7 +4737,7 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
             <tbody className="divide-y divide-gray-100">
               {filteredEvents.map((ev: any) => (
                 <tr key={ev.id}>
-                  <td className="px-4 py-2 text-xs text-gray-500 whitespace-nowrap">{new Date(ev.created || ev.created_at).toLocaleString()}</td>
+                  <td className="px-4 py-2 text-xs text-gray-500 whitespace-nowrap">{formatEventTime(ev)}</td>
                   <td className="px-4 py-2 font-black text-slate-800 whitespace-nowrap">{ev.title}</td>
                   <td className="px-4 py-2 text-xs text-gray-600">{ev.body}</td>
                   <td className="px-4 py-2 text-xs font-bold text-gray-700 whitespace-nowrap">{ev.actor || '-'}</td>
