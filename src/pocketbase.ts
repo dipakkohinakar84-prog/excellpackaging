@@ -95,6 +95,14 @@ const normalizeRecord = <T = any>(record: RecordModel | Record<string, any>): T 
     normalized.id = normalized.legacy_id;
   }
 
+  if (normalized.created !== undefined && normalized.created_at === undefined) {
+    normalized.created_at = normalized.created;
+  }
+
+  if (normalized.updated !== undefined && normalized.updated_at === undefined) {
+    normalized.updated_at = normalized.updated;
+  }
+
   normalized.pb_id = record.id;
   return normalized as T;
 };

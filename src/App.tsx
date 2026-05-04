@@ -4648,7 +4648,7 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
       const { data, error } = await supabase
         .from('notification_events')
         .select('*')
-        .order('created_at', { ascending: false })
+        .order('created', { ascending: false })
         .limit(200);
 
       if (error?.code === '42P01') {
