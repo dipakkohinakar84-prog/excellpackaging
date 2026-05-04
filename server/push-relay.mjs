@@ -3,7 +3,7 @@ import express from 'express';
 import PocketBase from 'pocketbase';
 import webpush from 'web-push';
 
-const port = Number(process.env.PUSH_RELAY_PORT || 8091);
+const port = Number(process.env.PORT || process.env.PUSH_RELAY_PORT || 8091);
 const pocketBaseUrl = process.env.POCKETBASE_URL || 'http://127.0.0.1:8090';
 const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || '';
 const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || '';
@@ -87,6 +87,15 @@ app.post('/api/send-push', async (req, res) => {
       const pushPayload = JSON.stringify({
         title,
         body: message,
+        icon: '/app-icon.svg',
+        badge: '/app-icon.svg',
+        requireInteraction: true,
+        timestamp: Date.now(),
+        actions: [
+          { action: 'open', title: 'Open ERP' },
+          { action: 'dismiss', title: 'Dismiss' },
+        ],
+        vibrate: [120, 60, 120],
         data: {
           workOrderId,
           url: '/',

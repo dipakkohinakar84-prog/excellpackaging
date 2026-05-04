@@ -9,7 +9,7 @@
       "source_file": "App.tsx",
       "source_location": "L1",
       "id": "c_users_rct_desktop_excell_packaging_erp_29_app_tsx",
-      "community": 0,
+      "community": 4,
       "norm_label": "app.tsx"
     },
     {
@@ -18,7 +18,7 @@
       "source_file": "App.tsx",
       "source_location": "L75",
       "id": "app_statusbadge",
-      "community": 0,
+      "community": 4,
       "norm_label": "statusbadge()"
     },
     {
@@ -27,7 +27,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L114",
       "id": "app_card",
-      "community": 0,
+      "community": 4,
       "norm_label": "card()"
     },
     {
@@ -36,7 +36,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L118",
       "id": "app_loadingstate",
-      "community": 0,
+      "community": 4,
       "norm_label": "loadingstate()"
     },
     {
@@ -45,7 +45,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L125",
       "id": "app_modal",
-      "community": 0,
+      "community": 4,
       "norm_label": "modal()"
     },
     {
@@ -54,7 +54,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L147",
       "id": "app_parseassigneddepartments",
-      "community": 7,
+      "community": 8,
       "norm_label": "parseassigneddepartments()"
     },
     {
@@ -72,7 +72,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L663",
       "id": "app_fetchcounts",
-      "community": 5,
+      "community": 0,
       "norm_label": "fetchcounts()"
     },
     {
@@ -135,7 +135,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L2002",
       "id": "app_handledepttoggle",
-      "community": 0,
+      "community": 4,
       "norm_label": "handledepttoggle()"
     },
     {
@@ -144,7 +144,7 @@
       "source_file": "App.tsx",
       "source_location": "L793",
       "id": "app_handlechilddepttoggle",
-      "community": 0,
+      "community": 4,
       "norm_label": "handlechilddepttoggle()"
     },
     {
@@ -162,7 +162,7 @@
       "source_file": "App.tsx",
       "source_location": "L968",
       "id": "app_onerror",
-      "community": 5,
+      "community": 0,
       "norm_label": "onerror()"
     },
     {
@@ -171,7 +171,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L2869",
       "id": "app_toggledeptselection",
-      "community": 0,
+      "community": 4,
       "norm_label": "toggledeptselection()"
     },
     {
@@ -198,7 +198,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L4552",
       "id": "app_handleprint",
-      "community": 0,
+      "community": 4,
       "norm_label": "handleprint()"
     },
     {
@@ -207,7 +207,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5698",
       "id": "app_handlelogin",
-      "community": 0,
+      "community": 4,
       "norm_label": "handlelogin()"
     },
     {
@@ -216,7 +216,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5712",
       "id": "app_handlelogout",
-      "community": 0,
+      "community": 4,
       "norm_label": "handlelogout()"
     },
     {
@@ -225,7 +225,7 @@
       "source_file": "DepartmentStatusTracker.tsx",
       "source_location": "L1",
       "id": "c_users_rct_desktop_excell_packaging_erp_29_departmentstatustracker_tsx",
-      "community": 4,
+      "community": 6,
       "norm_label": "departmentstatustracker.tsx"
     },
     {
@@ -234,7 +234,7 @@
       "source_file": "src\\DepartmentStatusTracker.tsx",
       "source_location": "L29",
       "id": "departmentstatustracker_getdepartmentstatus",
-      "community": 4,
+      "community": 6,
       "norm_label": "getdepartmentstatus()"
     },
     {
@@ -243,7 +243,7 @@
       "source_file": "src\\DepartmentStatusTracker.tsx",
       "source_location": "L41",
       "id": "departmentstatustracker_getstatuscolor",
-      "community": 4,
+      "community": 6,
       "norm_label": "getstatuscolor()"
     },
     {
@@ -252,7 +252,7 @@
       "source_file": "src\\DepartmentStatusTracker.tsx",
       "source_location": "L53",
       "id": "departmentstatustracker_handlestatuschange",
-      "community": 4,
+      "community": 6,
       "norm_label": "handlestatuschange()"
     },
     {
@@ -261,7 +261,7 @@
       "source_file": "src\\DepartmentStatusTracker.tsx",
       "source_location": "L57",
       "id": "departmentstatustracker_handleqcstatuschange",
-      "community": 4,
+      "community": 6,
       "norm_label": "handleqcstatuschange()"
     },
     {
@@ -270,7 +270,7 @@
       "source_file": "src\\DepartmentStatusTracker.tsx",
       "source_location": "L61",
       "id": "departmentstatustracker_caneditdepartment",
-      "community": 4,
+      "community": 6,
       "norm_label": "caneditdepartment()"
     },
     {
@@ -279,7 +279,7 @@
       "source_file": "index.tsx",
       "source_location": "L1",
       "id": "c_users_rct_desktop_excell_packaging_erp_29_index_tsx",
-      "community": 12,
+      "community": 13,
       "norm_label": "index.tsx"
     },
     {
@@ -288,7 +288,7 @@
       "source_file": "mockData.ts",
       "source_location": "L1",
       "id": "c_users_rct_desktop_excell_packaging_erp_29_mockdata_ts",
-      "community": 13,
+      "community": 14,
       "norm_label": "mockdata.ts"
     },
     {
@@ -297,7 +297,7 @@
       "source_file": "supabase.ts",
       "source_location": "L1",
       "id": "c_users_rct_desktop_excell_packaging_erp_29_supabase_ts",
-      "community": 14,
+      "community": 15,
       "norm_label": "supabase.ts"
     },
     {
@@ -306,7 +306,7 @@
       "source_file": "types.ts",
       "source_location": "L1",
       "id": "c_users_rct_desktop_excell_packaging_erp_29_types_ts",
-      "community": 15,
+      "community": 16,
       "norm_label": "types.ts"
     },
     {
@@ -396,7 +396,7 @@
       "source_file": "vite.config.ts",
       "source_location": "L1",
       "id": "c_users_rct_desktop_excell_packaging_erp_29_vite_config_ts",
-      "community": 16,
+      "community": 17,
       "norm_label": "vite.config.ts"
     },
     {
@@ -405,7 +405,7 @@
       "source_file": "public\\sw.js",
       "source_location": "L1",
       "id": "c_users_rct_desktop_excell_packaging_erp_29_public_sw_js",
-      "community": 17,
+      "community": 18,
       "norm_label": "sw.js"
     },
     {
@@ -414,7 +414,7 @@
       "source_file": "server\\push-relay.mjs",
       "source_location": "L1",
       "id": "c_users_rct_desktop_excell_packaging_erp_29_server_push_relay_mjs",
-      "community": 6,
+      "community": 7,
       "norm_label": "push-relay.mjs"
     },
     {
@@ -423,7 +423,7 @@
       "source_file": "server\\push-relay.mjs",
       "source_location": "L20",
       "id": "push_relay_normalizedepartment",
-      "community": 6,
+      "community": 7,
       "norm_label": "normalizedepartment()"
     },
     {
@@ -432,7 +432,7 @@
       "source_file": "server\\push-relay.mjs",
       "source_location": "L39",
       "id": "push_relay_escapefiltervalue",
-      "community": 6,
+      "community": 7,
       "norm_label": "escapefiltervalue()"
     },
     {
@@ -441,7 +441,7 @@
       "source_file": "server\\push-relay.mjs",
       "source_location": "L41",
       "id": "push_relay_builddepartmentfilter",
-      "community": 6,
+      "community": 7,
       "norm_label": "builddepartmentfilter()"
     },
     {
@@ -450,7 +450,7 @@
       "source_file": "server\\push-relay.mjs",
       "source_location": "L46",
       "id": "push_relay_authenticatepocketbase",
-      "community": 6,
+      "community": 7,
       "norm_label": "authenticatepocketbase()"
     },
     {
@@ -459,7 +459,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L1",
       "id": "c_users_rct_desktop_excell_packaging_erp_29_src_app_tsx",
-      "community": 2,
+      "community": 1,
       "norm_label": "app.tsx"
     },
     {
@@ -468,7 +468,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L197",
       "id": "app_makelocalid",
-      "community": 2,
+      "community": 1,
       "norm_label": "makelocalid()"
     },
     {
@@ -486,7 +486,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L217",
       "id": "app_sortstatuses",
-      "community": 2,
+      "community": 1,
       "norm_label": "sortstatuses()"
     },
     {
@@ -495,7 +495,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L229",
       "id": "app_getpageslice",
-      "community": 2,
+      "community": 1,
       "norm_label": "getpageslice()"
     },
     {
@@ -504,7 +504,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L725",
       "id": "app_getorderdate",
-      "community": 2,
+      "community": 1,
       "norm_label": "getorderdate()"
     },
     {
@@ -513,7 +513,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L1971",
       "id": "app_opencomponentmanager",
-      "community": 2,
+      "community": 0,
       "norm_label": "opencomponentmanager()"
     },
     {
@@ -522,7 +522,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L2014",
       "id": "app_addcomponenttoselection",
-      "community": 2,
+      "community": 1,
       "norm_label": "addcomponenttoselection()"
     },
     {
@@ -531,7 +531,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L2025",
       "id": "app_updatecomponentqty",
-      "community": 2,
+      "community": 1,
       "norm_label": "updatecomponentqty()"
     },
     {
@@ -540,7 +540,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L2031",
       "id": "app_removecomponentfromselection",
-      "community": 2,
+      "community": 1,
       "norm_label": "removecomponentfromselection()"
     },
     {
@@ -558,7 +558,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L2373",
       "id": "app_toggledepartment",
-      "community": 2,
+      "community": 1,
       "norm_label": "toggledepartment()"
     },
     {
@@ -567,7 +567,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L2739",
       "id": "app_handleresize",
-      "community": 2,
+      "community": 1,
       "norm_label": "handleresize()"
     },
     {
@@ -576,7 +576,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L4184",
       "id": "app_openeditorfromprint",
-      "community": 2,
+      "community": 1,
       "norm_label": "openeditorfromprint()"
     },
     {
@@ -585,7 +585,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L4765",
       "id": "app_toisodate",
-      "community": 11,
+      "community": 9,
       "norm_label": "toisodate()"
     },
     {
@@ -594,7 +594,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L4768",
       "id": "app_fetchreportdata",
-      "community": 5,
+      "community": 0,
       "norm_label": "fetchreportdata()"
     },
     {
@@ -603,7 +603,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L4808",
       "id": "app_parsedate",
-      "community": 10,
+      "community": 11,
       "norm_label": "parsedate()"
     },
     {
@@ -612,7 +612,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L4814",
       "id": "app_inrange",
-      "community": 10,
+      "community": 11,
       "norm_label": "inrange()"
     },
     {
@@ -621,7 +621,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5017",
       "id": "app_handlesort",
-      "community": 2,
+      "community": 1,
       "norm_label": "handlesort()"
     },
     {
@@ -630,7 +630,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5021",
       "id": "app_applysortgeneric",
-      "community": 2,
+      "community": 1,
       "norm_label": "applysortgeneric()"
     },
     {
@@ -639,7 +639,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5045",
       "id": "app_downloadcsv",
-      "community": 8,
+      "community": 10,
       "norm_label": "downloadcsv()"
     },
     {
@@ -648,7 +648,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5071",
       "id": "app_exportcurrentreport",
-      "community": 8,
+      "community": 10,
       "norm_label": "exportcurrentreport()"
     },
     {
@@ -657,7 +657,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5111",
       "id": "app_applyquickrange",
-      "community": 11,
+      "community": 9,
       "norm_label": "applyquickrange()"
     },
     {
@@ -666,7 +666,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5139",
       "id": "app_sorticon",
-      "community": 2,
+      "community": 1,
       "norm_label": "sorticon()"
     },
     {
@@ -675,7 +675,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5490",
       "id": "app_onbeforeinstallprompt",
-      "community": 2,
+      "community": 1,
       "norm_label": "onbeforeinstallprompt()"
     },
     {
@@ -684,7 +684,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5496",
       "id": "app_onappinstalled",
-      "community": 2,
+      "community": 1,
       "norm_label": "onappinstalled()"
     },
     {
@@ -693,7 +693,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5515",
       "id": "app_getnormalizedassigneddepartments",
-      "community": 7,
+      "community": 8,
       "norm_label": "getnormalizedassigneddepartments()"
     },
     {
@@ -711,7 +711,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5529",
       "id": "app_ispendingqc",
-      "community": 2,
+      "community": 1,
       "norm_label": "ispendingqc()"
     },
     {
@@ -720,7 +720,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5534",
       "id": "app_getnewlystarteddepartments",
-      "community": 2,
+      "community": 1,
       "norm_label": "getnewlystarteddepartments()"
     },
     {
@@ -729,7 +729,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5714",
       "id": "app_handlenavclick",
-      "community": 2,
+      "community": 1,
       "norm_label": "handlenavclick()"
     },
     {
@@ -738,7 +738,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5731",
       "id": "app_clearhint",
-      "community": 9,
+      "community": 12,
       "norm_label": "clearhint()"
     },
     {
@@ -747,7 +747,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5732",
       "id": "app_onpopstate",
-      "community": 9,
+      "community": 12,
       "norm_label": "onpopstate()"
     },
     {
@@ -756,7 +756,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5818",
       "id": "app_handleinstallapp",
-      "community": 2,
+      "community": 1,
       "norm_label": "handleinstallapp()"
     },
     {
@@ -765,7 +765,7 @@
       "source_file": "src\\DepartmentStatusTracker.tsx",
       "source_location": "L1",
       "id": "c_users_rct_desktop_excell_packaging_erp_29_src_departmentstatustracker_tsx",
-      "community": 4,
+      "community": 6,
       "norm_label": "departmentstatustracker.tsx"
     },
     {
@@ -774,7 +774,7 @@
       "source_file": "src\\mockData.ts",
       "source_location": "L1",
       "id": "c_users_rct_desktop_excell_packaging_erp_29_src_mockdata_ts",
-      "community": 18,
+      "community": 19,
       "norm_label": "mockdata.ts"
     },
     {
@@ -783,7 +783,7 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L1",
       "id": "c_users_rct_desktop_excell_packaging_erp_29_src_pocketbase_ts",
-      "community": 1,
+      "community": 2,
       "norm_label": "pocketbase.ts"
     },
     {
@@ -792,131 +792,131 @@
       "source_file": "src\\pocketbase.ts",
       "source_location": "L33",
       "id": "pocketbase_topostgresevent",
-      "community": 1,
+      "community": 2,
       "norm_label": "topostgresevent()"
     },
     {
       "label": "resolveCollectionName()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L57",
+      "source_location": "L61",
       "id": "pocketbase_resolvecollectionname",
-      "community": 1,
+      "community": 2,
       "norm_label": "resolvecollectionname()"
     },
     {
       "label": "isValidLegacyId()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L83",
+      "source_location": "L87",
       "id": "pocketbase_isvalidlegacyid",
-      "community": 1,
+      "community": 2,
       "norm_label": "isvalidlegacyid()"
     },
     {
       "label": "normalizeRecord()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L87",
+      "source_location": "L91",
       "id": "pocketbase_normalizerecord",
-      "community": 1,
+      "community": 2,
       "norm_label": "normalizerecord()"
     },
     {
       "label": "normalizePayload()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L98",
+      "source_location": "L102",
       "id": "pocketbase_normalizepayload",
-      "community": 1,
+      "community": 2,
       "norm_label": "normalizepayload()"
     },
     {
       "label": "getNextLegacyId()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L109",
+      "source_location": "L113",
       "id": "pocketbase_getnextlegacyid",
-      "community": 1,
+      "community": 2,
       "norm_label": "getnextlegacyid()"
     },
     {
       "label": "ensureLegacyId()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L123",
+      "source_location": "L127",
       "id": "pocketbase_ensurelegacyid",
-      "community": 1,
+      "community": 2,
       "norm_label": "ensurelegacyid()"
     },
     {
       "label": "escapeFilterValue()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L136",
+      "source_location": "L140",
       "id": "pocketbase_escapefiltervalue",
-      "community": 1,
+      "community": 2,
       "norm_label": "escapefiltervalue()"
     },
     {
       "label": "toPocketBaseField()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L142",
+      "source_location": "L146",
       "id": "pocketbase_topocketbasefield",
-      "community": 1,
+      "community": 2,
       "norm_label": "topocketbasefield()"
     },
     {
       "label": "buildFilter()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L147",
+      "source_location": "L151",
       "id": "pocketbase_buildfilter",
-      "community": 1,
+      "community": 2,
       "norm_label": "buildfilter()"
     },
     {
       "label": "toPocketBaseSort()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L166",
+      "source_location": "L170",
       "id": "pocketbase_topocketbasesort",
-      "community": 1,
+      "community": 2,
       "norm_label": "topocketbasesort()"
     },
     {
       "label": "toError()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L171",
+      "source_location": "L175",
       "id": "pocketbase_toerror",
-      "community": 1,
+      "community": 2,
       "norm_label": "toerror()"
     },
     {
       "label": "PocketBaseQuery",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L176",
+      "source_location": "L180",
       "id": "pocketbase_pocketbasequery",
-      "community": 1,
+      "community": 0,
       "norm_label": "pocketbasequery"
     },
     {
       "label": ".constructor()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L184",
+      "source_location": "L188",
       "id": "pocketbase_pocketbasequery_constructor",
-      "community": 1,
+      "community": 2,
       "norm_label": ".constructor()"
     },
     {
       "label": ".select()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L188",
+      "source_location": "L192",
       "id": "pocketbase_pocketbasequery_select",
       "community": 0,
       "norm_label": ".select()"
@@ -925,7 +925,7 @@
       "label": ".insert()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L194",
+      "source_location": "L198",
       "id": "pocketbase_pocketbasequery_insert",
       "community": 0,
       "norm_label": ".insert()"
@@ -934,7 +934,7 @@
       "label": ".update()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L199",
+      "source_location": "L203",
       "id": "pocketbase_pocketbasequery_update",
       "community": 0,
       "norm_label": ".update()"
@@ -943,25 +943,25 @@
       "label": ".delete()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L204",
+      "source_location": "L208",
       "id": "pocketbase_pocketbasequery_delete",
-      "community": 1,
+      "community": 0,
       "norm_label": ".delete()"
     },
     {
       "label": ".upsert()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L209",
+      "source_location": "L213",
       "id": "pocketbase_pocketbasequery_upsert",
-      "community": 1,
+      "community": 0,
       "norm_label": ".upsert()"
     },
     {
       "label": ".eq()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L214",
+      "source_location": "L218",
       "id": "pocketbase_pocketbasequery_eq",
       "community": 0,
       "norm_label": ".eq()"
@@ -970,34 +970,34 @@
       "label": ".in()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L219",
+      "source_location": "L223",
       "id": "pocketbase_pocketbasequery_in",
-      "community": 1,
+      "community": 0,
       "norm_label": ".in()"
     },
     {
       "label": ".order()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L224",
+      "source_location": "L228",
       "id": "pocketbase_pocketbasequery_order",
-      "community": 5,
+      "community": 0,
       "norm_label": ".order()"
     },
     {
       "label": ".limit()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L229",
+      "source_location": "L233",
       "id": "pocketbase_pocketbasequery_limit",
-      "community": 5,
+      "community": 0,
       "norm_label": ".limit()"
     },
     {
       "label": ".single()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L234",
+      "source_location": "L238",
       "id": "pocketbase_pocketbasequery_single",
       "community": 0,
       "norm_label": ".single()"
@@ -1006,63 +1006,99 @@
       "label": ".then()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L239",
+      "source_location": "L243",
       "id": "pocketbase_pocketbasequery_then",
-      "community": 1,
+      "community": 5,
       "norm_label": ".then()"
     },
     {
       "label": ".execute()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L246",
+      "source_location": "L250",
       "id": "pocketbase_pocketbasequery_execute",
-      "community": 1,
+      "community": 2,
       "norm_label": ".execute()"
     },
     {
       "label": "PocketBaseChannel",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L321",
+      "source_location": "L325",
       "id": "pocketbase_pocketbasechannel",
-      "community": 1,
+      "community": 5,
       "norm_label": "pocketbasechannel"
     },
     {
       "label": ".constructor()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L326",
+      "source_location": "L331",
       "id": "pocketbase_pocketbasechannel_constructor",
-      "community": 1,
+      "community": 5,
       "norm_label": ".constructor()"
     },
     {
       "label": ".on()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L330",
+      "source_location": "L335",
       "id": "pocketbase_pocketbasechannel_on",
-      "community": 1,
+      "community": 5,
       "norm_label": ".on()"
     },
     {
       "label": ".subscribe()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L335",
+      "source_location": "L340",
       "id": "pocketbase_pocketbasechannel_subscribe",
-      "community": 1,
+      "community": 5,
       "norm_label": ".subscribe()"
+    },
+    {
+      "label": ".primeCache()",
+      "file_type": "code",
+      "source_file": "src\\pocketbase.ts",
+      "source_location": "L402",
+      "id": "pocketbase_pocketbasechannel_primecache",
+      "community": 5,
+      "norm_label": ".primecache()"
+    },
+    {
+      "label": ".notifyHandlers()",
+      "file_type": "code",
+      "source_file": "src\\pocketbase.ts",
+      "source_location": "L412",
+      "id": "pocketbase_pocketbasechannel_notifyhandlers",
+      "community": 5,
+      "norm_label": ".notifyhandlers()"
+    },
+    {
+      "label": ".pollTables()",
+      "file_type": "code",
+      "source_file": "src\\pocketbase.ts",
+      "source_location": "L426",
+      "id": "pocketbase_pocketbasechannel_polltables",
+      "community": 5,
+      "norm_label": ".polltables()"
+    },
+    {
+      "label": ".subscribeWithPolling()",
+      "file_type": "code",
+      "source_file": "src\\pocketbase.ts",
+      "source_location": "L460",
+      "id": "pocketbase_pocketbasechannel_subscribewithpolling",
+      "community": 5,
+      "norm_label": ".subscribewithpolling()"
     },
     {
       "label": ".unsubscribe()",
       "file_type": "code",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L392",
+      "source_location": "L477",
       "id": "pocketbase_pocketbasechannel_unsubscribe",
-      "community": 1,
+      "community": 5,
       "norm_label": ".unsubscribe()"
     },
     {
@@ -1071,7 +1107,7 @@
       "source_file": "src\\supabase.ts",
       "source_location": "L1",
       "id": "c_users_rct_desktop_excell_packaging_erp_29_src_supabase_ts",
-      "community": 19,
+      "community": 20,
       "norm_label": "supabase.ts"
     },
     {
@@ -1080,7 +1116,7 @@
       "source_file": "src\\types.ts",
       "source_location": "L1",
       "id": "c_users_rct_desktop_excell_packaging_erp_29_src_types_ts",
-      "community": 20,
+      "community": 21,
       "norm_label": "types.ts"
     },
     {
@@ -1107,7 +1143,7 @@
       "source_file": "src\\vite-env.d.ts",
       "source_location": "L1",
       "id": "c_users_rct_desktop_excell_packaging_erp_29_src_vite_env_d_ts",
-      "community": 21,
+      "community": 22,
       "norm_label": "vite-env.d.ts"
     }
   ],
@@ -3144,7 +3180,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L57",
+      "source_location": "L61",
       "weight": 1.0,
       "_src": "c_users_rct_desktop_excell_packaging_erp_29_src_pocketbase_ts",
       "_tgt": "pocketbase_resolvecollectionname",
@@ -3156,7 +3192,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L83",
+      "source_location": "L87",
       "weight": 1.0,
       "_src": "c_users_rct_desktop_excell_packaging_erp_29_src_pocketbase_ts",
       "_tgt": "pocketbase_isvalidlegacyid",
@@ -3168,7 +3204,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L87",
+      "source_location": "L91",
       "weight": 1.0,
       "_src": "c_users_rct_desktop_excell_packaging_erp_29_src_pocketbase_ts",
       "_tgt": "pocketbase_normalizerecord",
@@ -3180,7 +3216,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L98",
+      "source_location": "L102",
       "weight": 1.0,
       "_src": "c_users_rct_desktop_excell_packaging_erp_29_src_pocketbase_ts",
       "_tgt": "pocketbase_normalizepayload",
@@ -3192,7 +3228,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L109",
+      "source_location": "L113",
       "weight": 1.0,
       "_src": "c_users_rct_desktop_excell_packaging_erp_29_src_pocketbase_ts",
       "_tgt": "pocketbase_getnextlegacyid",
@@ -3204,7 +3240,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L123",
+      "source_location": "L127",
       "weight": 1.0,
       "_src": "c_users_rct_desktop_excell_packaging_erp_29_src_pocketbase_ts",
       "_tgt": "pocketbase_ensurelegacyid",
@@ -3216,7 +3252,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L136",
+      "source_location": "L140",
       "weight": 1.0,
       "_src": "c_users_rct_desktop_excell_packaging_erp_29_src_pocketbase_ts",
       "_tgt": "pocketbase_escapefiltervalue",
@@ -3228,7 +3264,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L142",
+      "source_location": "L146",
       "weight": 1.0,
       "_src": "c_users_rct_desktop_excell_packaging_erp_29_src_pocketbase_ts",
       "_tgt": "pocketbase_topocketbasefield",
@@ -3240,7 +3276,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L147",
+      "source_location": "L151",
       "weight": 1.0,
       "_src": "c_users_rct_desktop_excell_packaging_erp_29_src_pocketbase_ts",
       "_tgt": "pocketbase_buildfilter",
@@ -3252,7 +3288,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L166",
+      "source_location": "L170",
       "weight": 1.0,
       "_src": "c_users_rct_desktop_excell_packaging_erp_29_src_pocketbase_ts",
       "_tgt": "pocketbase_topocketbasesort",
@@ -3264,7 +3300,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L171",
+      "source_location": "L175",
       "weight": 1.0,
       "_src": "c_users_rct_desktop_excell_packaging_erp_29_src_pocketbase_ts",
       "_tgt": "pocketbase_toerror",
@@ -3276,7 +3312,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L176",
+      "source_location": "L180",
       "weight": 1.0,
       "_src": "c_users_rct_desktop_excell_packaging_erp_29_src_pocketbase_ts",
       "_tgt": "pocketbase_pocketbasequery",
@@ -3288,7 +3324,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L321",
+      "source_location": "L325",
       "weight": 1.0,
       "_src": "c_users_rct_desktop_excell_packaging_erp_29_src_pocketbase_ts",
       "_tgt": "pocketbase_pocketbasechannel",
@@ -3300,7 +3336,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L110",
+      "source_location": "L114",
       "weight": 1.0,
       "_src": "pocketbase_getnextlegacyid",
       "_tgt": "pocketbase_resolvecollectionname",
@@ -3312,7 +3348,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L185",
+      "source_location": "L189",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasequery_constructor",
       "_tgt": "pocketbase_resolvecollectionname",
@@ -3324,7 +3360,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L90",
+      "source_location": "L94",
       "weight": 1.0,
       "_src": "pocketbase_normalizerecord",
       "_tgt": "pocketbase_isvalidlegacyid",
@@ -3336,7 +3372,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L128",
+      "source_location": "L132",
       "weight": 1.0,
       "_src": "pocketbase_ensurelegacyid",
       "_tgt": "pocketbase_isvalidlegacyid",
@@ -3348,7 +3384,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L261",
+      "source_location": "L265",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasequery_execute",
       "_tgt": "pocketbase_normalizerecord",
@@ -3360,7 +3396,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L124",
+      "source_location": "L128",
       "weight": 1.0,
       "_src": "pocketbase_ensurelegacyid",
       "_tgt": "pocketbase_normalizepayload",
@@ -3372,7 +3408,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L284",
+      "source_location": "L288",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasequery_execute",
       "_tgt": "pocketbase_normalizepayload",
@@ -3384,7 +3420,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L130",
+      "source_location": "L134",
       "weight": 1.0,
       "_src": "pocketbase_ensurelegacyid",
       "_tgt": "pocketbase_getnextlegacyid",
@@ -3396,7 +3432,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L272",
+      "source_location": "L276",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasequery_execute",
       "_tgt": "pocketbase_ensurelegacyid",
@@ -3408,7 +3444,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L303",
+      "source_location": "L307",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasequery_execute",
       "_tgt": "pocketbase_escapefiltervalue",
@@ -3420,7 +3456,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L250",
+      "source_location": "L254",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasequery_execute",
       "_tgt": "pocketbase_buildfilter",
@@ -3432,7 +3468,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L251",
+      "source_location": "L255",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasequery_execute",
       "_tgt": "pocketbase_topocketbasesort",
@@ -3444,7 +3480,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L316",
+      "source_location": "L320",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasequery_execute",
       "_tgt": "pocketbase_toerror",
@@ -3456,7 +3492,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L184",
+      "source_location": "L188",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasequery",
       "_tgt": "pocketbase_pocketbasequery_constructor",
@@ -3468,7 +3504,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L188",
+      "source_location": "L192",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasequery",
       "_tgt": "pocketbase_pocketbasequery_select",
@@ -3480,7 +3516,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L194",
+      "source_location": "L198",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasequery",
       "_tgt": "pocketbase_pocketbasequery_insert",
@@ -3492,7 +3528,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L199",
+      "source_location": "L203",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasequery",
       "_tgt": "pocketbase_pocketbasequery_update",
@@ -3504,7 +3540,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L204",
+      "source_location": "L208",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasequery",
       "_tgt": "pocketbase_pocketbasequery_delete",
@@ -3516,7 +3552,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L209",
+      "source_location": "L213",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasequery",
       "_tgt": "pocketbase_pocketbasequery_upsert",
@@ -3528,7 +3564,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L214",
+      "source_location": "L218",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasequery",
       "_tgt": "pocketbase_pocketbasequery_eq",
@@ -3540,7 +3576,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L219",
+      "source_location": "L223",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasequery",
       "_tgt": "pocketbase_pocketbasequery_in",
@@ -3552,7 +3588,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L224",
+      "source_location": "L228",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasequery",
       "_tgt": "pocketbase_pocketbasequery_order",
@@ -3564,7 +3600,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L229",
+      "source_location": "L233",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasequery",
       "_tgt": "pocketbase_pocketbasequery_limit",
@@ -3576,7 +3612,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L234",
+      "source_location": "L238",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasequery",
       "_tgt": "pocketbase_pocketbasequery_single",
@@ -3588,7 +3624,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L239",
+      "source_location": "L243",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasequery",
       "_tgt": "pocketbase_pocketbasequery_then",
@@ -3600,7 +3636,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L246",
+      "source_location": "L250",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasequery",
       "_tgt": "pocketbase_pocketbasequery_execute",
@@ -3612,7 +3648,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L284",
+      "source_location": "L288",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasequery_execute",
       "_tgt": "pocketbase_pocketbasequery_update",
@@ -3624,7 +3660,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L293",
+      "source_location": "L297",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasequery_execute",
       "_tgt": "pocketbase_pocketbasequery_delete",
@@ -3636,7 +3672,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L243",
+      "source_location": "L247",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasequery_then",
       "_tgt": "pocketbase_pocketbasequery_execute",
@@ -3648,7 +3684,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L338",
+      "source_location": "L348",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasechannel_subscribe",
       "_tgt": "pocketbase_pocketbasequery_then",
@@ -3657,10 +3693,22 @@
       "confidence_score": 1.0
     },
     {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\pocketbase.ts",
+      "source_location": "L461",
+      "weight": 1.0,
+      "_src": "pocketbase_pocketbasechannel_subscribewithpolling",
+      "_tgt": "pocketbase_pocketbasequery_then",
+      "source": "pocketbase_pocketbasequery_then",
+      "target": "pocketbase_pocketbasechannel_subscribewithpolling",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L326",
+      "source_location": "L331",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasechannel",
       "_tgt": "pocketbase_pocketbasechannel_constructor",
@@ -3672,7 +3720,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L330",
+      "source_location": "L335",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasechannel",
       "_tgt": "pocketbase_pocketbasechannel_on",
@@ -3684,7 +3732,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L335",
+      "source_location": "L340",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasechannel",
       "_tgt": "pocketbase_pocketbasechannel_subscribe",
@@ -3696,12 +3744,84 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src\\pocketbase.ts",
-      "source_location": "L392",
+      "source_location": "L402",
+      "weight": 1.0,
+      "_src": "pocketbase_pocketbasechannel",
+      "_tgt": "pocketbase_pocketbasechannel_primecache",
+      "source": "pocketbase_pocketbasechannel",
+      "target": "pocketbase_pocketbasechannel_primecache",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\pocketbase.ts",
+      "source_location": "L412",
+      "weight": 1.0,
+      "_src": "pocketbase_pocketbasechannel",
+      "_tgt": "pocketbase_pocketbasechannel_notifyhandlers",
+      "source": "pocketbase_pocketbasechannel",
+      "target": "pocketbase_pocketbasechannel_notifyhandlers",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\pocketbase.ts",
+      "source_location": "L426",
+      "weight": 1.0,
+      "_src": "pocketbase_pocketbasechannel",
+      "_tgt": "pocketbase_pocketbasechannel_polltables",
+      "source": "pocketbase_pocketbasechannel",
+      "target": "pocketbase_pocketbasechannel_polltables",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\pocketbase.ts",
+      "source_location": "L460",
+      "weight": 1.0,
+      "_src": "pocketbase_pocketbasechannel",
+      "_tgt": "pocketbase_pocketbasechannel_subscribewithpolling",
+      "source": "pocketbase_pocketbasechannel",
+      "target": "pocketbase_pocketbasechannel_subscribewithpolling",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\pocketbase.ts",
+      "source_location": "L477",
       "weight": 1.0,
       "_src": "pocketbase_pocketbasechannel",
       "_tgt": "pocketbase_pocketbasechannel_unsubscribe",
       "source": "pocketbase_pocketbasechannel",
       "target": "pocketbase_pocketbasechannel_unsubscribe",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\pocketbase.ts",
+      "source_location": "L344",
+      "weight": 1.0,
+      "_src": "pocketbase_pocketbasechannel_subscribe",
+      "_tgt": "pocketbase_pocketbasechannel_subscribewithpolling",
+      "source": "pocketbase_pocketbasechannel_subscribe",
+      "target": "pocketbase_pocketbasechannel_subscribewithpolling",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\pocketbase.ts",
+      "source_location": "L461",
+      "weight": 1.0,
+      "_src": "pocketbase_pocketbasechannel_subscribewithpolling",
+      "_tgt": "pocketbase_pocketbasechannel_primecache",
+      "source": "pocketbase_pocketbasechannel_primecache",
+      "target": "pocketbase_pocketbasechannel_subscribewithpolling",
       "confidence_score": 1.0
     },
     {

@@ -21,11 +21,19 @@ self.addEventListener('push', (event) => {
 
   const options = {
     body: payload.body,
-    icon: '/favicon.ico',
-    badge: '/favicon.ico',
+    icon: payload.icon || '/app-icon.svg',
+    badge: payload.badge || '/app-icon.svg',
+    image: payload.image,
     data: payload.data || {},
-    tag: payload.data?.tag || undefined,
-    renotify: false,
+    tag: payload.data?.tag || payload.tag || undefined,
+    renotify: true,
+    requireInteraction: payload.requireInteraction || false,
+    actions: payload.actions || [
+      { action: 'open', title: 'Open ERP' },
+      { action: 'dismiss', title: 'Dismiss' },
+    ],
+    timestamp: payload.timestamp || Date.now(),
+    vibrate: payload.vibrate || [120, 60, 120],
   };
 
   event.waitUntil(self.registration.showNotification(payload.title || 'Notification', options));
@@ -33,6 +41,8 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+
+  if (event.action === 'dismiss') return;
 
   const targetUrl = event.notification?.data?.url || '/';
 

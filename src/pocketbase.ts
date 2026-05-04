@@ -39,9 +39,13 @@ const toPostgresEvent = (action: string) => {
 };
 
 const DEFAULT_POCKETBASE_URL = 'http://127.0.0.1:8090';
+const REALTIME_POLL_INTERVAL_MS = 8000;
 
 export const pocketBaseUrl =
   (import.meta.env.VITE_POCKETBASE_URL as string | undefined) || DEFAULT_POCKETBASE_URL;
+
+const realtimeMode =
+  (import.meta.env.VITE_REALTIME_MODE as string | undefined) || (import.meta.env.PROD ? 'polling' : 'pocketbase');
 
 export const pb = new PocketBase(pocketBaseUrl);
 pb.autoCancellation(false);
@@ -322,6 +326,7 @@ class PocketBaseChannel {
   private handlers: RealtimeHandler[] = [];
   private unsubscribeTasks: Array<() => void> = [];
   private recordCache = new Map<string, any>();
+  private pollTimer: ReturnType<typeof window.setInterval> | null = null;
 
   constructor(private readonly name: string) {
     void this.name;
@@ -334,6 +339,11 @@ class PocketBaseChannel {
 
   subscribe(callback?: (status: string) => void) {
     const tables = Array.from(new Set(this.handlers.map((handler) => handler.table)));
+
+    if (realtimeMode === 'polling') {
+      this.subscribeWithPolling(tables, callback);
+      return this;
+    }
 
     Promise.all(
       tables.map(async (table) => {
@@ -389,7 +399,86 @@ class PocketBaseChannel {
     return this;
   }
 
+  private async primeCache(tables: string[]) {
+    await Promise.all(tables.map(async (table) => {
+      const pocketBaseTable = resolveCollectionName(table);
+      const initialRecords = await pb.collection(pocketBaseTable).getFullList({ requestKey: null }).catch(() => []);
+      initialRecords.forEach((record) => {
+        this.recordCache.set(`${table}:${record.id}`, normalizeRecord(record));
+      });
+    }));
+  }
+
+  private notifyHandlers(table: string, action: string, oldRecord: any, newRecord: any) {
+    const matchingHandlers = this.handlers.filter((handler) => {
+      return handler.table === table && (handler.event === '*' || handler.event.toUpperCase() === action);
+    });
+
+    const payload = {
+      eventType: action,
+      new: newRecord,
+      old: action === 'INSERT' ? null : oldRecord,
+    };
+
+    matchingHandlers.forEach((handler) => handler.callback(payload));
+  }
+
+  private async pollTables(tables: string[]) {
+    await Promise.all(tables.map(async (table) => {
+      const pocketBaseTable = resolveCollectionName(table);
+      const records = await pb.collection(pocketBaseTable).getFullList({ requestKey: null }).catch(() => []);
+      const seenKeys = new Set<string>();
+
+      records.forEach((record) => {
+        const cacheKey = `${table}:${record.id}`;
+        const newRecord = normalizeRecord(record);
+        const oldRecord = this.recordCache.get(cacheKey) || null;
+        seenKeys.add(cacheKey);
+
+        if (!oldRecord) {
+          this.recordCache.set(cacheKey, newRecord);
+          this.notifyHandlers(table, 'INSERT', null, newRecord);
+          return;
+        }
+
+        if (JSON.stringify(oldRecord) !== JSON.stringify(newRecord)) {
+          this.recordCache.set(cacheKey, newRecord);
+          this.notifyHandlers(table, 'UPDATE', oldRecord, newRecord);
+        }
+      });
+
+      Array.from(this.recordCache.keys())
+        .filter((cacheKey) => cacheKey.startsWith(`${table}:`) && !seenKeys.has(cacheKey))
+        .forEach((cacheKey) => {
+          const oldRecord = this.recordCache.get(cacheKey) || null;
+          this.recordCache.delete(cacheKey);
+          this.notifyHandlers(table, 'DELETE', oldRecord, null);
+        });
+    }));
+  }
+
+  private subscribeWithPolling(tables: string[], callback?: (status: string) => void) {
+    this.primeCache(tables)
+      .then(() => {
+        if (import.meta.env.DEV) console.debug('PocketBase polling realtime active:', tables);
+        callback?.('SUBSCRIBED');
+        this.pollTimer = window.setInterval(() => {
+          this.pollTables(tables).catch((error) => {
+            console.error('PocketBase polling realtime failed:', error);
+          });
+        }, REALTIME_POLL_INTERVAL_MS);
+      })
+      .catch((error) => {
+        console.error('PocketBase polling realtime setup failed:', error);
+        callback?.('CHANNEL_ERROR');
+      });
+  }
+
   unsubscribe() {
+    if (this.pollTimer) {
+      window.clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
     this.unsubscribeTasks.forEach((unsubscribe) => unsubscribe());
     this.unsubscribeTasks = [];
   }

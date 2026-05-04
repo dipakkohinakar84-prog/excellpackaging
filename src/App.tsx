@@ -1124,7 +1124,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
 
       await sendBackgroundPushEvent({
         title: 'Order Dispatched',
-        body: `Dispatch completed (${dispatchedOrderIds}) | Invoice: ${invoiceNo} | Vehicle: ${vehicleNo}`,
+        body: `Orders ${dispatchedOrderIds}\nInvoice ${invoiceNo} | Vehicle ${vehicleNo}`,
         departments: ['Office'],
         actor: loggedInUser.username,
       });
@@ -2846,7 +2846,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
             for (const dept of sanitizedAssignedDepartments) {
               await sendBackgroundPushEvent({
                 title: 'New Work Assigned',
-                body: `Order #${insertedOrder.id} ${formData.job_details} (${dept.replace(/_/g, ' ')})`.trim(),
+                body: `Order #${insertedOrder.id} | ${dept.replace(/_/g, ' ')}\n${formData.job_details}`.trim(),
                 departments: [dept],
                 workOrderId: insertedOrder.id,
                 actor: loggedInUser.username,
@@ -3376,7 +3376,7 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                       if (status === 'Work Started' && previousStatus !== 'Work Started') {
                         await sendBackgroundPushEvent({
                           title: 'Work Started',
-                          body: `Order #${wo.id} - ${department.replace(/_/g, ' ')} started work`,
+                          body: `Order #${wo.id} | ${department.replace(/_/g, ' ')}\nProduction has started`,
                           departments: ['Office'],
                           workOrderId: wo.id,
                           actor: loggedInUser.username,
@@ -3386,7 +3386,7 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                       if (status === 'Ready for QC' && previousStatus !== 'Ready for QC') {
                         await sendBackgroundPushEvent({
                           title: 'QC Check Required',
-                          body: `Order #${wo.id} is ready for QC (${department.replace(/_/g, ' ')})`,
+                          body: `Order #${wo.id} | ${department.replace(/_/g, ' ')}\nReady for quality approval`,
                           departments: ['Quality_Control'],
                           workOrderId: wo.id,
                           actor: loggedInUser.username,
@@ -3396,7 +3396,7 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                       if ((qcStatus === 'QC Approved' || qcStatus === 'QC Denied') && previousQCStatus !== qcStatus) {
                         await sendBackgroundPushEvent({
                           title: qcStatus,
-                          body: `Order #${wo.id} - ${department.replace(/_/g, ' ')} ${qcStatus.toLowerCase()}`,
+                          body: `Order #${wo.id} | ${department.replace(/_/g, ' ')}\n${qcStatus}`,
                           departments: [department],
                           workOrderId: wo.id,
                           actor: loggedInUser.username,
@@ -3406,7 +3406,7 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                       if (!wasAllApproved && allApproved && newOverallStatus === 'QC Approved') {
                         await sendBackgroundPushEvent({
                           title: 'Dispatch Ready',
-                          body: `Order #${wo.id} is approved and ready for dispatch`,
+                          body: `Order #${wo.id}\nQC approved. Ready for dispatch`,
                           departments: ['Dispatch'],
                           workOrderId: wo.id,
                           actor: loggedInUser.username,
