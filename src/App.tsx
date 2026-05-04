@@ -4720,7 +4720,7 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
             <tbody className="divide-y divide-gray-100">
               {filteredEvents.map((ev: any) => (
                 <tr key={ev.id}>
-                  <td className="px-4 py-2 text-xs text-gray-500 whitespace-nowrap">{new Date(ev.created_at).toLocaleString()}</td>
+                  <td className="px-4 py-2 text-xs text-gray-500 whitespace-nowrap">{new Date(ev.created || ev.created_at).toLocaleString()}</td>
                   <td className="px-4 py-2 font-black text-slate-800 whitespace-nowrap">{ev.title}</td>
                   <td className="px-4 py-2 text-xs text-gray-600">{ev.body}</td>
                   <td className="px-4 py-2 text-xs font-bold text-gray-700 whitespace-nowrap">{ev.actor || '-'}</td>

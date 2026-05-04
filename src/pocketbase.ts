@@ -145,6 +145,8 @@ const escapeFilterValue = (value: any): string => {
 
 const toPocketBaseField = (collection: string, field: string) => {
   if (field === 'id' && idFieldCollections.has(collection)) return 'legacy_id';
+  if (field === 'created_at') return 'created';
+  if (field === 'updated_at') return 'updated';
   return field;
 };
 
@@ -169,7 +171,7 @@ const buildFilter = (collection: string, filters: Filter[]) => {
 
 const toPocketBaseSort = (sorts: { field: string; ascending: boolean }[]) => {
   if (sorts.length === 0) return undefined;
-  return sorts.map((sort) => `${sort.ascending ? '' : '-'}${sort.field === 'id' ? 'legacy_id' : sort.field}`).join(',');
+  return sorts.map((sort) => `${sort.ascending ? '' : '-'}${toPocketBaseField('', sort.field)}`).join(',');
 };
 
 const toError = (error: any) => ({
