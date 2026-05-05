@@ -54,7 +54,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L147",
       "id": "app_parseassigneddepartments",
-      "community": 10,
+      "community": 12,
       "norm_label": "parseassigneddepartments()"
     },
     {
@@ -603,7 +603,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L4872",
       "id": "app_parsedate",
-      "community": 9,
+      "community": 10,
       "norm_label": "parsedate()"
     },
     {
@@ -612,7 +612,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L4878",
       "id": "app_inrange",
-      "community": 9,
+      "community": 10,
       "norm_label": "inrange()"
     },
     {
@@ -639,7 +639,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5109",
       "id": "app_downloadcsv",
-      "community": 12,
+      "community": 8,
       "norm_label": "downloadcsv()"
     },
     {
@@ -648,7 +648,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5135",
       "id": "app_exportcurrentreport",
-      "community": 12,
+      "community": 8,
       "norm_label": "exportcurrentreport()"
     },
     {
@@ -693,7 +693,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5579",
       "id": "app_getnormalizedassigneddepartments",
-      "community": 10,
+      "community": 12,
       "norm_label": "getnormalizedassigneddepartments()"
     },
     {
@@ -738,7 +738,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5795",
       "id": "app_clearhint",
-      "community": 8,
+      "community": 9,
       "norm_label": "clearhint()"
     },
     {
@@ -747,7 +747,7 @@
       "source_file": "src\\App.tsx",
       "source_location": "L5796",
       "id": "app_onpopstate",
-      "community": 8,
+      "community": 9,
       "norm_label": "onpopstate()"
     },
     {

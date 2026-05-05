@@ -833,8 +833,8 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
           <div className="md:hidden mb-2 inline-flex items-center gap-2 rounded-full bg-blue-500/15 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-blue-200 border border-blue-400/20">
             <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" /> Mobile Command
           </div>
-          <h1 className="text-2xl font-black tracking-tight md:text-gray-800">Welcome, {user.username}</h1>
-          <p className="text-sm font-bold text-slate-300 md:text-gray-500 md:font-medium">{user.department.replace(/_/g, ' ')} | {user.level.split('-')[1]}</p>
+          <h1 className="text-2xl font-black tracking-tight text-white">Welcome, {user.username}</h1>
+          <p className="text-sm font-bold text-slate-200 md:font-medium">{user.department.replace(/_/g, ' ')} | {user.level.split('-')[1]}</p>
         </div>
         <div className="relative z-10 flex items-center gap-2 bg-white/10 md:bg-white px-4 py-2 rounded-xl border border-white/10 md:border-gray-100 shadow-sm self-start md:self-auto">
           <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
