@@ -827,16 +827,20 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
   ];
 
   return (
-    <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-500">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-black text-gray-800 tracking-tight">Welcome, {user.username}</h1>
-          <p className="text-gray-500 font-medium">{user.department} | {user.level.split('-')[1]}</p>
+    <div className="space-y-4 sm:space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-500">
+      <div className="relative overflow-hidden rounded-3xl bg-slate-950 p-4 text-white shadow-xl shadow-slate-950/20 md:bg-transparent md:p-0 md:text-slate-900 md:shadow-none md:rounded-none flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="relative z-10">
+          <div className="md:hidden mb-2 inline-flex items-center gap-2 rounded-full bg-blue-500/15 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-blue-200 border border-blue-400/20">
+            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" /> Mobile Command
+          </div>
+          <h1 className="text-2xl font-black tracking-tight md:text-gray-800">Welcome, {user.username}</h1>
+          <p className="text-sm font-bold text-slate-300 md:text-gray-500 md:font-medium">{user.department.replace(/_/g, ' ')} | {user.level.split('-')[1]}</p>
         </div>
-        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-gray-100 shadow-sm self-start md:self-auto">
+        <div className="relative z-10 flex items-center gap-2 bg-white/10 md:bg-white px-4 py-2 rounded-xl border border-white/10 md:border-gray-100 shadow-sm self-start md:self-auto">
           <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Live Cloud Sync</span>
+          <span className="text-[10px] font-black text-slate-200 md:text-gray-400 uppercase tracking-widest">Live Cloud Sync</span>
         </div>
+        <div className="md:hidden absolute -right-10 -top-10 h-32 w-32 rounded-full bg-blue-600/25 blur-2xl" />
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
@@ -844,7 +848,7 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
           <button
             key={stat.label}
             onClick={() => setView(stat.view)}
-            className="group relative bg-white p-4 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md hover:border-blue-200 transition-all text-left overflow-hidden"
+            className="group relative bg-white p-3.5 sm:p-4 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md hover:border-blue-200 transition-all text-left overflow-hidden min-h-[104px] active:scale-[0.99]"
           >
             <div className={`p-2.5 rounded-xl mb-3 inline-flex ${stat.tone}`}>
               <stat.icon size={18} />
@@ -857,7 +861,7 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
         ))}
       </div>
 
-      <Card className="space-y-3">
+      <Card className="space-y-3 rounded-3xl sm:rounded-xl">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <h3 className="text-sm font-black text-gray-800 uppercase tracking-wider">Analytics</h3>
@@ -2634,13 +2638,14 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
   if (loading) return <LoadingState />;
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
-      <div className="flex flex-col gap-2 mb-6">
-        <h1 className="text-2xl font-black text-gray-800">{loggedInUser.department.replace(/_/g, ' ')} Dashboard</h1>
-        <p className="text-gray-500 text-sm">Manage your department's active work orders.</p>
+    <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-300">
+      <div className="rounded-3xl bg-slate-950 p-4 text-white shadow-xl shadow-slate-950/20 md:bg-transparent md:p-0 md:text-slate-900 md:shadow-none md:rounded-none flex flex-col gap-2 mb-4 sm:mb-6">
+        <div className="md:hidden text-[10px] font-black uppercase tracking-widest text-blue-200">Production Queue</div>
+        <h1 className="text-2xl font-black md:text-gray-800">{loggedInUser.department.replace(/_/g, ' ')} Dashboard</h1>
+        <p className="text-slate-300 md:text-gray-500 text-sm">Manage your department's active work orders.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3 mb-4 sm:mb-6">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
           <input 
@@ -2648,13 +2653,13 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
             placeholder="Search by order, customer, or job..." 
             value={searchQuery} 
             onChange={e => setSearchQuery(e.target.value)} 
-            className="w-full pl-12 pr-4 py-4 bg-white border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm" 
+            className="w-full pl-12 pr-4 py-3.5 sm:py-4 bg-white border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm" 
           />
         </div>
         <select
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value)}
-          className="w-full px-4 py-4 bg-white border border-gray-200 rounded-2xl text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-4 py-3.5 sm:py-4 bg-white border border-gray-200 rounded-2xl text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="All">All Statuses</option>
           {statusOptions.map(status => (
@@ -2668,7 +2673,7 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
           <div 
             key={wo.id} 
             onClick={() => onView(wo.id)}
-            className="group bg-white rounded-xl border border-gray-100 p-3 space-y-2 shadow-sm hover:shadow-md hover:border-blue-100 transition-all cursor-pointer"
+            className="group bg-white rounded-2xl sm:rounded-xl border border-gray-100 p-3.5 sm:p-3 space-y-2 shadow-sm hover:shadow-md hover:border-blue-100 transition-all cursor-pointer active:scale-[0.99]"
           >
             <div className="flex items-start justify-between gap-2">
               <div>
@@ -2939,13 +2944,19 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
   if (loading) return <LoadingState />;
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
-      <div className="sticky top-16 md:top-0 z-20 bg-gray-50/95 backdrop-blur px-1 py-2 rounded-xl border border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-4">
-        <h2 className="text-2xl font-black text-gray-800 tracking-tight">Work Orders</h2>
+    <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-300">
+      <div className="sticky top-16 md:top-0 z-20 bg-white/95 md:bg-gray-50/95 backdrop-blur px-3 md:px-1 py-3 md:py-2 rounded-3xl md:rounded-xl border border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-4 shadow-sm md:shadow-none">
+        <div className="flex items-center justify-between w-full md:w-auto gap-2">
+          <div>
+            <div className="md:hidden text-[10px] font-black uppercase tracking-widest text-blue-600">Factory Queue</div>
+            <h2 className="text-2xl font-black text-gray-800 tracking-tight">Work Orders</h2>
+          </div>
+          <Badge color="blue" className="md:hidden">{totalRows} Total</Badge>
+        </div>
         
         <div className="flex items-center gap-2 sm:gap-3 w-full md:w-auto">
             {/* View Toggle */}
-            <div className="flex bg-white rounded-xl p-1 border border-gray-200 shadow-sm">
+            <div className="hidden sm:flex bg-white rounded-xl p-1 border border-gray-200 shadow-sm">
                 <button 
                     onClick={() => setViewMode('table')} 
                     className={`p-2 rounded-lg transition-all ${viewMode === 'table' ? 'bg-indigo-50 text-indigo-600 shadow-sm' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
@@ -2978,7 +2989,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                 onClick={() => setIsModalOpen(true)}
                 aria-label="New Order"
                 title="New Order"
-                className="w-11 h-11 sm:w-auto sm:h-auto bg-blue-600 text-white sm:px-6 sm:py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 hover:scale-105 hover:bg-blue-500 transition-all"
+                className="w-11 h-11 sm:w-auto sm:h-auto bg-blue-600 text-white sm:px-6 sm:py-2.5 rounded-2xl sm:rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 hover:scale-105 hover:bg-blue-500 transition-all"
               >
                 <Plus size={20} />
                 <span className="hidden sm:inline">New Order</span>
@@ -2987,7 +2998,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
         </div>
       </div>
 
-      <div className="mb-6">
+      <div className="mb-4 sm:mb-6">
         <div className={`grid gap-2 ${canFilterByDepartment ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'}`}>
           <select
             value={statusFilter}
@@ -3086,7 +3097,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
       </Modal>
 
       {viewMode === 'table' ? (
-        <Card className="p-0 overflow-x-auto shadow-md border border-gray-100">
+        <Card className="hidden md:block p-0 overflow-x-auto shadow-md border border-gray-100">
                 <table className="w-full min-w-[1550px] text-left text-sm">
                     <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-400 border-b border-gray-200">
                         <tr>
@@ -3158,11 +3169,11 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
             {filteredOrders.length === 0 && <div className="p-12 text-center text-gray-400 italic">No matching work orders found.</div>}
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5 md:gap-3">
             {paginatedOrders.map(wo => (
             <div 
                 key={wo.id} 
-                className="group bg-white rounded-xl border border-gray-100 p-3 space-y-2 shadow-sm hover:shadow-md hover:border-blue-100 transition-all"
+                className="group bg-white rounded-2xl md:rounded-xl border border-gray-100 p-3.5 md:p-3 space-y-2.5 md:space-y-2 shadow-sm hover:shadow-md hover:border-blue-100 transition-all active:scale-[0.99]"
             >
                 <div className="flex items-start justify-between gap-2">
                   <div>
@@ -3287,39 +3298,40 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
   const allowedStatuses: WOStatus[] = ['Not Started', 'Work Started', 'Ready for QC', 'Ready for despatch', 'Cancelled'];
 
   return (
-    <div className="space-y-4 max-[375px]:space-y-3 animate-in fade-in slide-in-from-right-4 duration-300">
-      <button onClick={onBack} className="flex items-center gap-2 max-[375px]:gap-1.5 text-[10px] max-[375px]:text-[9px] font-black text-gray-400 hover:text-indigo-600 transition-colors uppercase tracking-widest">
+    <div className="space-y-3 sm:space-y-4 max-[375px]:space-y-3 animate-in fade-in slide-in-from-right-4 duration-300">
+      <button onClick={onBack} className="flex items-center gap-2 max-[375px]:gap-1.5 text-[10px] max-[375px]:text-[9px] font-black text-slate-300 md:text-gray-400 hover:text-indigo-600 transition-colors uppercase tracking-widest">
         <ChevronLeft size={16}/> Back
       </button>
-      
+       
       <div className="flex flex-col xl:flex-row gap-4 max-[375px]:gap-3">
         <div className="flex-1 space-y-4">
-          <Card className="p-5 max-[375px]:p-3.5 border-t-4 border-t-indigo-600">
-             <div className="flex flex-col md:flex-row justify-between items-start mb-5 max-[375px]:mb-3 gap-3 max-[375px]:gap-2">
-                <div>
-                   <span className="bg-indigo-50 text-indigo-600 px-3 max-[375px]:px-2 py-1 rounded-lg text-[10px] max-[375px]:text-[9px] font-black tracking-widest border border-indigo-100">ORDER-#{wo.id}</span>
-                   <h1 className="text-2xl max-[375px]:text-xl font-black text-gray-800 mt-2 mb-1 break-words leading-tight">{wo.job_details}</h1>
-                   <p className="text-base max-[375px]:text-sm font-bold text-gray-400 uppercase tracking-tight">{wo.customer}</p>
-                </div>
-                <StatusBadge status={wo.status} />
-             </div>
-              
-             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 max-[375px]:gap-2 py-4 border-y border-gray-100">
-                <div>
-                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Batch Size</label>
-                   <p className="text-xl max-[375px]:text-base font-black text-indigo-600">{wo.qty} <span className="text-[10px] text-gray-400 font-bold">PCS</span></p>
-                </div>
-                <div>
-                   <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest block mb-1">Delivery ETD</label>
-                   <p className="text-xs font-black text-orange-600 flex items-center gap-1"><Clock size={12}/> {wo.etd || 'N/A'}</p>
-                </div>
-                <div>
-                   <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest block mb-1">Blueprint Ref</label>
-                   <p className="text-xs font-mono font-bold bg-gray-50 px-2 py-1 rounded inline-block break-all">{wo.drawing || 'NO DRAWING'}</p>
-                </div>
-                <div>
-                   <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest block mb-1">QC/Ready Date</label>
-                   <p className="text-xs font-black text-green-600">{wo.ready_date || 'IN PROGRESS'}</p>
+          <Card className="p-4 sm:p-5 max-[375px]:p-3.5 border-t-0 md:border-t-4 md:border-t-indigo-600 rounded-3xl md:rounded-xl overflow-hidden relative">
+             <div className="md:hidden absolute inset-x-0 top-0 h-1.5 bg-blue-600" />
+             <div className="flex flex-col md:flex-row justify-between items-start mb-4 sm:mb-5 max-[375px]:mb-3 gap-3 max-[375px]:gap-2">
+                 <div>
+                    <span className="bg-indigo-50 text-indigo-600 px-3 max-[375px]:px-2 py-1 rounded-full md:rounded-lg text-[10px] max-[375px]:text-[9px] font-black tracking-widest border border-indigo-100">ORDER-#{wo.id}</span>
+                    <h1 className="text-2xl max-[375px]:text-xl font-black text-gray-800 mt-2 mb-1 break-words leading-tight">{wo.job_details}</h1>
+                    <p className="text-base max-[375px]:text-sm font-bold text-gray-400 uppercase tracking-tight">{wo.customer}</p>
+                 </div>
+                 <StatusBadge status={wo.status} />
+              </div>
+               
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 max-[375px]:gap-2 py-3 sm:py-4 border-y border-gray-100">
+                 <div className="rounded-2xl bg-gray-50 p-3 sm:bg-transparent sm:p-0 sm:rounded-none">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Batch Size</label>
+                    <p className="text-xl max-[375px]:text-base font-black text-indigo-600">{wo.qty} <span className="text-[10px] text-gray-400 font-bold">PCS</span></p>
+                 </div>
+                 <div className="rounded-2xl bg-orange-50 p-3 sm:bg-transparent sm:p-0 sm:rounded-none">
+                    <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest block mb-1">Delivery ETD</label>
+                    <p className="text-xs font-black text-orange-600 flex items-center gap-1"><Clock size={12}/> {wo.etd || 'N/A'}</p>
+                 </div>
+                 <div className="col-span-2 lg:col-span-1 rounded-2xl bg-gray-50 p-3 sm:bg-transparent sm:p-0 sm:rounded-none">
+                    <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest block mb-1">Blueprint Ref</label>
+                    <p className="text-xs font-mono font-bold bg-gray-50 px-2 py-1 rounded inline-block break-all">{wo.drawing || 'NO DRAWING'}</p>
+                 </div>
+                 <div className="col-span-2 lg:col-span-1 rounded-2xl bg-emerald-50 p-3 sm:bg-transparent sm:p-0 sm:rounded-none">
+                    <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest block mb-1">QC/Ready Date</label>
+                    <p className="text-xs font-black text-green-600">{wo.ready_date || 'IN PROGRESS'}</p>
                 </div>
              </div>
 
@@ -4700,12 +4712,13 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <div className="rounded-3xl bg-slate-950 p-4 text-white shadow-xl shadow-slate-950/20 md:bg-transparent md:p-0 md:text-slate-900 md:shadow-none md:rounded-none flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-black text-gray-800 tracking-tight">Notification Audit</h2>
-          <p className="text-xs font-semibold text-gray-500 text-center sm:text-left">Last 200 notification events from push function.</p>
+          <div className="md:hidden text-[10px] font-black uppercase tracking-widest text-blue-200">Alerts Center</div>
+          <h2 className="text-2xl font-black tracking-tight md:text-gray-800">Notification Audit</h2>
+          <p className="text-xs font-semibold text-slate-300 md:text-gray-500 text-left">Last 200 notification events from push function.</p>
         </div>
-        <button onClick={fetchEvents} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-black">Refresh</button>
+        <button onClick={fetchEvents} className="px-4 py-3 md:py-2 bg-blue-600 md:bg-slate-900 text-white rounded-2xl md:rounded-xl text-sm font-black">Refresh</button>
       </div>
 
       <div className="relative">
@@ -4718,7 +4731,41 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
         />
       </div>
 
-      <Card className="p-0 overflow-hidden">
+      <div className="md:hidden space-y-2.5">
+        {filteredEvents.map((ev: any) => {
+          const failed = Number(ev.failed || 0);
+          const sent = Number(ev.sent || 0);
+          const targets = Number(ev.targets || 0);
+          const tone = failed > 0 ? 'border-l-red-500' : sent > 0 ? 'border-l-emerald-500' : 'border-l-amber-500';
+
+          return (
+            <div key={ev.id} className={`rounded-2xl bg-white border border-gray-100 border-l-4 ${tone} p-3.5 shadow-sm`}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-gray-400">{formatEventTime(ev)}</div>
+                  <h3 className="mt-1 text-sm font-black text-slate-900 leading-tight">{ev.title}</h3>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-[10px] font-black text-indigo-600">WO #{ev.work_order_id || '-'}</div>
+                </div>
+              </div>
+              <p className="mt-2 text-xs font-semibold text-slate-600 whitespace-pre-line">{ev.body}</p>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {(ev.departments || []).map((d: string) => <Badge key={d} color="gray">{d}</Badge>)}
+              </div>
+              <div className="mt-3 grid grid-cols-4 gap-2 text-center">
+                <div className="rounded-xl bg-gray-50 px-2 py-2"><div className="text-[9px] font-black text-gray-400 uppercase">By</div><div className="text-[10px] font-black text-slate-700 truncate">{ev.actor || '-'}</div></div>
+                <div className="rounded-xl bg-gray-50 px-2 py-2"><div className="text-[9px] font-black text-gray-400 uppercase">Targets</div><div className="text-xs font-black text-slate-900">{targets}</div></div>
+                <div className="rounded-xl bg-emerald-50 px-2 py-2"><div className="text-[9px] font-black text-emerald-600 uppercase">Sent</div><div className="text-xs font-black text-emerald-700">{sent}</div></div>
+                <div className="rounded-xl bg-red-50 px-2 py-2"><div className="text-[9px] font-black text-red-600 uppercase">Failed</div><div className="text-xs font-black text-red-700">{failed}</div></div>
+              </div>
+            </div>
+          );
+        })}
+        {filteredEvents.length === 0 && <div className="rounded-2xl bg-white p-8 text-center text-sm font-semibold text-gray-400">No notification events found.</div>}
+      </div>
+
+      <Card className="hidden md:block p-0 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[980px] text-sm">
             <thead className="bg-gray-50 text-[10px] uppercase tracking-widest text-gray-400 font-black border-b">
@@ -5993,7 +6040,7 @@ export default function App() {
         : 'Notifications unsupported';
 
   return (
-    <div className="min-h-screen flex bg-gray-50 overflow-x-hidden">
+    <div className="min-h-screen flex bg-gray-50 lg:bg-gray-50 bg-gradient-to-b from-slate-950 via-slate-100 to-gray-50 overflow-x-hidden">
       <style>{`
         @page {
           size: A4 portrait;
@@ -6167,26 +6214,29 @@ export default function App() {
       )}
 
       <main className="flex-1 min-w-0 lg:ml-64 flex flex-col min-h-screen transition-all duration-300">
-         <header className="lg:hidden flex justify-between items-center h-16 bg-white border-b px-3 sm:px-4 sticky top-0 z-30 no-print shadow-sm">
-            <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-              <Menu size={24} />
-            </button>
-            <div className="flex items-center gap-2">
-              <span className="font-black tracking-widest text-lg text-slate-800">EXCELL</span>
-            </div>
-            <div className="w-10"></div> {/* Spacer to center logo visually if needed, or remove */}
-         </header>
-         <div className={`p-2 sm:p-3 md:p-4 mx-auto w-full flex-1 ${view === 'work-orders' ? 'max-w-none' : 'max-w-[1700px]'}`}>
+          <header className="lg:hidden flex justify-between items-center h-16 bg-slate-950 border-b border-slate-800 px-3 sm:px-4 sticky top-0 z-30 no-print shadow-lg shadow-slate-950/20">
+             <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 text-slate-300 hover:bg-slate-800 rounded-xl transition-colors">
+               <Menu size={24} />
+             </button>
+             <div className="flex items-center gap-2">
+               <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-900/40"><Package size={16}/></div>
+               <span className="font-black tracking-widest text-lg text-white">EXCELL</span>
+             </div>
+             <button onClick={refreshNotificationHealth} className="p-2 text-slate-300 hover:bg-slate-800 rounded-xl transition-colors" aria-label="Refresh notification status">
+               <RefreshCw size={20} />
+             </button>
+          </header>
+          <div className={`p-3 pb-24 sm:p-3 md:p-4 lg:pb-4 mx-auto w-full flex-1 ${view === 'work-orders' ? 'max-w-none' : 'max-w-[1700px]'}`}>
            {showExitHint && (
              <div className="mb-2 rounded-lg bg-slate-900 text-white px-3 py-2 text-xs font-bold no-print inline-block">
                Press back again to exit
              </div>
            )}
            {shouldShowNotificationBanner && (
-             <div className="mb-3 rounded-xl border border-blue-200 bg-blue-50/80 px-3 py-2.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 no-print">
-               <div className="min-w-0">
-                 <div className="text-[11px] font-black uppercase tracking-wider text-blue-700">Notification Setup</div>
-                 <div className="text-xs font-semibold text-blue-800 mt-0.5 break-words">
+              <div className="mb-3 rounded-2xl border border-blue-200 bg-white/95 lg:bg-blue-50/80 px-3 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 no-print shadow-sm lg:shadow-none">
+                <div className="min-w-0">
+                  <div className="text-[11px] font-black uppercase tracking-wider text-blue-700 flex items-center gap-1.5"><AlertCircle size={14}/> Notification Setup</div>
+                  <div className="text-xs font-semibold text-blue-800 mt-0.5 break-words">
                    {notificationStatusText}
                    {isIOSLike && !isStandalone ? ' - Open from Home Screen app to receive push on iOS.' : ''}
                  </div>
@@ -6209,9 +6259,23 @@ export default function App() {
                </div>
              </div>
            )}
-           {renderContent()}
-         </div>
-      </main>
+            {renderContent()}
+          </div>
+          <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 no-print border-t border-slate-800 bg-slate-950/95 backdrop-blur-xl px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-2xl shadow-slate-950/30">
+            <div className="grid grid-cols-5 gap-1">
+              {navGroups.flatMap(group => group.items).slice(0, 5).map(item => (
+                <button
+                  key={item.id}
+                  onClick={() => handleNavClick(item.id as AppView)}
+                  className={`min-h-14 rounded-2xl flex flex-col items-center justify-center gap-1 text-[10px] font-black transition-colors ${view === item.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-950/40' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}
+                >
+                  <item.icon size={18} />
+                  <span className="truncate max-w-full px-1">{item.label}</span>
+                </button>
+              ))}
+            </div>
+          </nav>
+       </main>
     </div>
   );
 }

@@ -76,8 +76,11 @@ const DepartmentStatusTracker: React.FC<DepartmentStatusTrackerProps> = ({
   };
 
   return (
-    <div className="space-y-2">
-      <h3 className="text-xl font-black text-gray-800 mb-2">Department Status Tracking</h3>
+    <div className="space-y-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-lg sm:text-xl font-black text-gray-800">Department Status Tracking</h3>
+        <span className="sm:hidden rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500">#{workOrderId}</span>
+      </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
       {assignedDepartments.map(dept => {
@@ -87,11 +90,11 @@ const DepartmentStatusTracker: React.FC<DepartmentStatusTrackerProps> = ({
         const isDepartmentBusy = isBusy && busyDepartmentKey === normalizedDept;
         
         return (
-          <div key={dept} className="bg-white border border-gray-200 rounded-xl p-2.5 shadow-sm">
+          <div key={dept} className="bg-white border border-gray-200 rounded-2xl sm:rounded-xl p-3 sm:p-2.5 shadow-sm">
             {/* Responsive header for the department status card */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-1.5 gap-1.5">
               <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0"></div>
+                <div className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0 shadow shadow-blue-200"></div>
                 <h4 className="font-black text-gray-800 break-words text-sm">{dept.replace(/_/g, ' ')}</h4>
               </div>
               
@@ -101,13 +104,13 @@ const DepartmentStatusTracker: React.FC<DepartmentStatusTrackerProps> = ({
             </div>
 
             {canEdit && !isQC && (
-              <div className="flex gap-1 flex-wrap mb-1.5">
+              <div className="grid grid-cols-3 sm:flex gap-1.5 sm:gap-1 flex-wrap mb-2 sm:mb-1.5">
                 {['Not Started', 'Work Started', 'Ready for QC'].map(status => (
                   <button
                     key={status}
                     onClick={() => handleStatusChange(dept, status)}
                     disabled={deptStatus.status === status || isDepartmentBusy}
-                    className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all flex-grow sm:flex-grow-0 ${
+                    className={`min-h-11 sm:min-h-0 px-2 py-2 sm:py-1 rounded-xl sm:rounded-md text-[10px] font-bold transition-all flex-grow sm:flex-grow-0 ${
                       deptStatus.status === status
                         ? 'bg-blue-600 text-white'
                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -137,7 +140,7 @@ const DepartmentStatusTracker: React.FC<DepartmentStatusTrackerProps> = ({
                     <button
                       onClick={() => handleQCStatusChange(dept, 'QC Approved')}
                       disabled={isDepartmentBusy}
-                      className="flex-1 px-2.5 py-1.5 bg-green-600 text-white rounded-md text-[10px] font-black hover:bg-green-700 transition-colors flex items-center justify-center disabled:opacity-50"
+                      className="flex-1 min-h-11 sm:min-h-0 px-2.5 py-2 sm:py-1.5 bg-green-600 text-white rounded-xl sm:rounded-md text-[10px] font-black hover:bg-green-700 transition-colors flex items-center justify-center disabled:opacity-50"
                     >
                       <Check size={12} className="inline mr-1" />
                       {isDepartmentBusy ? 'Updating...' : 'Approve'}
@@ -145,7 +148,7 @@ const DepartmentStatusTracker: React.FC<DepartmentStatusTrackerProps> = ({
                     <button
                       onClick={() => handleQCStatusChange(dept, 'QC Denied')}
                       disabled={isDepartmentBusy}
-                      className="flex-1 px-2.5 py-1.5 bg-red-600 text-white rounded-md text-[10px] font-black hover:bg-red-700 transition-colors flex items-center justify-center disabled:opacity-50"
+                      className="flex-1 min-h-11 sm:min-h-0 px-2.5 py-2 sm:py-1.5 bg-red-600 text-white rounded-xl sm:rounded-md text-[10px] font-black hover:bg-red-700 transition-colors flex items-center justify-center disabled:opacity-50"
                     >
                       <X size={12} className="inline mr-1" />
                       {isDepartmentBusy ? 'Updating...' : 'Deny'}
