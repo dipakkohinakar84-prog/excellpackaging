@@ -115,10 +115,14 @@ const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ chi
   <div className={`bg-white rounded-[18px] shadow-[0_1px_3px_rgba(15,23,42,0.14)] border border-slate-200/80 p-4 ${className}`}>{children}</div>
 );
 
-const LoadingState: React.FC<{ message?: string }> = ({ message = "Syncing with cloud..." }) => (
+const LoadingState: React.FC<{ message?: string }> = ({ message = "Loading..." }) => (
   <div className="flex flex-col items-center justify-center py-20 text-gray-400 animate-in fade-in duration-500">
-    <Loader2 className="w-10 h-10 animate-spin text-blue-600 mb-4" />
-    <p className="font-medium">{message}</p>
+    <div className="mb-5 grid w-full max-w-sm gap-2 px-8">
+      <div className="erp-skeleton h-3 rounded-full" />
+      <div className="erp-skeleton h-3 w-4/5 rounded-full" />
+      <div className="erp-skeleton h-3 w-2/3 rounded-full" />
+    </div>
+    <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">{message}</p>
   </div>
 );
 
@@ -403,6 +407,7 @@ const sendBackgroundPushEvent = async (params: {
 const Login: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) => {
   const [mobile, setMobile] = useState('');
   const [passkey, setPasskey] = useState('');
+  const [showPasskey, setShowPasskey] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -436,78 +441,129 @@ const Login: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-600/10 blur-[120px] rounded-full"></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-600/10 blur-[120px] rounded-full"></div>
-      </div>
-      
-      <div className="max-w-md w-full relative">
-        <div className="text-center mb-10">
-          <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-blue-500/20">
-            <Package size={32} className="text-white" />
-          </div>
-          <h1 className="text-3xl font-black text-white tracking-tighter mb-2">EXCELL PACKAGING</h1>
-          <p className="text-slate-400 font-medium">Enterprise Resource Planning</p>
-        </div>
+    <div className="min-h-screen overflow-hidden bg-[#f4f4f4] text-slate-900 lg:grid lg:grid-cols-2">
+      <style>{`
+        @keyframes loginFloat { 0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); } 50% { transform: translate3d(0, -18px, 0) rotate(4deg); } }
+        @keyframes loginDrift { 0% { transform: translateX(-8%) rotate(-4deg); } 100% { transform: translateX(8%) rotate(4deg); } }
+        @keyframes loginPulse { 0%, 100% { opacity: .35; transform: scale(.95); } 50% { opacity: .9; transform: scale(1.05); } }
+        @media (prefers-reduced-motion: reduce) { .login-animate { animation: none !important; } }
+      `}</style>
 
-        <div className="bg-slate-900/50 backdrop-blur-xl border border-white/5 rounded-3xl p-8 shadow-2xl">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {error && (
-              <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm font-bold flex items-center gap-3 animate-in fade-in slide-in-from-top-1">
-                <AlertCircle size={18} />
-                {error}
+      <section className="flex min-h-screen items-center justify-center px-5 py-10 lg:px-8">
+        <div className="w-full max-w-[430px] overflow-hidden rounded-lg border border-slate-300 bg-white shadow-[0_2px_10px_rgba(15,23,42,0.14)]">
+          <div className="px-8 pb-8 pt-14 sm:px-10">
+            <div className="mx-auto flex h-[72px] w-[72px] items-center justify-center rounded-[24px] bg-[#0176d3] text-white shadow-lg shadow-blue-200">
+              <Package size={38} strokeWidth={2.2} />
+            </div>
+            <h1 className="mt-8 text-center text-[28px] font-normal tracking-tight text-[#032d60]">Enter your Passkey</h1>
+            <div className="mt-8 flex items-center gap-3 text-sm font-medium text-slate-700">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#032d60] via-[#0176d3] to-emerald-400 text-white">
+                <Package size={20} />
               </div>
-            )}
-            
-            <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Registered Mobile</label>
-              <div className="relative">
-                <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-                <input 
-                  required
-                  type="text"
-                  placeholder="98XXXXXXXX"
-                  value={mobile}
-                  onChange={e => setMobile(e.target.value)}
-                  className="w-full pl-12 pr-4 py-4 bg-white/5 border border-white/10 rounded-2xl text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all font-mono"
-                />
-              </div>
+              <span>{mobile || 'Registered mobile user'}</span>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Access Passkey</label>
-              <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-                <input 
-                  required
-                  type="password"
-                  placeholder="••••••••"
-                  value={passkey}
-                  onChange={e => setPasskey(e.target.value)}
-                  className="w-full pl-12 pr-4 py-4 bg-white/5 border border-white/10 rounded-2xl text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                />
-              </div>
-            </div>
-
-            <button 
-              type="submit" 
-              disabled={loading}
-              className="w-full py-4 bg-blue-600 hover:bg-blue-50 disabled:bg-blue-600/50 text-white rounded-2xl font-black shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center gap-3 group"
-            >
-              {loading ? <Loader2 className="animate-spin" size={20} /> : (
-                <>
-                  SIGN IN <LogIn size={20} className="group-hover:translate-x-1 transition-transform" />
-                </>
+            <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+              {error && (
+                <div className="flex items-center gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-medium text-red-700 animate-in fade-in slide-in-from-top-1">
+                  <AlertCircle size={18} />
+                  {error}
+                </div>
               )}
-            </button>
-          </form>
-          
-          <div className="mt-8 text-center">
-            <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">Authorized Access Only</p>
+
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Registered Mobile</label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
+                  <input
+                    required
+                    type="text"
+                    inputMode="tel"
+                    placeholder="98XXXXXXXX"
+                    value={mobile}
+                    onChange={e => setMobile(e.target.value)}
+                    className="w-full rounded-md border border-slate-400 bg-white py-2.5 pl-10 pr-3 font-mono text-sm text-slate-900 outline-none transition-all focus:border-[#0176d3] focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Passkey</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
+                  <input
+                    required
+                    type={showPasskey ? 'text' : 'password'}
+                    placeholder="Enter passkey"
+                    value={passkey}
+                    onChange={e => setPasskey(e.target.value)}
+                    className="w-full rounded-md border border-slate-400 bg-white py-2.5 pl-10 pr-11 text-sm text-slate-900 outline-none transition-all focus:border-[#0176d3] focus:ring-2 focus:ring-blue-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPasskey(prev => !prev)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
+                    aria-label={showPasskey ? 'Hide passkey' : 'Show passkey'}
+                  >
+                    {showPasskey ? <EyeOff size={17} /> : <Eye size={17} />}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-[#0176d3] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#0b5cab] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loading ? <Loader2 className="animate-spin" size={18} /> : <>Log In <LogIn size={17} /></>}
+              </button>
+            </form>
+          </div>
+
+          <div className="border-t border-slate-200 bg-slate-50 px-8 py-7 text-center sm:px-10">
+            <div className="text-xs font-medium text-slate-500">Authorized Excell Packaging users only</div>
           </div>
         </div>
-      </div>
+      </section>
+
+      <section className="relative hidden min-h-screen overflow-hidden bg-gradient-to-br from-[#0b2ee8] via-[#123ec5] to-[#0622a8] px-10 py-9 text-white lg:block">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_35%_20%,rgba(255,255,255,0.22),transparent_28%),radial-gradient(circle_at_78%_55%,rgba(59,130,246,0.55),transparent_30%)]" />
+        <div className="absolute inset-0 opacity-30 [background-image:linear-gradient(rgba(255,255,255,.12)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.12)_1px,transparent_1px)] [background-size:44px_44px]" />
+
+        <div className="relative z-10 max-w-4xl">
+          <p className="text-sm font-bold tracking-wide text-blue-100">Cloud ERP | Excell Packaging</p>
+          <h2 className="mt-5 max-w-3xl text-[52px] font-black leading-[1.05] tracking-tight xl:text-[64px]">
+            Control every order from planning to dispatch.
+          </h2>
+          <p className="mt-7 max-w-3xl text-xl font-medium leading-8 text-blue-50/90">
+            Real-time production visibility, department queues, QC approvals, alerts, and dispatch tracking in one secure workspace.
+          </p>
+        </div>
+
+        <div className="relative z-10 mt-12 h-[430px] max-w-4xl overflow-hidden rounded-[34px] border border-white/20 bg-white/10 shadow-2xl shadow-blue-950/40 backdrop-blur-sm">
+          <div className="absolute left-10 top-10 h-24 w-24 rounded-[28px] border border-white/20 bg-white/15 login-animate" style={{ animation: 'loginFloat 5.5s ease-in-out infinite' }}>
+            <Package className="m-7 text-white" size={40} />
+          </div>
+          <div className="absolute right-12 top-16 h-28 w-28 rounded-full bg-cyan-300/80 blur-sm login-animate" style={{ animation: 'loginPulse 4.5s ease-in-out infinite' }} />
+          <div className="absolute left-32 top-36 h-56 w-[38rem] rounded-[999px] bg-gradient-to-r from-cyan-300 via-yellow-300 to-red-400 opacity-90 login-animate" style={{ animation: 'loginDrift 7s ease-in-out infinite alternate' }} />
+          <div className="absolute bottom-[-74px] right-[-42px] h-72 w-[42rem] rotate-[-7deg] rounded-[44px] border-[10px] border-white/30 bg-slate-950/80 shadow-2xl">
+            <div className="grid h-full grid-cols-3 gap-4 p-8">
+              {['Planning', 'QC', 'Dispatch'].map((label, index) => (
+                <div key={label} className="rounded-3xl border border-white/10 bg-white/10 p-5">
+                  <div className="h-3 w-16 rounded-full bg-blue-300" />
+                  <div className="mt-5 h-20 rounded-2xl bg-white/15" />
+                  <div className="mt-4 text-sm font-black text-white">{label}</div>
+                  <div className="mt-2 h-2 rounded-full bg-white/15">
+                    <div className="h-2 rounded-full bg-emerald-300" style={{ width: `${55 + index * 14}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="absolute left-[40%] top-24 text-6xl font-light text-white/80 login-animate" style={{ animation: 'loginFloat 4s ease-in-out infinite' }}>+</div>
+          <div className="absolute right-[33%] top-36 h-10 w-10 rotate-45 rounded-lg bg-cyan-200 login-animate" style={{ animation: 'loginPulse 3.8s ease-in-out infinite' }} />
+        </div>
+      </section>
     </div>
   );
 };
@@ -828,12 +884,12 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
 
   return (
     <div className="space-y-4 sm:space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-500">
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
+      <div className="erp-stagger grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
         {stats.map((stat) => (
           <button
             key={stat.label}
             onClick={() => setView(stat.view)}
-            className="group relative bg-white p-3.5 sm:p-4 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md hover:border-blue-200 transition-all text-left overflow-hidden min-h-[104px] active:scale-[0.99]"
+            className="group relative bg-white p-3.5 sm:p-4 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md hover:border-blue-200 transition-all duration-200 text-left overflow-hidden min-h-[104px] active:scale-[0.99]"
           >
             <div className={`p-2.5 rounded-xl mb-3 inline-flex ${stat.tone}`}>
               <stat.icon size={18} />
@@ -6229,6 +6285,73 @@ export default function App() {
         }
 
         @media screen {
+          @keyframes erpFadeUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+
+          @keyframes erpScaleIn {
+            from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+          }
+
+          @keyframes erpFadeOnly {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
+
+          @keyframes erpSoftPulse {
+            0%, 100% { box-shadow: inset 0 0 0 0 rgba(255,255,255,0.12), 0 0 0 rgba(255,255,255,0); }
+            50% { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18), 0 0 18px rgba(255,255,255,0.16); }
+          }
+
+          @keyframes erpShimmer {
+            0% { background-position: -240px 0; }
+            100% { background-position: calc(240px + 100%) 0; }
+          }
+
+          .erp-fade-up {
+            animation: erpFadeUp 360ms cubic-bezier(.2,.8,.2,1) both;
+          }
+
+          .erp-scale-in {
+            animation: erpScaleIn 180ms cubic-bezier(.2,.8,.2,1) both;
+          }
+
+          .erp-fade-only {
+            animation: erpFadeOnly 220ms ease-out both;
+          }
+
+          .erp-stagger > * {
+            animation: erpFadeUp 420ms cubic-bezier(.2,.8,.2,1) both;
+          }
+
+          .erp-stagger > *:nth-child(1) { animation-delay: 40ms; }
+          .erp-stagger > *:nth-child(2) { animation-delay: 90ms; }
+          .erp-stagger > *:nth-child(3) { animation-delay: 140ms; }
+          .erp-stagger > *:nth-child(4) { animation-delay: 190ms; }
+          .erp-stagger > *:nth-child(5) { animation-delay: 240ms; }
+          .erp-stagger > *:nth-child(6) { animation-delay: 290ms; }
+
+          .erp-active-pulse {
+            animation: erpSoftPulse 1.8s ease-in-out infinite;
+          }
+
+          .erp-search-results > * {
+            animation: erpFadeUp 220ms cubic-bezier(.2,.8,.2,1) both;
+          }
+
+          .erp-search-results > *:nth-child(2) { animation-delay: 25ms; }
+          .erp-search-results > *:nth-child(3) { animation-delay: 50ms; }
+          .erp-search-results > *:nth-child(4) { animation-delay: 75ms; }
+          .erp-search-results > *:nth-child(5) { animation-delay: 100ms; }
+
+          .erp-skeleton {
+            background: linear-gradient(90deg, #f1f5f9 0%, #e2e8f0 45%, #f8fafc 70%, #f1f5f9 100%);
+            background-size: 240px 100%;
+            animation: erpShimmer 1.4s ease-in-out infinite;
+          }
+
           .liquid-app .liquid-sidebar {
             background: linear-gradient(180deg, #032d60 0%, #083b7a 55%, #062b5f 100%) !important;
             border-right: 1px solid rgba(255,255,255,0.12) !important;
@@ -6267,11 +6390,28 @@ export default function App() {
             border-color: #d8dde6 !important;
             box-shadow: 0 1px 3px rgba(15,23,42,0.14) !important;
           }
+
+          @media (prefers-reduced-motion: reduce) {
+            .erp-fade-up,
+            .erp-fade-only,
+            .erp-scale-in,
+            .erp-stagger > *,
+            .erp-search-results > *,
+            .erp-active-pulse,
+            .erp-skeleton {
+              animation: none !important;
+            }
+          }
         }
       `}</style>
 
       {/* Desktop Sidebar */}
       <aside className="liquid-sidebar hidden lg:flex w-24 bg-[#032d60] flex-col fixed h-full z-40 no-print transition-all duration-300">
+        <div className="flex flex-col items-center px-2 pb-3 pt-4 border-b border-white/10">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/20 bg-[#0176d3] text-white shadow-lg shadow-blue-950/20" aria-label="Excell Packaging">
+            <Package size={25} strokeWidth={2.4} />
+          </div>
+        </div>
         <nav className="flex-1 px-2 py-4 space-y-4 overflow-y-auto">
           {navGroups.map((group) => {
             const isOpen = mobileNavOpen[group.key] ?? group.items.some(item => item.id === view);
@@ -6288,7 +6428,9 @@ export default function App() {
                     <ChevronRight size={11} className={`transition-transform ${isOpen ? 'rotate-90' : ''}`} />
                   </span>
                 </button>
-                {isOpen && group.items.map((item) => {
+                {isOpen && (
+                  <div className="erp-stagger space-y-1.5">
+                    {group.items.map((item) => {
                   const isActive = view === item.id;
                   return (
                     <button
@@ -6297,13 +6439,15 @@ export default function App() {
                     className={`group w-full min-h-[70px] rounded-xl flex flex-col items-center justify-center gap-1.5 text-center font-semibold text-[11px] leading-tight transition-all ${isActive ? 'text-white' : 'text-blue-50 hover:bg-white/10 hover:text-white'}`}
                       title={`${group.label}: ${item.label}`}
                     >
-                      <span className={`flex h-10 w-14 items-center justify-center rounded-xl transition-all ${isActive ? 'border-2 border-white bg-white/10 shadow-inner' : 'border border-transparent group-hover:border-white/30'}`}>
+                      <span className={`flex h-10 w-14 items-center justify-center rounded-xl transition-all ${isActive ? 'erp-active-pulse border-2 border-white bg-white/10 shadow-inner' : 'border border-transparent group-hover:border-white/30'}`}>
                         <item.icon size={25} strokeWidth={2.3} className="text-current" />
                       </span>
                       <span className="max-w-[82px] px-0.5">{item.label}</span>
                     </button>
                   );
-                })}
+                    })}
+                  </div>
+                )}
               </section>
             );
           })}
@@ -6410,7 +6554,7 @@ export default function App() {
               )}
 
               {isGlobalSearchOpen && globalSearchQuery.trim().length >= 2 && (
-                <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-800 shadow-2xl shadow-blue-950/20">
+                <div className="erp-scale-in absolute left-0 right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-800 shadow-2xl shadow-blue-950/20">
                   {globalSearchLoading && (
                     <div className="flex items-center gap-2 px-4 py-3 text-sm font-bold text-slate-500">
                       <Loader2 size={16} className="animate-spin text-blue-600" /> Searching...
@@ -6419,34 +6563,43 @@ export default function App() {
                   {!globalSearchLoading && globalSearchResults.length === 0 && (
                     <div className="px-4 py-3 text-sm font-bold text-slate-500">No results found</div>
                   )}
-                  {!globalSearchLoading && globalSearchResults.map(result => {
-                    const ResultIcon = result.icon;
-                    return (
-                      <button
-                        key={result.key}
-                        onMouseDown={e => e.preventDefault()}
-                        onClick={() => openGlobalSearchResult(result)}
-                        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-blue-50"
-                      >
-                        <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
-                          <ResultIcon size={18} />
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-black text-slate-900">{result.title}</span>
-                          <span className="block truncate text-xs font-semibold text-slate-500">{result.subtitle}</span>
-                        </span>
-                        <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500">
-                          {result.type}
-                        </span>
-                      </button>
-                    );
-                  })}
+                  {!globalSearchLoading && (
+                    <div className="erp-search-results">
+                      {globalSearchResults.map(result => {
+                        const ResultIcon = result.icon;
+                        return (
+                          <button
+                            key={result.key}
+                            onMouseDown={e => e.preventDefault()}
+                            onClick={() => openGlobalSearchResult(result)}
+                            className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-blue-50"
+                          >
+                            <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
+                              <ResultIcon size={18} />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-black text-slate-900">{result.title}</span>
+                              <span className="block truncate text-xs font-semibold text-slate-500">{result.subtitle}</span>
+                            </span>
+                            <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                              {result.type}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-            <button onClick={refreshNotificationHealth} className="absolute right-5 rounded-full bg-white/15 p-2 hover:bg-white/25 transition-colors" aria-label="Refresh notification status">
-              <RefreshCw size={17} />
-            </button>
+            <div className="absolute right-5 flex items-center gap-2">
+              <button onClick={refreshNotificationHealth} className="rounded-full bg-white/15 p-2 hover:bg-white/25 transition-colors" aria-label="Refresh notification status">
+                <RefreshCw size={17} />
+              </button>
+              <button onClick={handleLogout} className="rounded-full bg-white/15 p-2 hover:bg-white/25 transition-colors" aria-label="Sign out" title="Sign out">
+                <LogOut size={17} />
+              </button>
+            </div>
           </div>
           <header className="lg:hidden flex justify-between items-center h-16 bg-[#0176d3] border-b border-blue-700 px-3 sm:px-4 sticky top-0 z-30 no-print shadow-lg shadow-blue-900/20">
              <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 text-white hover:bg-white/15 rounded-xl transition-colors">
@@ -6493,7 +6646,9 @@ export default function App() {
                </div>
              </div>
            )}
-            {renderContent()}
+            <div key={view} className="erp-fade-only">
+              {renderContent()}
+            </div>
           </div>
           <nav className="lg:hidden fixed bottom-3 left-3 right-3 z-40 no-print border border-white/70 bg-white/82 backdrop-blur-2xl rounded-3xl px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-2xl shadow-slate-300/50">
             <div className="grid grid-cols-5 gap-1">
