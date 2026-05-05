@@ -112,7 +112,7 @@ const StatusBadge: React.FC<{ status: WOStatus }> = ({ status }) => {
 };
 
 const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = "" }) => (
-  <div className={`bg-white rounded-xl shadow-sm border border-gray-100 p-4 ${className}`}>{children}</div>
+  <div className={`bg-white rounded-[18px] shadow-[0_1px_3px_rgba(15,23,42,0.14)] border border-slate-200/80 p-4 ${className}`}>{children}</div>
 );
 
 const LoadingState: React.FC<{ message?: string }> = ({ message = "Syncing with cloud..." }) => (
@@ -828,21 +828,6 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
 
   return (
     <div className="space-y-4 sm:space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-500">
-      <div className="relative overflow-hidden rounded-3xl bg-slate-950 p-4 text-white shadow-xl shadow-slate-950/20 md:bg-transparent md:p-0 md:text-slate-900 md:shadow-none md:rounded-none flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div className="relative z-10">
-          <div className="md:hidden mb-2 inline-flex items-center gap-2 rounded-full bg-blue-500/15 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-blue-200 border border-blue-400/20">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" /> Mobile Command
-          </div>
-          <h1 className="text-2xl font-black tracking-tight text-white">Welcome, {user.username}</h1>
-          <p className="text-sm font-bold text-slate-200 md:font-medium">{user.department.replace(/_/g, ' ')} | {user.level.split('-')[1]}</p>
-        </div>
-        <div className="relative z-10 flex items-center gap-2 bg-white/10 md:bg-white px-4 py-2 rounded-xl border border-white/10 md:border-gray-100 shadow-sm self-start md:self-auto">
-          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-          <span className="text-[10px] font-black text-slate-200 md:text-gray-400 uppercase tracking-widest">Live Cloud Sync</span>
-        </div>
-        <div className="md:hidden absolute -right-10 -top-10 h-32 w-32 rounded-full bg-blue-600/25 blur-2xl" />
-      </div>
-
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
         {stats.map((stat) => (
           <button
@@ -2639,10 +2624,10 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
 
   return (
     <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-300">
-      <div className="rounded-3xl bg-slate-950 p-4 text-white shadow-xl shadow-slate-950/20 md:bg-transparent md:p-0 md:text-slate-900 md:shadow-none md:rounded-none flex flex-col gap-2 mb-4 sm:mb-6">
-        <div className="md:hidden text-[10px] font-black uppercase tracking-widest text-blue-200">Production Queue</div>
-        <h1 className="text-2xl font-black md:text-gray-800">{loggedInUser.department.replace(/_/g, ' ')} Dashboard</h1>
-        <p className="text-slate-300 md:text-gray-500 text-sm">Manage your department's active work orders.</p>
+      <div className="rounded-[20px] bg-white p-5 text-slate-900 shadow-[0_2px_8px_rgba(15,23,42,0.12)] border border-slate-200 flex flex-col gap-2 mb-4 sm:mb-6">
+        <div className="md:hidden text-[10px] font-black uppercase tracking-widest text-blue-700">Production Queue</div>
+        <h1 className="text-2xl font-black text-slate-900 md:text-gray-800">{loggedInUser.department.replace(/_/g, ' ')} Dashboard</h1>
+        <p className="text-slate-600 md:text-gray-500 text-sm">Manage your department's active work orders.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3 mb-4 sm:mb-6">
@@ -4712,11 +4697,11 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
 
   return (
     <div className="space-y-4">
-      <div className="rounded-3xl bg-slate-950 p-4 text-white shadow-xl shadow-slate-950/20 md:bg-transparent md:p-0 md:text-slate-900 md:shadow-none md:rounded-none flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <div className="rounded-[20px] bg-white p-5 text-slate-900 shadow-[0_2px_8px_rgba(15,23,42,0.12)] border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div>
-          <div className="md:hidden text-[10px] font-black uppercase tracking-widest text-blue-200">Alerts Center</div>
-          <h2 className="text-2xl font-black tracking-tight md:text-gray-800">Notification Audit</h2>
-          <p className="text-xs font-semibold text-slate-300 md:text-gray-500 text-left">Last 200 notification events from push function.</p>
+          <div className="md:hidden text-[10px] font-black uppercase tracking-widest text-blue-700">Alerts Center</div>
+          <h2 className="text-2xl font-black tracking-tight text-slate-900 md:text-gray-800">Notification Audit</h2>
+          <p className="text-xs font-semibold text-slate-600 md:text-gray-500 text-left">Last 200 notification events from push function.</p>
         </div>
         <button onClick={fetchEvents} className="px-4 py-3 md:py-2 bg-blue-600 md:bg-slate-900 text-white rounded-2xl md:rounded-xl text-sm font-black">Refresh</button>
       </div>
@@ -5923,6 +5908,16 @@ export default function App() {
     items: NavItem[];
   };
 
+  type GlobalSearchResult = {
+    key: string;
+    type: string;
+    title: string;
+    subtitle: string;
+    icon: any;
+    view: AppView;
+    payload?: AppHistoryState['payload'];
+  };
+
   const navGroups: NavGroup[] = useMemo(() => {
     return [
       {
@@ -5964,13 +5959,148 @@ export default function App() {
       .filter(group => group.items.length > 0);
   }, [loggedInUser, canAccess]);
 
+  const [globalSearchQuery, setGlobalSearchQuery] = useState('');
+  const [globalSearchResults, setGlobalSearchResults] = useState<GlobalSearchResult[]>([]);
+  const [globalSearchLoading, setGlobalSearchLoading] = useState(false);
+  const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
+
+  const searchableViews = useMemo(() => (
+    navGroups.flatMap(group => group.items.map(item => ({ ...item, group: group.label })))
+  ), [navGroups]);
+
+  const openGlobalSearchResult = useCallback((result: GlobalSearchResult) => {
+    setGlobalSearchQuery('');
+    setGlobalSearchResults([]);
+    setIsGlobalSearchOpen(false);
+    navigateTo(result.view, { payload: result.payload });
+  }, [navigateTo]);
+
+  useEffect(() => {
+    if (!loggedInUser) return;
+
+    const query = globalSearchQuery.trim().toLowerCase();
+    if (query.length < 2) {
+      setGlobalSearchResults([]);
+      setGlobalSearchLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const includesQuery = (...values: any[]) => values.some(value => String(value || '').toLowerCase().includes(query));
+
+    const timer = window.setTimeout(async () => {
+      setGlobalSearchLoading(true);
+      try {
+        const pageResults: GlobalSearchResult[] = searchableViews
+          .filter(item => includesQuery(item.label, item.group))
+          .slice(0, 4)
+          .map(item => ({
+            key: `view-${item.id}`,
+            type: 'Page',
+            title: item.label,
+            subtitle: item.group,
+            icon: item.icon,
+            view: item.id,
+          }));
+
+        const [ordersRes, customersRes, itemsRes, childItemsRes, usersRes] = await Promise.all([
+          supabase.from('work_orders').select('*').order('id', { ascending: false }),
+          canAccess(loggedInUser, 'customers') ? supabase.from('customers').select('*').order('name') : Promise.resolve({ data: [], error: null }),
+          canAccess(loggedInUser, 'items') ? supabase.from('items').select('*').order('name') : Promise.resolve({ data: [], error: null }),
+          canAccess(loggedInUser, 'child-items') ? supabase.from('child_items').select('*').order('name') : Promise.resolve({ data: [], error: null }),
+          canAccess(loggedInUser, 'users') ? supabase.from('users').select('*').order('id', { ascending: false }) : Promise.resolve({ data: [], error: null }),
+        ]);
+
+        const visibleOrders = filterWorkOrdersByDepartment((ordersRes.data || []) as WorkOrder[], loggedInUser);
+        const orderResults: GlobalSearchResult[] = visibleOrders
+          .filter(wo => includesQuery(wo.id, wo.customer, wo.job_details, wo.drawing, wo.status))
+          .slice(0, 6)
+          .map(wo => ({
+            key: `wo-${wo.id}`,
+            type: 'Work Order',
+            title: `Order #${wo.id}`,
+            subtitle: `${wo.customer || 'No customer'} - ${wo.job_details || 'No job details'}`,
+            icon: ClipboardList,
+            view: 'wo-details' as AppView,
+            payload: { id: wo.id },
+          }));
+
+        const customerResults: GlobalSearchResult[] = ((customersRes.data || []) as Customer[])
+          .filter(customer => includesQuery(customer.name, customer.city, customer.contact, customer.email, customer.gst))
+          .slice(0, 4)
+          .map(customer => ({
+            key: `customer-${customer.id}`,
+            type: 'Customer',
+            title: customer.name,
+            subtitle: [customer.city, customer.contact].filter(Boolean).join(' - ') || 'Customer master',
+            icon: UserCircle,
+            view: 'customers' as AppView,
+          }));
+
+        const itemResults: GlobalSearchResult[] = ((itemsRes.data || []) as Item[])
+          .filter(item => includesQuery(item.name, item.customer_name, item.drawing_no, item.remarks))
+          .slice(0, 4)
+          .map(item => ({
+            key: `item-${item.id}`,
+            type: 'Item',
+            title: item.name,
+            subtitle: [item.customer_name, item.drawing_no].filter(Boolean).join(' - ') || 'Item master',
+            icon: Package,
+            view: 'items' as AppView,
+          }));
+
+        const componentResults: GlobalSearchResult[] = ((childItemsRes.data || []) as ChildItem[])
+          .filter(component => includesQuery(component.name, component.size, ...(component.departments || [])))
+          .slice(0, 4)
+          .map(component => ({
+            key: `component-${component.id}`,
+            type: 'Component',
+            title: component.name,
+            subtitle: (component.departments || []).map(dept => dept.replace(/_/g, ' ')).join(', ') || 'Component library',
+            icon: Layers,
+            view: 'child-items' as AppView,
+          }));
+
+        const userResults: GlobalSearchResult[] = ((usersRes.data || []) as User[])
+          .filter(user => includesQuery(user.username, user.mobile, user.email, user.department, user.level))
+          .slice(0, 4)
+          .map(user => ({
+            key: `user-${user.id}`,
+            type: 'User',
+            title: user.username,
+            subtitle: `${user.department.replace(/_/g, ' ')} - ${user.level}`,
+            icon: Users,
+            view: 'users' as AppView,
+          }));
+
+        if (!cancelled) {
+          setGlobalSearchResults([
+            ...pageResults,
+            ...orderResults,
+            ...customerResults,
+            ...itemResults,
+            ...componentResults,
+            ...userResults,
+          ].slice(0, 12));
+        }
+      } finally {
+        if (!cancelled) setGlobalSearchLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [globalSearchQuery, loggedInUser, searchableViews, canAccess]);
+
   useEffect(() => {
     setMobileNavOpen(prev => {
       let hasChanges = false;
       const next = { ...prev };
       navGroups.forEach(group => {
         if (next[group.key] === undefined) {
-          next[group.key] = false;
+          next[group.key] = group.items.some(item => item.id === viewRef.current);
           hasChanges = true;
         }
       });
@@ -6040,7 +6170,7 @@ export default function App() {
         : 'Notifications unsupported';
 
   return (
-    <div className="min-h-screen flex bg-gray-50 lg:bg-gray-50 bg-gradient-to-b from-slate-950 via-slate-100 to-gray-50 overflow-x-hidden">
+    <div className="liquid-app min-h-screen flex bg-[#f3f6f9] overflow-x-hidden">
       <style>{`
         @page {
           size: A4 portrait;
@@ -6097,54 +6227,87 @@ export default function App() {
 
           main { padding: 0 !important; }
         }
+
+        @media screen {
+          .liquid-app .liquid-sidebar {
+            background: linear-gradient(180deg, #032d60 0%, #083b7a 55%, #062b5f 100%) !important;
+            border-right: 1px solid rgba(255,255,255,0.12) !important;
+            box-shadow: 0 14px 40px rgba(3,45,96,0.24) !important;
+          }
+
+          .liquid-app .liquid-sidebar .liquid-brand,
+          .liquid-app .liquid-sidebar .liquid-brand span {
+            color: #ffffff !important;
+          }
+
+          .liquid-app .liquid-sidebar .liquid-nav-group {
+            border-color: rgba(255,255,255,0.14) !important;
+            background: rgba(255,255,255,0.04) !important;
+          }
+
+          .liquid-app .liquid-sidebar .liquid-nav-head {
+            background: rgba(255,255,255,0.06) !important;
+            color: #dbeafe !important;
+          }
+
+          .liquid-app .liquid-sidebar .liquid-nav-body {
+            background: rgba(0,0,0,0.05) !important;
+          }
+
+          .liquid-app .liquid-sidebar .liquid-nav-item:not(.liquid-active) {
+            color: #d7e8ff !important;
+          }
+
+          .liquid-app .liquid-sidebar .liquid-muted-icon {
+            color: #b9d7ff !important;
+          }
+
+          .liquid-app .liquid-glass-surface {
+            background: #ffffff !important;
+            border-color: #d8dde6 !important;
+            box-shadow: 0 1px 3px rgba(15,23,42,0.14) !important;
+          }
+        }
       `}</style>
 
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex w-64 bg-[#0f172a] flex-col fixed h-full z-40 no-print transition-all duration-300">
-        <div className="p-5 border-b border-slate-800 flex items-center gap-3">
-          <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center text-white shadow-lg"><Package size={20}/></div>
-          <span className="text-white font-black tracking-widest text-lg">EXCELL</span>
-        </div>
-        <nav className="flex-1 p-3 space-y-2 mt-1 overflow-y-auto">
-          {navGroups.map(group => {
-            const isOpen = mobileNavOpen[group.key] ?? false;
+      <aside className="liquid-sidebar hidden lg:flex w-24 bg-[#032d60] flex-col fixed h-full z-40 no-print transition-all duration-300">
+        <nav className="flex-1 px-2 py-4 space-y-4 overflow-y-auto">
+          {navGroups.map((group) => {
+            const isOpen = mobileNavOpen[group.key] ?? group.items.some(item => item.id === view);
+            const hasActiveItem = group.items.some(item => item.id === view);
             return (
-              <div key={group.key} className="rounded-xl border border-slate-800/80 overflow-hidden">
+              <section key={group.key} className="space-y-1.5 border-b border-white/10 pb-3 last:border-b-0 last:pb-0">
                 <button
                   onClick={() => setMobileNavOpen(prev => ({ ...prev, [group.key]: !isOpen }))}
-                  className="w-full flex items-center justify-between px-3 py-2.5 bg-slate-900/70 text-slate-300"
+                  className={`w-full rounded-lg px-1 py-2 text-center text-[9px] font-black uppercase tracking-[0.16em] transition-colors ${hasActiveItem ? 'bg-white/12 text-white' : 'text-blue-100/75 hover:bg-white/10 hover:text-white'}`}
+                  title={`${isOpen ? 'Hide' : 'Show'} ${group.label}`}
                 >
-                  <span className="text-[10px] font-black uppercase tracking-widest">{group.label}</span>
-                  <ChevronRight size={14} className={`transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+                  <span className="flex items-center justify-center gap-1">
+                    {group.label}
+                    <ChevronRight size={11} className={`transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+                  </span>
                 </button>
-                {isOpen && (
-                  <div className="p-1.5 space-y-1 bg-slate-950/20">
-                    {group.items.map(item => (
-                      <button
-                        key={item.id}
-                        onClick={() => handleNavClick(item.id as AppView)}
-                        className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg font-bold text-[13px] transition-all ${view === item.id ? 'bg-blue-600 text-white shadow-xl shadow-blue-900/40' : item.highlight ? 'text-indigo-300 hover:bg-slate-800/80 bg-slate-900/30 border border-indigo-500/20' : 'text-slate-400 hover:bg-slate-800/80'}`}
-                      >
-                        <item.icon size={18} className={view === item.id ? 'text-white' : item.highlight ? 'text-indigo-300' : 'text-slate-500'} />
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+                {isOpen && group.items.map((item) => {
+                  const isActive = view === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => handleNavClick(item.id as AppView)}
+                    className={`group w-full min-h-[70px] rounded-xl flex flex-col items-center justify-center gap-1.5 text-center font-semibold text-[11px] leading-tight transition-all ${isActive ? 'text-white' : 'text-blue-50 hover:bg-white/10 hover:text-white'}`}
+                      title={`${group.label}: ${item.label}`}
+                    >
+                      <span className={`flex h-10 w-14 items-center justify-center rounded-xl transition-all ${isActive ? 'border-2 border-white bg-white/10 shadow-inner' : 'border border-transparent group-hover:border-white/30'}`}>
+                        <item.icon size={25} strokeWidth={2.3} className="text-current" />
+                      </span>
+                      <span className="max-w-[82px] px-0.5">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </section>
             );
           })}
         </nav>
-        <div className="p-4 space-y-2.5">
-          {!isStandalone && (isInstallAvailable || isIOSLike) && (
-            <button onClick={handleInstallApp} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold text-emerald-300 hover:bg-emerald-900/20 text-sm group transition-colors border border-emerald-500/20">
-              <ExternalLink size={18} /> Install App
-            </button>
-          )}
-          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold text-red-400 hover:bg-red-900/10 text-sm group transition-colors">
-            <LogOut size={18} className="group-hover:-translate-x-1 transition-transform" /> Sign Out
-          </button>
-        </div>
       </aside>
 
       {/* Mobile Sidebar (Drawer) */}
@@ -6157,13 +6320,13 @@ export default function App() {
           />
           
           {/* Drawer Content */}
-          <aside className="relative w-[85vw] max-w-64 bg-[#0f172a] flex flex-col h-full shadow-2xl animate-in slide-in-from-left duration-300">
-            <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+          <aside className="liquid-sidebar relative w-[85vw] max-w-64 bg-white/85 backdrop-blur-2xl flex flex-col h-full shadow-2xl animate-in slide-in-from-left duration-300">
+            <div className="liquid-brand p-6 border-b border-white/70 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center text-white shadow-lg"><Package size={20}/></div>
-                <span className="text-white font-black tracking-widest text-lg">EXCELL</span>
+                <span className="text-slate-900 font-black tracking-widest text-lg">EXCELL</span>
               </div>
-              <button onClick={() => setIsMobileMenuOpen(false)} className="text-slate-400 hover:text-white transition-colors">
+              <button onClick={() => setIsMobileMenuOpen(false)} className="text-slate-500 hover:text-slate-900 transition-colors">
                 <X size={24} />
               </button>
             </div>
@@ -6172,23 +6335,23 @@ export default function App() {
               {navGroups.map(group => {
                 const isOpen = mobileNavOpen[group.key] ?? true;
                 return (
-                  <div key={group.key} className="rounded-xl border border-slate-800/80 overflow-hidden">
+                  <div key={group.key} className="liquid-nav-group rounded-xl border border-slate-200/80 overflow-hidden">
                     <button
                       onClick={() => setMobileNavOpen(prev => ({ ...prev, [group.key]: !isOpen }))}
-                      className="w-full flex items-center justify-between px-3 py-2.5 bg-slate-900/70 text-slate-300"
+                      className="liquid-nav-head w-full flex items-center justify-between px-3 py-2.5 bg-white/60 text-slate-600"
                     >
-                      <span className="text-[10px] font-black uppercase tracking-widest">{group.label}</span>
+                      <span className="text-[10px] font-medium uppercase tracking-widest">{group.label}</span>
                       <ChevronRight size={14} className={`transition-transform ${isOpen ? 'rotate-90' : ''}`} />
                     </button>
                     {isOpen && (
-                      <div className="p-1.5 space-y-1 bg-slate-950/20">
+                      <div className="liquid-nav-body p-1.5 space-y-1 bg-slate-50/50">
                         {group.items.map(item => (
                           <button
                             key={item.id}
                             onClick={() => handleNavClick(item.id as AppView)}
-                            className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg font-bold text-[13px] transition-all ${view === item.id ? 'bg-blue-600 text-white shadow-xl shadow-blue-900/40' : item.highlight ? 'text-indigo-300 hover:bg-slate-800/80 bg-slate-900/30 border border-indigo-500/20' : 'text-slate-400 hover:bg-slate-800/80'}`}
+                            className={`liquid-nav-item ${view === item.id ? 'liquid-active' : ''} w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg font-normal text-[13px] transition-all ${view === item.id ? 'bg-blue-600 text-white shadow-xl shadow-blue-200/70' : item.highlight ? 'text-indigo-600 hover:bg-white/80 bg-white/40 border border-indigo-100' : 'text-slate-600 hover:bg-white/80'}`}
                           >
-                            <item.icon size={18} className={view === item.id ? 'text-white' : item.highlight ? 'text-indigo-300' : 'text-slate-500'} />
+                            <item.icon size={18} className={view === item.id ? 'text-white' : item.highlight ? 'text-indigo-500' : 'liquid-muted-icon text-slate-500'} />
                             {item.label}
                           </button>
                         ))}
@@ -6199,13 +6362,13 @@ export default function App() {
               })}
             </nav>
             
-            <div className="p-6 border-t border-slate-800 space-y-3">
+            <div className="p-6 border-t border-white/70 space-y-3">
               {!isStandalone && (isInstallAvailable || isIOSLike) && (
-                <button onClick={handleInstallApp} className="w-full flex items-center gap-4 px-4 py-3 rounded-xl font-bold text-emerald-300 hover:bg-emerald-900/20 text-sm group transition-colors border border-emerald-500/20">
+                <button onClick={handleInstallApp} className="w-full flex items-center gap-4 px-4 py-3 rounded-xl font-bold text-emerald-700 hover:bg-emerald-50 text-sm group transition-colors border border-emerald-100 bg-white/40">
                   <ExternalLink size={20} /> Install App
                 </button>
               )}
-              <button onClick={handleLogout} className="w-full flex items-center gap-4 px-4 py-3 rounded-xl font-bold text-red-400 hover:bg-red-900/10 text-sm group transition-colors">
+              <button onClick={handleLogout} className="w-full flex items-center gap-4 px-4 py-3 rounded-xl font-bold text-red-500 hover:bg-red-50 text-sm group transition-colors">
                 <LogOut size={20} /> Sign Out
               </button>
             </div>
@@ -6213,16 +6376,87 @@ export default function App() {
         </div>
       )}
 
-      <main className="flex-1 min-w-0 lg:ml-64 flex flex-col min-h-screen transition-all duration-300">
-          <header className="lg:hidden flex justify-between items-center h-16 bg-slate-950 border-b border-slate-800 px-3 sm:px-4 sticky top-0 z-30 no-print shadow-lg shadow-slate-950/20">
-             <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 text-slate-300 hover:bg-slate-800 rounded-xl transition-colors">
+      <main className="flex-1 min-w-0 lg:ml-24 flex flex-col min-h-screen transition-all duration-300">
+          <div className="hidden lg:flex h-[54px] bg-[#0176d3] text-white items-center justify-center px-5 no-print shadow-sm relative">
+            <div className="relative w-[560px] max-w-[52vw]">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <input
+                type="text"
+                value={globalSearchQuery}
+                onChange={e => {
+                  setGlobalSearchQuery(e.target.value);
+                  setIsGlobalSearchOpen(true);
+                }}
+                onFocus={() => setIsGlobalSearchOpen(true)}
+                onBlur={() => window.setTimeout(() => setIsGlobalSearchOpen(false), 140)}
+                onKeyDown={e => {
+                  if (e.key === 'Escape') setIsGlobalSearchOpen(false);
+                  if (e.key === 'Enter' && globalSearchResults[0]) openGlobalSearchResult(globalSearchResults[0]);
+                }}
+                placeholder="Search orders, customers, items, users..."
+                className="w-full rounded-full border border-white/30 bg-white pl-11 pr-11 py-2.5 text-sm font-semibold text-slate-800 shadow-sm outline-none transition-all placeholder:text-slate-400 focus:border-white focus:ring-4 focus:ring-white/20"
+              />
+              {globalSearchQuery && (
+                <button
+                  onClick={() => {
+                    setGlobalSearchQuery('');
+                    setGlobalSearchResults([]);
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  aria-label="Clear search"
+                >
+                  <X size={16} />
+                </button>
+              )}
+
+              {isGlobalSearchOpen && globalSearchQuery.trim().length >= 2 && (
+                <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-800 shadow-2xl shadow-blue-950/20">
+                  {globalSearchLoading && (
+                    <div className="flex items-center gap-2 px-4 py-3 text-sm font-bold text-slate-500">
+                      <Loader2 size={16} className="animate-spin text-blue-600" /> Searching...
+                    </div>
+                  )}
+                  {!globalSearchLoading && globalSearchResults.length === 0 && (
+                    <div className="px-4 py-3 text-sm font-bold text-slate-500">No results found</div>
+                  )}
+                  {!globalSearchLoading && globalSearchResults.map(result => {
+                    const ResultIcon = result.icon;
+                    return (
+                      <button
+                        key={result.key}
+                        onMouseDown={e => e.preventDefault()}
+                        onClick={() => openGlobalSearchResult(result)}
+                        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-blue-50"
+                      >
+                        <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
+                          <ResultIcon size={18} />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-black text-slate-900">{result.title}</span>
+                          <span className="block truncate text-xs font-semibold text-slate-500">{result.subtitle}</span>
+                        </span>
+                        <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                          {result.type}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <button onClick={refreshNotificationHealth} className="absolute right-5 rounded-full bg-white/15 p-2 hover:bg-white/25 transition-colors" aria-label="Refresh notification status">
+              <RefreshCw size={17} />
+            </button>
+          </div>
+          <header className="lg:hidden flex justify-between items-center h-16 bg-[#0176d3] border-b border-blue-700 px-3 sm:px-4 sticky top-0 z-30 no-print shadow-lg shadow-blue-900/20">
+             <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 text-white hover:bg-white/15 rounded-xl transition-colors">
                <Menu size={24} />
              </button>
              <div className="flex items-center gap-2">
                <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-900/40"><Package size={16}/></div>
                <span className="font-black tracking-widest text-lg text-white">EXCELL</span>
              </div>
-             <button onClick={refreshNotificationHealth} className="p-2 text-slate-300 hover:bg-slate-800 rounded-xl transition-colors" aria-label="Refresh notification status">
+             <button onClick={refreshNotificationHealth} className="p-2 text-white hover:bg-white/15 rounded-xl transition-colors" aria-label="Refresh notification status">
                <RefreshCw size={20} />
              </button>
           </header>
@@ -6261,13 +6495,13 @@ export default function App() {
            )}
             {renderContent()}
           </div>
-          <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 no-print border-t border-slate-800 bg-slate-950/95 backdrop-blur-xl px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-2xl shadow-slate-950/30">
+          <nav className="lg:hidden fixed bottom-3 left-3 right-3 z-40 no-print border border-white/70 bg-white/82 backdrop-blur-2xl rounded-3xl px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-2xl shadow-slate-300/50">
             <div className="grid grid-cols-5 gap-1">
               {navGroups.flatMap(group => group.items).slice(0, 5).map(item => (
                 <button
                   key={item.id}
                   onClick={() => handleNavClick(item.id as AppView)}
-                  className={`min-h-14 rounded-2xl flex flex-col items-center justify-center gap-1 text-[10px] font-black transition-colors ${view === item.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-950/40' : 'text-slate-400 hover:bg-slate-900 hover:text-white'}`}
+                  className={`min-h-14 rounded-2xl flex flex-col items-center justify-center gap-1 text-[10px] font-normal transition-colors ${view === item.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-200/80' : 'text-slate-500 hover:bg-white/80 hover:text-slate-900'}`}
                 >
                   <item.icon size={18} />
                   <span className="truncate max-w-full px-1">{item.label}</span>
