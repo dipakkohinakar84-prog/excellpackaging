@@ -446,6 +446,8 @@ const Login: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) => {
         @keyframes loginFloat { 0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); } 50% { transform: translate3d(0, -18px, 0) rotate(4deg); } }
         @keyframes loginDrift { 0% { transform: translateX(-8%) rotate(-4deg); } 100% { transform: translateX(8%) rotate(4deg); } }
         @keyframes loginPulse { 0%, 100% { opacity: .35; transform: scale(.95); } 50% { opacity: .9; transform: scale(1.05); } }
+        @keyframes erpLogoMotion { 0%, 100% { transform: translateY(0) rotate(0deg) scale(1); filter: drop-shadow(0 0 0 rgba(255,255,255,0)); } 50% { transform: translateY(-2px) rotate(5deg) scale(1.04); filter: drop-shadow(0 0 8px rgba(255,255,255,.45)); } }
+        .erp-logo-svg { animation: erpLogoMotion 2.8s ease-in-out infinite; transform-origin: center; }
         @media (prefers-reduced-motion: reduce) { .login-animate { animation: none !important; } }
       `}</style>
 
@@ -453,12 +455,12 @@ const Login: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) => {
         <div className="w-full max-w-[430px] overflow-hidden rounded-lg border border-slate-300 bg-white shadow-[0_2px_10px_rgba(15,23,42,0.14)]">
           <div className="px-8 pb-8 pt-14 sm:px-10">
             <div className="mx-auto flex h-[72px] w-[72px] items-center justify-center rounded-[24px] bg-[#0176d3] text-white shadow-lg shadow-blue-200">
-              <Package size={38} strokeWidth={2.2} />
+              <Package className="erp-logo-svg" size={38} strokeWidth={2.2} />
             </div>
             <h1 className="mt-8 text-center text-[28px] font-normal tracking-tight text-[#032d60]">Enter your Passkey</h1>
             <div className="mt-8 flex items-center gap-3 text-sm font-medium text-slate-700">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#032d60] via-[#0176d3] to-emerald-400 text-white">
-                <Package size={20} />
+                <Package className="erp-logo-svg" size={20} />
               </div>
               <span>{mobile || 'Registered mobile user'}</span>
             </div>
@@ -542,7 +544,7 @@ const Login: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) => {
 
         <div className="relative z-10 mt-12 h-[430px] max-w-4xl overflow-hidden rounded-[34px] border border-white/20 bg-white/10 shadow-2xl shadow-blue-950/40 backdrop-blur-sm">
           <div className="absolute left-10 top-10 h-24 w-24 rounded-[28px] border border-white/20 bg-white/15 login-animate" style={{ animation: 'loginFloat 5.5s ease-in-out infinite' }}>
-            <Package className="m-7 text-white" size={40} />
+            <Package className="erp-logo-svg m-7 text-white" size={40} />
           </div>
           <div className="absolute right-12 top-16 h-28 w-28 rounded-full bg-cyan-300/80 blur-sm login-animate" style={{ animation: 'loginPulse 4.5s ease-in-out infinite' }} />
           <div className="absolute left-32 top-36 h-56 w-[38rem] rounded-[999px] bg-gradient-to-r from-cyan-300 via-yellow-300 to-red-400 opacity-90 login-animate" style={{ animation: 'loginDrift 7s ease-in-out infinite alternate' }} />
@@ -6310,6 +6312,11 @@ export default function App() {
             100% { background-position: calc(240px + 100%) 0; }
           }
 
+          @keyframes erpLogoMotion {
+            0%, 100% { transform: translateY(0) rotate(0deg) scale(1); filter: drop-shadow(0 0 0 rgba(255,255,255,0)); }
+            50% { transform: translateY(-2px) rotate(5deg) scale(1.04); filter: drop-shadow(0 0 8px rgba(255,255,255,.45)); }
+          }
+
           .erp-fade-up {
             animation: erpFadeUp 360ms cubic-bezier(.2,.8,.2,1) both;
           }
@@ -6350,6 +6357,11 @@ export default function App() {
             background: linear-gradient(90deg, #f1f5f9 0%, #e2e8f0 45%, #f8fafc 70%, #f1f5f9 100%);
             background-size: 240px 100%;
             animation: erpShimmer 1.4s ease-in-out infinite;
+          }
+
+          .erp-logo-svg {
+            animation: erpLogoMotion 2.8s ease-in-out infinite;
+            transform-origin: center;
           }
 
           .liquid-app .liquid-sidebar {
@@ -6398,7 +6410,8 @@ export default function App() {
             .erp-stagger > *,
             .erp-search-results > *,
             .erp-active-pulse,
-            .erp-skeleton {
+            .erp-skeleton,
+            .erp-logo-svg {
               animation: none !important;
             }
           }
@@ -6409,7 +6422,7 @@ export default function App() {
       <aside className="liquid-sidebar hidden lg:flex w-24 bg-[#032d60] flex-col fixed h-full z-40 no-print transition-all duration-300">
         <div className="flex h-[54px] w-[95px] flex-col items-center justify-center border-b border-white/10">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/20 bg-[#0176d3] text-white shadow-lg shadow-blue-950/20" aria-label="Excell Packaging">
-            <Package size={25} strokeWidth={2.4} />
+            <Package className="erp-logo-svg" size={25} strokeWidth={2.4} />
           </div>
         </div>
         <nav className="flex-1 px-2 py-4 space-y-4 overflow-y-auto">
@@ -6467,7 +6480,7 @@ export default function App() {
           <aside className="liquid-sidebar relative w-[85vw] max-w-64 bg-white/85 backdrop-blur-2xl flex flex-col h-full shadow-2xl animate-in slide-in-from-left duration-300">
             <div className="liquid-brand p-6 border-b border-white/70 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center text-white shadow-lg"><Package size={20}/></div>
+                <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center text-white shadow-lg"><Package className="erp-logo-svg" size={20}/></div>
                 <span className="text-slate-900 font-black tracking-widest text-lg">EXCELL</span>
               </div>
               <button onClick={() => setIsMobileMenuOpen(false)} className="text-slate-500 hover:text-slate-900 transition-colors">
@@ -6606,7 +6619,7 @@ export default function App() {
                <Menu size={24} />
              </button>
              <div className="flex items-center gap-2">
-               <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-900/40"><Package size={16}/></div>
+               <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-900/40"><Package className="erp-logo-svg" size={16}/></div>
                <span className="font-black tracking-widest text-lg text-white">EXCELL</span>
              </div>
              <button onClick={refreshNotificationHealth} className="p-2 text-white hover:bg-white/15 rounded-xl transition-colors" aria-label="Refresh notification status">
