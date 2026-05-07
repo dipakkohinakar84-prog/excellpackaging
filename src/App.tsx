@@ -6407,7 +6407,7 @@ export default function App() {
 
       {/* Desktop Sidebar */}
       <aside className="liquid-sidebar hidden lg:flex w-24 bg-[#032d60] flex-col fixed h-full z-40 no-print transition-all duration-300">
-        <div className="flex flex-col items-center px-2 pb-3 pt-4 border-b border-white/10">
+        <div className="flex h-[54px] w-[95px] flex-col items-center justify-center border-b border-white/10">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/20 bg-[#0176d3] text-white shadow-lg shadow-blue-950/20" aria-label="Excell Packaging">
             <Package size={25} strokeWidth={2.4} />
           </div>
