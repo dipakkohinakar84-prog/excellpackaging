@@ -53,12 +53,16 @@ export interface Customer {
   remarks: string;
 }
 
+export type BomChildType = 'component' | 'item';
+
 export interface ChildItem {
-  id: string;
+  id: string | number;
+  type?: BomChildType;
   name: string;
   departments: string[];
   size?: string;
   qtyPerMaster?: number;
+  drawing_no?: string;
 }
 
 export interface Item {
@@ -88,6 +92,11 @@ export interface DepartmentStatus {
 export interface WorkOrder {
   id: number;
   itemId?: number; 
+  order_type?: 'parent' | 'suborder';
+  parent_work_order_id?: number;
+  parent_item_name?: string;
+  source_item_id?: number;
+  source_child_qty?: number;
   customer: string;
   job_details: string;
   drawing: string;

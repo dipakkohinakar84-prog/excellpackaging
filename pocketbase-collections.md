@@ -83,6 +83,11 @@ Fields:
 - `department_statuses`: json
 - `last_invoice_no`: text
 - `last_vehicle_no`: text
+- `order_type`: text (`parent` or `suborder`)
+- `parent_work_order_id`: number
+- `parent_item_name`: text
+- `source_item_id`: number
+- `source_child_qty`: number
 
 ## dispatch_logs
 

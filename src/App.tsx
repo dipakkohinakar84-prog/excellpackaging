@@ -187,6 +187,7 @@ const parseAssignedDepartments = (val: any): string[] => {
 };
 
 type CustomPlanComponent = {
+  component_type?: 'component' | 'item';
   component_id?: string;
   component_name: string;
   departments: string[];
@@ -211,6 +212,153 @@ const isInvolvingDepartment = (departmentName: string) => {
 };
 
 const PLAN_DEPARTMENT_COLUMNS = ['Wood_Work', 'Corrugation', 'Trading_Consumables'];
+
+type BomRowType = 'component' | 'item';
+
+type BomSelectionRow = {
+  id: string | number;
+  type: BomRowType;
+  name: string;
+  qty: number | '';
+  departments: string[];
+  drawing_no?: string;
+};
+
+const getBomChildType = (child: any): BomRowType => child?.type === 'item' ? 'item' : 'component';
+
+const isSameBomReference = (a: Pick<BomSelectionRow, 'id' | 'type'>, b: Pick<BomSelectionRow, 'id' | 'type'>) => (
+  a.type === b.type && String(a.id) === String(b.id)
+);
+
+const itemContainsItem = (items: Item[], sourceItemId: number, targetItemId: number, visited = new Set<number>()): boolean => {
+  if (sourceItemId === targetItemId) return true;
+  if (visited.has(sourceItemId)) return false;
+  visited.add(sourceItemId);
+
+  const sourceItem = items.find(item => Number(item.id) === Number(sourceItemId));
+  if (!sourceItem || !Array.isArray(sourceItem.children)) return false;
+
+  return sourceItem.children.some((child: any) => {
+    if (getBomChildType(child) !== 'item') return false;
+    const childItemId = Number(child.id);
+    return childItemId === targetItemId || itemContainsItem(items, childItemId, targetItemId, visited);
+  });
+};
+
+const toBomSelectionRow = (child: any): BomSelectionRow => ({
+  id: child.id,
+  type: getBomChildType(child),
+  name: child.name,
+  qty: Math.max(1, Number(child.qtyPerMaster) || 1),
+  departments: Array.isArray(child.departments) ? child.departments : [],
+  drawing_no: child.drawing_no,
+});
+
+const toStoredBomChild = (row: BomSelectionRow) => ({
+  id: row.id,
+  type: row.type,
+  name: row.name,
+  qtyPerMaster: Number(row.qty) > 0 ? Number(row.qty) : 1,
+  departments: row.departments,
+  ...(row.type === 'item' && row.drawing_no ? { drawing_no: row.drawing_no } : {}),
+});
+
+const addExpandedBomComponents = (
+  target: any[],
+  items: Item[],
+  children: any[],
+  multiplier: number,
+  visited = new Set<number>(),
+) => {
+  children.forEach((child: any) => {
+    const qty = Math.max(1, Number(child.qtyPerMaster) || 1) * multiplier;
+
+    if (getBomChildType(child) === 'item') {
+      const childItemId = Number(child.id);
+      if (!Number.isFinite(childItemId) || visited.has(childItemId)) return;
+
+      const nestedItem = items.find(item => Number(item.id) === childItemId);
+      if (!nestedItem || !Array.isArray(nestedItem.children) || nestedItem.children.length === 0) {
+        target.push({ ...child, type: 'item', totalQty: qty });
+        return;
+      }
+
+      const nextVisited = new Set(visited);
+      nextVisited.add(childItemId);
+      addExpandedBomComponents(target, items, nestedItem.children, qty, nextVisited);
+      return;
+    }
+
+    target.push({ ...child, type: 'component', totalQty: qty });
+  });
+};
+
+const collectItemBomDepartments = (items: Item[], item: Item | undefined, visited = new Set<number>()): string[] => {
+  if (!item || visited.has(Number(item.id))) return [];
+  visited.add(Number(item.id));
+
+  const departments = new Set<string>();
+  const addDepartments = (values: any) => {
+    if (!Array.isArray(values)) return;
+    values
+      .map((department: string) => normalizeDepartment(department))
+      .filter(isInvolvingDepartment)
+      .forEach((department: string) => departments.add(department));
+  };
+
+  addDepartments(item.departments);
+
+  (item.children || []).forEach((child: any) => {
+    addDepartments(child.departments);
+
+    if (getBomChildType(child) === 'item') {
+      const nestedItem = items.find(candidate => Number(candidate.id) === Number(child.id));
+      collectItemBomDepartments(items, nestedItem, visited).forEach(department => departments.add(department));
+    }
+  });
+
+  return Array.from(departments);
+};
+
+const collectDirectWorkDepartments = (item: Item | undefined): string[] => {
+  if (!item) return [];
+  const departments = new Set<string>();
+  const addDepartments = (values: any) => {
+    if (!Array.isArray(values)) return;
+    values
+      .map((department: string) => normalizeDepartment(department))
+      .filter(isInvolvingDepartment)
+      .forEach((department: string) => departments.add(department));
+  };
+
+  addDepartments(item.departments);
+  (item.children || [])
+    .filter((child: any) => getBomChildType(child) === 'component')
+    .forEach((child: any) => addDepartments(child.departments));
+
+  return Array.from(departments);
+};
+
+const makeDepartmentStatuses = (departments: string[], username: string) => departments.map(dept => ({
+  department: dept,
+  status: 'Not Started',
+  updated_at: new Date().toISOString(),
+  updated_by: username,
+}));
+
+const getBomParentReferences = (items: Item[], childType: BomRowType, childId: string | number) => {
+  const childIdText = String(childId);
+
+  return items.filter(item => (item.children || []).some((child: any) => (
+    getBomChildType(child) === childType && String(child.id) === childIdText
+  )));
+};
+
+const alertBomDeleteBlocked = (rowName: string, parents: Item[]) => {
+  const parentNames = parents.map(parent => parent.name).slice(0, 8).join('\n- ');
+  const extraCount = Math.max(0, parents.length - 8);
+  alert(`Cannot delete "${rowName}" because it is used in parent BOM(s).\n\nFirst remove it from:\n- ${parentNames}${extraCount > 0 ? `\n...and ${extraCount} more` : ''}`);
+};
 
 const STATUS_FILTER_ORDER: WOStatus[] = [
   'Not Started',
@@ -1703,7 +1851,7 @@ const UserList: React.FC<{ onError: () => void }> = ({ onError }) => {
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-black">User Access Control</h2>
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => { setEditingUser(null); setFormData(initialFormData); setIsModalOpen(true); }}
           aria-label="Add User"
           title="Add User"
           className="w-10 h-10 sm:w-auto sm:h-auto bg-blue-600 text-white sm:px-4 sm:py-2 rounded-lg font-bold flex items-center justify-center gap-2 shadow-lg hover:bg-blue-700 transition-colors"
@@ -1718,7 +1866,7 @@ const UserList: React.FC<{ onError: () => void }> = ({ onError }) => {
         <input placeholder="Search users by name..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-white border rounded-xl outline-none" />
       </div>
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingUser ? "Edit User" : "New User"}>
+      <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingUser(null); setFormData(initialFormData); }} title={editingUser ? "Edit User" : "New User"}>
         <form onSubmit={handleSaveUser} className="space-y-4">
           <input required placeholder="Name" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl" />
           <input required type="email" placeholder="Email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl" />
@@ -1819,6 +1967,7 @@ const DepartmentList: React.FC<{ onError: () => void }> = ({ onError }) => {
   const [data, setData] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
   const [formData, setFormData] = useState({ name: '', incharge: '', supervisor: '', info: '' });
 
   const fetchData = async () => {
@@ -1835,10 +1984,14 @@ const DepartmentList: React.FC<{ onError: () => void }> = ({ onError }) => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { error } = await supabase.from('departments').insert([formData]);
+    const result = editingDepartment
+      ? await supabase.from('departments').update(formData).eq('id', editingDepartment.id)
+      : await supabase.from('departments').insert([formData]);
+    const { error } = result;
     if (error) alert(error.message);
     else { 
       setIsModalOpen(false); 
+      setEditingDepartment(null);
       setFormData({ name: '', incharge: '', supervisor: '', info: '' }); 
       fetchData(); 
     }
@@ -1850,12 +2003,12 @@ const DepartmentList: React.FC<{ onError: () => void }> = ({ onError }) => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-black text-gray-800">Departments</h2>
-        <button onClick={() => setIsModalOpen(true)} className="bg-purple-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg hover:bg-purple-700 transition-colors">
+        <button onClick={() => { setEditingDepartment(null); setFormData({ name: '', incharge: '', supervisor: '', info: '' }); setIsModalOpen(true); }} className="bg-purple-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg hover:bg-purple-700 transition-colors">
           <Plus size={18} /> <span className="hidden sm:inline">Add Dept</span><span className="sm:hidden">Add</span>
         </button>
       </div>
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Department">
+      <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingDepartment(null); }} title={editingDepartment ? "Edit Department" : "New Department"}>
         <form onSubmit={handleSave} className="space-y-4">
           <input required placeholder="Department Name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl" />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1863,7 +2016,7 @@ const DepartmentList: React.FC<{ onError: () => void }> = ({ onError }) => {
             <input placeholder="Supervisor" value={formData.supervisor} onChange={e => setFormData({...formData, supervisor: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl" />
           </div>
           <textarea placeholder="Description" value={formData.info} onChange={e => setFormData({...formData, info: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl" />
-          <button type="submit" className="w-full py-4 bg-purple-600 text-white rounded-xl font-black shadow-lg">Register Department</button>
+          <button type="submit" className="w-full py-4 bg-purple-600 text-white rounded-xl font-black shadow-lg">{editingDepartment ? 'Save Department' : 'Register Department'}</button>
         </form>
       </Modal>
 
@@ -1872,7 +2025,10 @@ const DepartmentList: React.FC<{ onError: () => void }> = ({ onError }) => {
           <Card key={d.id} className="hover:border-purple-200 transition-all border-l-4 border-l-purple-500">
             <div className="flex justify-between items-start mb-2">
               <h3 className="text-lg font-black text-gray-800">{d.name}</h3>
-              <button onClick={async () => { if(confirm("Delete?")) { await supabase.from('departments').delete().eq('id', d.id); fetchData(); } }} className="text-red-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
+              <div className="flex gap-1">
+                <button onClick={() => { setEditingDepartment(d); setFormData({ name: d.name, incharge: d.incharge || '', supervisor: d.supervisor || '', info: d.info || '' }); setIsModalOpen(true); }} className="text-blue-500 hover:text-blue-700 transition-colors"><Edit size={16} /></button>
+                <button onClick={async () => { if(confirm("Delete?")) { await supabase.from('departments').delete().eq('id', d.id); fetchData(); } }} className="text-red-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
+              </div>
             </div>
             <div className="space-y-2 mt-4">
               <div className="flex justify-between items-center text-sm">
@@ -1895,16 +2051,20 @@ const DepartmentList: React.FC<{ onError: () => void }> = ({ onError }) => {
 
 const CustomerManagement: React.FC<{ onError: () => void }> = ({ onError }) => {
   const [data, setData] = useState<Customer[]>([]);
+  const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [formData, setFormData] = useState({ name: '', proprietor: '', address: '', city: '', contact: '', email: '', gst: '', type: 'Direct', reference: '', remarks: '' });
 
   const fetchData = async () => {
     setLoading(true);
     try {
       const { data: res, error } = await supabase.from('customers').select('*').order('name');
+      const { data: itemRes } = await supabase.from('items').select('*').order('name');
       if (error?.code === '42P01') { onError(); return; }
       if (res) setData(res);
+      if (itemRes) setItems(itemRes);
     } catch (e) { onError(); }
     setLoading(false);
   };
@@ -1913,12 +2073,40 @@ const CustomerManagement: React.FC<{ onError: () => void }> = ({ onError }) => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { error } = await supabase.from('customers').insert([formData]);
+    const oldCustomerName = editingCustomer?.name || '';
+    const result = editingCustomer
+      ? await supabase.from('customers').update(formData).eq('id', editingCustomer.id)
+      : await supabase.from('customers').insert([formData]);
+    const { error } = result;
     if (error) alert(error.message);
     else { 
+      if (editingCustomer && normalizeDuplicateKey(oldCustomerName) !== normalizeDuplicateKey(formData.name)) {
+        const linkedItems = items.filter(item => normalizeDuplicateKey(item.customer_name || '') === normalizeDuplicateKey(oldCustomerName));
+        for (const item of linkedItems) {
+          await supabase.from('items').update({ customer_name: formData.name }).eq('id', item.id);
+        }
+      }
       setIsModalOpen(false); 
+      setEditingCustomer(null);
       setFormData({ name: '', proprietor: '', address: '', city: '', contact: '', email: '', gst: '', type: 'Direct', reference: '', remarks: '' }); 
       fetchData(); 
+    }
+  };
+
+  const deleteCustomer = async (customer: Customer) => {
+    const customerKey = normalizeDuplicateKey(customer.name || '');
+    const linkedItems = items.filter(item => normalizeDuplicateKey(item.customer_name || '') === customerKey);
+
+    if (linkedItems.length > 0) {
+      const itemNames = linkedItems.map(item => item.name).slice(0, 8).join('\n- ');
+      const extraCount = Math.max(0, linkedItems.length - 8);
+      alert(`Cannot delete "${customer.name}" because item master records exist for this client.\n\nFirst delete or move these item(s):\n- ${itemNames}${extraCount > 0 ? `\n...and ${extraCount} more` : ''}`);
+      return;
+    }
+
+    if (confirm("Delete?")) {
+      await supabase.from('customers').delete().eq('id', customer.id);
+      fetchData();
     }
   };
 
@@ -1928,12 +2116,12 @@ const CustomerManagement: React.FC<{ onError: () => void }> = ({ onError }) => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-black text-gray-800">Customers</h2>
-        <button onClick={() => setIsModalOpen(true)} className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg hover:bg-green-700 transition-colors">
+        <button onClick={() => { setEditingCustomer(null); setFormData({ name: '', proprietor: '', address: '', city: '', contact: '', email: '', gst: '', type: 'Direct', reference: '', remarks: '' }); setIsModalOpen(true); }} className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg hover:bg-green-700 transition-colors">
           <Plus size={18} /> <span className="hidden sm:inline">Add Client</span><span className="sm:hidden">Add</span>
         </button>
       </div>
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Customer">
+      <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingCustomer(null); }} title={editingCustomer ? "Edit Customer" : "New Customer"}>
         <form onSubmit={handleSave} className="space-y-4">
           <input required placeholder="Company Name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl" />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1943,7 +2131,7 @@ const CustomerManagement: React.FC<{ onError: () => void }> = ({ onError }) => {
           <input type="email" placeholder="Email Address" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl" />
           <input placeholder="GST Number" value={formData.gst} onChange={e => setFormData({...formData, gst: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl" />
           <textarea placeholder="Address" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl" />
-          <button type="submit" className="w-full py-4 bg-green-600 text-white rounded-xl font-black shadow-lg">Save Customer</button>
+          <button type="submit" className="w-full py-4 bg-green-600 text-white rounded-xl font-black shadow-lg">{editingCustomer ? 'Update Customer' : 'Save Customer'}</button>
         </form>
       </Modal>
 
@@ -1966,7 +2154,10 @@ const CustomerManagement: React.FC<{ onError: () => void }> = ({ onError }) => {
                  <Tag size={12} /> GST: {c.gst || 'N/A'}
               </div>
             </div>
-            <button onClick={async () => { if(confirm("Delete?")) { await supabase.from('customers').delete().eq('id', c.id); fetchData(); } }} className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 p-2 text-red-300 hover:text-red-500 transition-all bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+            <div className="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+              <button onClick={() => { setEditingCustomer(c); setFormData({ name: c.name || '', proprietor: c.proprietor || '', address: c.address || '', city: c.city || '', contact: c.contact || '', email: c.email || '', gst: c.gst || '', type: c.type || 'Direct', reference: c.reference || '', remarks: c.remarks || '' }); setIsModalOpen(true); }} className="p-2 text-blue-500 hover:text-blue-700 bg-blue-50 rounded-lg"><Edit size={16} /></button>
+              <button onClick={() => deleteCustomer(c)} className="p-2 text-red-300 hover:text-red-500 bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+            </div>
           </Card>
         ))}
       </div>
@@ -1989,6 +2180,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
   
   // Selection / Data for Modals
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
+  const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [allLibraryComponents, setAllLibraryComponents] = useState<any[]>([]); // From child_items table
   
   // Component Management States
@@ -1996,7 +2188,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
   const [newComponentNames, setNewComponentNames] = useState('');
   const [isAddingComponents, setIsAddingComponents] = useState(false);
   const [newComponentDepartments, setNewComponentDepartments] = useState<string[]>([]);
-  const [selectedComponents, setSelectedComponents] = useState<{id: string, name: string, qty: number | '', departments: string[]}[]>([]);
+  const [selectedComponents, setSelectedComponents] = useState<BomSelectionRow[]>([]);
 
   // Form Data
   const [formData, setFormData] = useState<{
@@ -2036,12 +2228,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
     setSelectedItem(item);
     
     // 1. Load existing components for this item (from items.children JSONB)
-    const existing = (item.children || []).map((c: any) => ({
-      id: c.id,
-      name: c.name,
-      qty: c.qtyPerMaster || 1,
-      departments: c.departments || []
-    }));
+    const existing = (item.children || []).map(toBomSelectionRow);
     setSelectedComponents(existing);
 
     // 2. Fetch all available components from Library (child_items table)
@@ -2093,19 +2280,79 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
     setItemRows(prev => prev.length === 1 ? [{ name: '', drawing_no: '', drawing_file: null }] : prev.filter((_, rowIndex) => rowIndex !== index));
   };
 
+  const openEditItem = (item: Item) => {
+    setEditingItem(item);
+    setFormData({ name: item.name || '', customer_name: item.customer_name || '', drawing_no: item.drawing_no || '', departments: item.departments || [] });
+    setItemRows([{ name: item.name || '', drawing_no: item.drawing_no || '', drawing_file: null }]);
+    setIsModalOpen(true);
+  };
+
+  const updateItemReferencesInBoms = async (item: Item, nextData: { name: string; drawing_no: string; departments: string[] }) => {
+    const parents = getBomParentReferences(data, 'item', item.id);
+    for (const parent of parents) {
+      const nextChildren = (parent.children || []).map((child: any) => (
+        getBomChildType(child) === 'item' && String(child.id) === String(item.id)
+          ? { ...child, name: nextData.name, drawing_no: nextData.drawing_no, departments: nextData.departments }
+          : child
+      ));
+      await supabase.from('items').update({ children: nextChildren }).eq('id', parent.id);
+    }
+  };
+
   const filteredComponents = allLibraryComponents.filter(c => 
     c.name.toLowerCase().includes(componentSearch.toLowerCase()) ||
     (c.departments || []).some((d: string) => d.toLowerCase().includes(componentSearch.toLowerCase()))
   );
 
+  const filteredBomItems = data.filter(item => {
+    if (!selectedItem || item.id === selectedItem.id) return false;
+    if (itemContainsItem(data, item.id, selectedItem.id)) return false;
+    if (selectedComponents.some(component => component.type === 'item' && String(component.id) === String(item.id))) return false;
+
+    const query = componentSearch.trim().toLowerCase();
+    if (!query) return true;
+    return item.name.toLowerCase().includes(query) ||
+      (item.customer_name || '').toLowerCase().includes(query) ||
+      (item.drawing_no || '').toLowerCase().includes(query) ||
+      (item.departments || []).some((d: string) => d.toLowerCase().includes(query));
+  });
+
   const addComponentToSelection = (component: any) => {
-    if (!selectedComponents.find(c => normalizeDuplicateKey(c.name) === normalizeDuplicateKey(component.name))) {
+    const nextRow: BomSelectionRow = {
+      id: component.id,
+      type: 'component',
+      name: component.name,
+      qty: 1,
+      departments: component.departments || []
+    };
+    if (!selectedComponents.find(c => isSameBomReference(c, nextRow))) {
       setSelectedComponents([...selectedComponents, {
         id: component.id,
+        type: 'component',
         name: component.name,
         qty: 1,
         departments: component.departments || []
       }]);
+    }
+  };
+
+  const addItemToSelection = (item: Item) => {
+    if (!selectedItem) return;
+    if (item.id === selectedItem.id || itemContainsItem(data, item.id, selectedItem.id)) {
+      alert('This item cannot be added because it would create a circular BOM.');
+      return;
+    }
+
+    const nextRow: BomSelectionRow = {
+      id: item.id,
+      type: 'item',
+      name: item.name,
+      qty: 1,
+      departments: item.departments || [],
+      drawing_no: item.drawing_no,
+    };
+    if (!selectedComponents.find(component => isSameBomReference(component, nextRow))) {
+      setSelectedComponents(prev => [...prev, nextRow]);
     }
   };
 
@@ -2161,7 +2408,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
         const next = [...prev];
         for (const component of nextComponents) {
           if (!selectedKeys.has(normalizeDuplicateKey(component.name || '')) && !next.find(row => normalizeDuplicateKey(row.name) === normalizeDuplicateKey(component.name || ''))) {
-            next.push({ id: component.id, name: component.name, qty: 1, departments: component.departments || newComponentDepartments });
+            next.push({ id: component.id, type: 'component', name: component.name, qty: 1, departments: component.departments || newComponentDepartments });
           }
         }
         return next;
@@ -2190,12 +2437,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
   const saveComponentsToItem = async () => {
     if (!selectedItem) return;
 
-    const componentsToSave = selectedComponents.map(sc => ({
-      id: sc.id,
-      name: sc.name,
-      qtyPerMaster: Number(sc.qty) > 0 ? Number(sc.qty) : 1,
-      departments: sc.departments
-    }));
+    const componentsToSave = selectedComponents.map(toStoredBomChild);
     
     const { error } = await supabase
       .from('items')
@@ -2211,16 +2453,29 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
     }
   };
 
+  const deleteItem = async (item: Item) => {
+    const parentReferences = getBomParentReferences(data, 'item', item.id).filter(parent => parent.id !== item.id);
+    if (parentReferences.length > 0) {
+      alertBomDeleteBlocked(item.name, parentReferences);
+      return;
+    }
+
+    if (confirm("Delete Item?")) {
+      await supabase.from('items').delete().eq('id', item.id);
+      fetchData();
+    }
+  };
+
   if (loading && data.length === 0) return <LoadingState />;
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-black text-gray-800">Item Master</h2>
-        <button onClick={() => { resetItemForm(); setIsModalOpen(true); }} className="bg-orange-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg hover:bg-orange-700 transition-colors"><Plus size={18} /></button>
+        <button onClick={() => { setEditingItem(null); resetItemForm(); setIsModalOpen(true); }} className="bg-orange-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg hover:bg-orange-700 transition-colors"><Plus size={18} /></button>
       </div>
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Item">
+      <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingItem(null); }} title={editingItem ? "Edit Item" : "New Item"}>
         <form onSubmit={async (e) => { 
           e.preventDefault(); 
           const customerKey = normalizeDuplicateKey(formData.customer_name);
@@ -2243,7 +2498,12 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
             return;
           }
 
-          const duplicateInForm = validRows.find((row, index) => validRows.findIndex(other => normalizeDuplicateKey(other.name) === normalizeDuplicateKey(row.name)) !== index);
+          if (formData.departments.length === 0) {
+            alert('Please select at least one department for this item.');
+            return;
+          }
+
+          const duplicateInForm = !editingItem && validRows.find((row, index) => validRows.findIndex(other => normalizeDuplicateKey(other.name) === normalizeDuplicateKey(row.name)) !== index);
           if (duplicateInForm) {
             alert(`Item "${duplicateInForm.name}" is repeated in this form.`);
             return;
@@ -2251,7 +2511,8 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
 
           const duplicateExisting = validRows.find(row => data.some(item =>
             normalizeDuplicateKey(item.name || '') === normalizeDuplicateKey(row.name) &&
-            normalizeDuplicateKey(item.customer_name || '') === customerKey
+            normalizeDuplicateKey(item.customer_name || '') === customerKey &&
+            (!editingItem || Number(item.id) !== Number(editingItem.id))
           ));
           if (duplicateExisting) {
             alert(`Item "${duplicateExisting.name}" already exists for ${formData.customer_name}.`);
@@ -2266,10 +2527,15 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
             drawing_file: row.drawing_file || undefined,
             departments: formData.departments,
           }));
-          const { error } = await supabase.from('items').insert(rowsToInsert); 
+          const result = editingItem
+            ? await supabase.from('items').update(rowsToInsert[0]).eq('id', editingItem.id)
+            : await supabase.from('items').insert(rowsToInsert);
+          const { error } = result; 
           if(error) alert(error.message);
           else {
+            if (editingItem) await updateItemReferencesInBoms(editingItem, { name: rowsToInsert[0].name, drawing_no: rowsToInsert[0].drawing_no, departments: formData.departments });
             setIsModalOpen(false); 
+            setEditingItem(null);
             resetItemForm();
             fetchData(); 
           }
@@ -2284,14 +2550,14 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
                   <div className="text-xs font-black uppercase tracking-widest text-orange-600">Items</div>
                   <div className="text-[11px] font-semibold text-gray-400">Add item masters one by one in rows.</div>
                 </div>
-                <button type="button" onClick={addItemRow} className="inline-flex items-center gap-2 rounded-xl border border-orange-200 bg-white px-3 py-2 text-xs font-black text-orange-700 hover:bg-orange-100"><Plus size={14} /> Add another item</button>
+                {!editingItem && <button type="button" onClick={addItemRow} className="inline-flex items-center gap-2 rounded-xl border border-orange-200 bg-white px-3 py-2 text-xs font-black text-orange-700 hover:bg-orange-100"><Plus size={14} /> Add another item</button>}
               </div>
               <div className="space-y-2">
                 {itemRows.map((row, index) => (
                   <div key={index} className="rounded-xl border border-orange-100 bg-white p-3 shadow-sm">
                     <div className="mb-2 flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-gray-400">
                       <span>Item {index + 1}</span>
-                      <button type="button" onClick={() => removeItemRow(index)} className="text-red-400 hover:text-red-600">Remove</button>
+                      {!editingItem && <button type="button" onClick={() => removeItemRow(index)} className="text-red-400 hover:text-red-600">Remove</button>}
                     </div>
                     <input required={index === 0} placeholder="Item Name / Assembly" value={row.name} onChange={e => updateItemRow(index, 'name', e.target.value)} className="mb-2 w-full px-4 py-3 bg-gray-50 border rounded-xl" />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -2314,7 +2580,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
                 ))}
               </div>
            </div>
-           <button type="submit" className="w-full py-4 bg-orange-600 text-white rounded-xl font-black shadow-lg">Register Item Master</button>
+            <button type="submit" className="w-full py-4 bg-orange-600 text-white rounded-xl font-black shadow-lg">{editingItem ? 'Save Item' : 'Register Item Master'}</button>
         </form>
       </Modal>
 
@@ -2344,9 +2610,10 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
           </div>
 
           <div className={componentSearch.trim() && filteredComponents.length === 0 ? 'grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)]' : ''}>
+          <div className="space-y-3">
           <div className="border border-gray-200 rounded-xl overflow-hidden flex flex-col max-h-60">
-             <div className="bg-gray-50 px-4 py-2 border-b border-gray-200 text-[10px] font-black uppercase text-gray-400 tracking-widest">Available Library</div>
-             <div className="overflow-y-auto p-2 space-y-1">
+              <div className="bg-gray-50 px-4 py-2 border-b border-gray-200 text-[10px] font-black uppercase text-gray-400 tracking-widest">Available Library</div>
+              <div className="overflow-y-auto p-2 space-y-1">
                 {filteredComponents.map(component => (
                   <div key={component.id} className="flex items-center justify-between p-3 border border-transparent hover:border-gray-200 hover:bg-gray-50 rounded-lg group transition-all">
                     <div className="flex-1">
@@ -2370,8 +2637,32 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
                 ))}
                 {filteredComponents.length === 0 && (
                    <div className="p-6 text-center text-sm font-semibold text-gray-400">No matching components found.</div>
+                 )}
+              </div>
+          </div>
+
+          <div className="border border-indigo-100 rounded-xl overflow-hidden flex flex-col max-h-60">
+             <div className="bg-indigo-50 px-4 py-2 border-b border-indigo-100 text-[10px] font-black uppercase text-indigo-500 tracking-widest">Available Items</div>
+             <div className="overflow-y-auto p-2 space-y-1">
+                {filteredBomItems.map(item => (
+                  <div key={item.id} className="flex items-center justify-between p-3 border border-transparent hover:border-indigo-100 hover:bg-indigo-50/50 rounded-lg group transition-all">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bold text-gray-800 text-sm truncate">{item.name}</div>
+                      <div className="text-[10px] font-semibold text-gray-400 truncate">{item.customer_name} {item.drawing_no ? `| ${item.drawing_no}` : ''}</div>
+                      <div className="flex gap-1 mt-1 flex-wrap">
+                        {(item.departments || []).map((d: string) => <Badge key={d} color="gray">{d}</Badge>)}
+                      </div>
+                    </div>
+                    <button type="button" onClick={() => addItemToSelection(item)} className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-sm hover:shadow-md transition-all active:scale-95">
+                      <Plus size={16} />
+                    </button>
+                  </div>
+                ))}
+                {filteredBomItems.length === 0 && (
+                   <div className="p-6 text-center text-sm font-semibold text-indigo-300">No available item matches this search.</div>
                 )}
              </div>
+          </div>
           </div>
 
           {componentSearch.trim() && filteredComponents.length === 0 && (
@@ -2428,6 +2719,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
                   <div key={idx} className="flex items-center gap-3 p-3 bg-white border border-blue-100 rounded-xl shadow-sm">
                     <div className="flex-1">
                        <span className="font-bold text-gray-800 text-sm block">{item.name}</span>
+                       <Badge color={item.type === 'item' ? 'indigo' : 'blue'}>{item.type === 'item' ? 'Item' : 'Component'}</Badge>
                        <div className="flex gap-1 mt-1">
                           {(item.departments || []).map((d: string) => (
                              <span key={d} className="text-[9px] text-gray-400 font-bold uppercase">{d}</span>
@@ -2500,8 +2792,9 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
                           </span>
                         )}
                     </button>
+                    <button onClick={() => openEditItem(c)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Edit Item"><Edit size={16}/></button>
                     {c.drawing_image_url && <button onClick={() => { setSelectedItem(c); setIsImageModalOpen(true); }} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="View Drawing PDF"><FileText size={16}/></button>}
-                    <button onClick={async () => { if(confirm("Delete Item?")) { await supabase.from('items').delete().eq('id', c.id); fetchData(); } }} className="p-2 text-red-400 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button>
+                    <button onClick={() => deleteItem(c)} className="p-2 text-red-400 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button>
                   </td>
                 </tr>
               ))}
@@ -2535,7 +2828,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
                 )}
               </div>
 
-              <div className="mt-3 grid grid-cols-3 gap-2">
+              <div className="mt-3 grid grid-cols-4 gap-2">
                 <button
                   onClick={() => openComponentManager(c)}
                   className="flex items-center justify-center gap-1.5 rounded-lg bg-indigo-50 px-2 py-2 text-[11px] font-black text-indigo-700"
@@ -2545,6 +2838,13 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
                   {(c.children?.length || 0) > 0 && (
                     <span className="rounded-full bg-orange-500 px-1.5 py-0.5 text-[9px] text-white">{c.children?.length}</span>
                   )}
+                </button>
+
+                <button
+                  onClick={() => openEditItem(c)}
+                  className="flex items-center justify-center gap-1.5 rounded-lg bg-blue-50 px-2 py-2 text-[11px] font-black text-blue-700"
+                >
+                  <Edit size={14} /> Edit
                 </button>
 
                 <button
@@ -2562,10 +2862,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
 
                 <button
                   onClick={async () => {
-                    if (confirm("Delete Item?")) {
-                      await supabase.from('items').delete().eq('id', c.id);
-                      fetchData();
-                    }
+                    deleteItem(c);
                   }}
                   className="flex items-center justify-center gap-1.5 rounded-lg bg-red-50 px-2 py-2 text-[11px] font-black text-red-600"
                 >
@@ -2588,13 +2885,14 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
 
 const ChildItemListView: React.FC<{ onError: () => void }> = ({ onError }) => {
   const [data, setData] = useState<any[]>([]);
+  const [items, setItems] = useState<Item[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingComponent, setEditingComponent] = useState<any | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('All');
-  const [formData, setFormData] = useState({ name: '', departments: [] as string[] });
-  const [componentNameRows, setComponentNameRows] = useState(['']);
+  const [componentNameRows, setComponentNameRows] = useState<Array<{ name: string; departments: string[] }>>([{ name: '', departments: [] }]);
 
   const involvingDepartments = useMemo(
     () => departments.filter(d => isInvolvingDepartment(d.name)),
@@ -2606,10 +2904,12 @@ const ChildItemListView: React.FC<{ onError: () => void }> = ({ onError }) => {
     try {
       const { data: res, error } = await supabase.from('child_items').select('*').order('name');
       const { data: deptRes } = await supabase.from('departments').select('*').order('name');
+      const { data: itemRes } = await supabase.from('items').select('*').order('name');
       
       if (error?.code === '42P01') { onError(); return; }
       if (res) setData(res);
       if (deptRes) setDepartments(deptRes);
+      if (itemRes) setItems(itemRes);
     } catch (e) { onError(); }
     setLoading(false);
   };
@@ -2618,62 +2918,101 @@ const ChildItemListView: React.FC<{ onError: () => void }> = ({ onError }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (formData.departments.length === 0) { alert("Please select at least one department."); return; }
-    const componentNames = Array.from(new Set(componentNameRows
-      .map(name => name.trim().replace(/\s+/g, ' '))
-      .filter(Boolean)));
+    const validRows = componentNameRows
+      .map(row => ({
+        name: row.name.trim().replace(/\s+/g, ' '),
+        departments: row.departments,
+      }))
+      .filter(row => row.name);
 
-    if (componentNames.length === 0) {
+    if (validRows.length === 0) {
       alert('Please enter at least one component name.');
       return;
     }
 
-    const existingKeys = new Set(data.map(component => normalizeDuplicateKey(component.name || '')));
-    const duplicateNames = componentNames.filter(name => existingKeys.has(normalizeDuplicateKey(name)));
-    const namesToCreate = componentNames.filter(name => !existingKeys.has(normalizeDuplicateKey(name)));
+    const missingDepartmentRow = validRows.find(row => row.departments.length === 0);
+    if (missingDepartmentRow) {
+      alert(`Please select at least one department for "${missingDepartmentRow.name}".`);
+      return;
+    }
 
-    if (namesToCreate.length === 0) {
+    const repeatedRow = validRows.find((row, index) => validRows.findIndex(other => normalizeDuplicateKey(other.name) === normalizeDuplicateKey(row.name)) !== index);
+    if (repeatedRow) {
+      alert(`Component "${repeatedRow.name}" is repeated in this form.`);
+      return;
+    }
+
+    const existingKeys = new Set(data.map(component => normalizeDuplicateKey(component.name || '')));
+    const duplicateNames = validRows
+      .filter(row => existingKeys.has(normalizeDuplicateKey(row.name)) && (!editingComponent || normalizeDuplicateKey(row.name) !== normalizeDuplicateKey(editingComponent.name || '')))
+      .map(row => row.name);
+    const rowsToCreate = editingComponent ? validRows : validRows.filter(row => !existingKeys.has(normalizeDuplicateKey(row.name)));
+
+    if (duplicateNames.length > 0 && editingComponent) {
+      alert(`Component already exists: ${duplicateNames.join(', ')}`);
+      return;
+    }
+
+    if (rowsToCreate.length === 0) {
       alert(`All entered components already exist: ${duplicateNames.join(', ')}`);
       return;
     }
     
-    const { error } = await supabase.from('child_items').insert(namesToCreate.map(name => ({
-        name,
-        departments: formData.departments,
-        qty_per_master: 0,
-        parent_item_id: null
-    })));
+    const payloadRows = rowsToCreate.map(row => ({
+      name: row.name,
+      departments: row.departments,
+      qty_per_master: 0,
+      parent_item_id: null
+    }));
+    const result = editingComponent
+      ? await supabase.from('child_items').update({ name: payloadRows[0].name, departments: payloadRows[0].departments }).eq('id', editingComponent.id)
+      : await supabase.from('child_items').insert(payloadRows);
+    const { error } = result;
     
     if (error) {
        console.error(error);
        alert("Error: " + error.message);
     } else {
-       if (duplicateNames.length > 0) alert(`Added ${namesToCreate.length} component(s). Skipped duplicate(s): ${duplicateNames.join(', ')}`);
+       if (editingComponent) {
+         const parentReferences = getBomParentReferences(items, 'component', editingComponent.id);
+         for (const parent of parentReferences) {
+           const nextChildren = (parent.children || []).map((child: any) => (
+             getBomChildType(child) === 'component' && String(child.id) === String(editingComponent.id)
+               ? { ...child, name: payloadRows[0].name, departments: payloadRows[0].departments }
+               : child
+           ));
+           await supabase.from('items').update({ children: nextChildren }).eq('id', parent.id);
+         }
+       }
+       if (duplicateNames.length > 0) alert(`Added ${rowsToCreate.length} component(s). Skipped duplicate(s): ${duplicateNames.join(', ')}`);
        setIsModalOpen(false);
-       setFormData({ name: '', departments: [] });
-       setComponentNameRows(['']);
+       setEditingComponent(null);
+       setComponentNameRows([{ name: '', departments: [] }]);
        fetchData();
     }
   };
 
   const updateComponentNameRow = (index: number, value: string) => {
-    setComponentNameRows(prev => prev.map((name, rowIndex) => rowIndex === index ? value : name));
+    setComponentNameRows(prev => prev.map((row, rowIndex) => rowIndex === index ? { ...row, name: value } : row));
   };
 
   const addComponentNameRow = () => {
-    setComponentNameRows(prev => [...prev, '']);
+    setComponentNameRows(prev => [...prev, { name: '', departments: [] }]);
   };
 
   const removeComponentNameRow = (index: number) => {
-    setComponentNameRows(prev => prev.length === 1 ? [''] : prev.filter((_, rowIndex) => rowIndex !== index));
+    setComponentNameRows(prev => prev.length === 1 ? [{ name: '', departments: [] }] : prev.filter((_, rowIndex) => rowIndex !== index));
   };
 
-  const toggleDepartment = (deptName: string) => {
-     setFormData(prev => ({
-        ...prev,
-        departments: prev.departments.includes(deptName) 
-           ? prev.departments.filter(d => d !== deptName) 
-           : [...prev.departments, deptName]
+  const toggleDepartment = (index: number, deptName: string) => {
+     setComponentNameRows(prev => prev.map((row, rowIndex) => {
+       if (rowIndex !== index) return row;
+       return {
+         ...row,
+         departments: row.departments.includes(deptName)
+           ? row.departments.filter(d => d !== deptName)
+           : [...row.departments, deptName]
+       };
      }));
   };
 
@@ -2704,6 +3043,25 @@ const ChildItemListView: React.FC<{ onError: () => void }> = ({ onError }) => {
     });
   }, [data, searchQuery, departmentFilter]);
 
+  const deleteComponent = async (component: any) => {
+    const parentReferences = getBomParentReferences(items, 'component', component.id);
+    if (parentReferences.length > 0) {
+      alertBomDeleteBlocked(component.name, parentReferences);
+      return;
+    }
+
+    if (confirm("Delete this component from library?")) {
+      await supabase.from('child_items').delete().eq('id', component.id);
+      fetchData();
+    }
+  };
+
+  const openEditComponent = (component: any) => {
+    setEditingComponent(component);
+    setComponentNameRows([{ name: component.name || '', departments: Array.isArray(component.departments) ? component.departments : [] }]);
+    setIsModalOpen(true);
+  };
+
   if (loading) return <LoadingState />;
 
   return (
@@ -2714,7 +3072,7 @@ const ChildItemListView: React.FC<{ onError: () => void }> = ({ onError }) => {
           <p className="hidden sm:block text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Manage standard parts and sub-assemblies</p>
         </div>
         <button
-          onClick={() => { setComponentNameRows(['']); setFormData({ name: '', departments: [] }); setIsModalOpen(true); }}
+          onClick={() => { setEditingComponent(null); setComponentNameRows([{ name: '', departments: [] }]); setIsModalOpen(true); }}
           aria-label="Add Component"
           title="Add Component"
           className="w-10 h-10 sm:w-auto sm:h-auto sm:px-4 sm:py-2 rounded-lg font-bold flex items-center justify-center gap-2 shadow-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors whitespace-nowrap text-xs sm:text-sm shrink-0"
@@ -2748,49 +3106,50 @@ const ChildItemListView: React.FC<{ onError: () => void }> = ({ onError }) => {
         </select>
       </div>
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Standard Component">
+      <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingComponent(null); }} title={editingComponent ? "Edit Component" : "New Standard Component"}>
          <form onSubmit={handleSubmit} className="space-y-6">
              <div>
                 <label className="text-[10px] font-black uppercase text-gray-400 mb-2 block tracking-widest ml-1">Component Name</label>
                <div className="space-y-2">
-                  {componentNameRows.map((name, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <input
-                        required={index === 0}
-                        className="w-full px-4 py-4 rounded-2xl border bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                        placeholder={index === 0 ? 'e.g., Foam Insert' : 'Another component name'}
-                        value={name}
-                        onChange={e => updateComponentNameRow(index, e.target.value)}
-                      />
-                      <button type="button" onClick={() => removeComponentNameRow(index)} className="p-3 rounded-xl text-red-400 hover:bg-red-50 hover:text-red-600" aria-label="Remove component row">
-                        <X size={18} />
-                      </button>
+                  {componentNameRows.map((row, index) => (
+                    <div key={index} className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
+                      <div className="flex items-center gap-2">
+                        <input
+                          required={index === 0}
+                          className="w-full px-4 py-4 rounded-2xl border bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                          placeholder={index === 0 ? 'e.g., Foam Insert' : 'Another component name'}
+                          value={row.name}
+                          onChange={e => updateComponentNameRow(index, e.target.value)}
+                        />
+                        <button type="button" onClick={() => removeComponentNameRow(index)} className="p-3 rounded-xl text-red-400 hover:bg-red-50 hover:text-red-600" aria-label="Remove component row">
+                          <X size={18} />
+                        </button>
+                      </div>
+                      <div className="mt-3">
+                        <label className="mb-2 ml-1 block text-[10px] font-black uppercase tracking-widest text-gray-400">Departments for this component</label>
+                        <div className="flex flex-wrap gap-2">
+                          {involvingDepartments.map(d => (
+                            <button
+                              key={d.id}
+                              type="button"
+                              onClick={() => toggleDepartment(index, d.name)}
+                              className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all ${row.departments.includes(d.name) ? 'bg-indigo-600 text-white shadow-lg border-indigo-600' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+                            >
+                              {d.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   ))}
                </div>
-               <button type="button" onClick={addComponentNameRow} className="mt-3 inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-black text-blue-700 hover:bg-blue-100">
-                 <Plus size={14} /> Add another component
-               </button>
+                {!editingComponent && <button type="button" onClick={addComponentNameRow} className="mt-3 inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-black text-blue-700 hover:bg-blue-100">
+                  <Plus size={14} /> Add another component
+                </button>}
              </div>
             
-            <div>
-                <label className="text-[10px] font-black uppercase text-gray-400 mb-3 block tracking-widest ml-1">Related Departments (Select at least one)</label>
-                <div className="flex flex-wrap gap-2">
-                    {involvingDepartments.map(d => (
-                        <button 
-                           key={d.id} 
-                           type="button" 
-                           onClick={() => toggleDepartment(d.name)} 
-                           className={`px-4 py-3 rounded-xl text-xs font-bold border transition-all ${formData.departments.includes(d.name) ? 'bg-indigo-600 text-white shadow-lg border-indigo-600' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
-                        >
-                            {d.name}
-                        </button>
-                    ))}
-                </div>
-            </div>
-
-            <button type="submit" disabled={formData.departments.length === 0} className="w-full py-5 bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-2xl font-black shadow-xl hover:bg-blue-700 transition-colors">
-               Add to Library
+            <button type="submit" disabled={!componentNameRows.some(row => row.name.trim()) || componentNameRows.some(row => row.name.trim() && row.departments.length === 0)} className="w-full py-5 bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-2xl font-black shadow-xl hover:bg-blue-700 transition-colors">
+               {editingComponent ? 'Save Component' : 'Add to Library'}
             </button>
          </form>
       </Modal>
@@ -2816,7 +3175,13 @@ const ChildItemListView: React.FC<{ onError: () => void }> = ({ onError }) => {
                   </td>
                   <td className="px-6 py-4 text-center">
                     <button 
-                      onClick={async () => { if(confirm("Delete this component from library?")) { await supabase.from('child_items').delete().eq('id', c.id); fetchData(); } }} 
+                      onClick={() => openEditComponent(c)} 
+                      className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-all"
+                    >
+                        <Edit size={16}/>
+                    </button>
+                    <button 
+                      onClick={() => deleteComponent(c)} 
                       className="p-2 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
                     >
                         <Trash2 size={16}/>
@@ -2851,11 +3216,17 @@ const ChildItemListView: React.FC<{ onError: () => void }> = ({ onError }) => {
                 </div>
 
                 <button
+                  onClick={() => openEditComponent(c)}
+                  className="shrink-0 p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-all"
+                  title="Edit component"
+                  aria-label="Edit component"
+                >
+                  <Edit size={16} />
+                </button>
+
+                <button
                   onClick={async () => {
-                    if (confirm("Delete this component from library?")) {
-                      await supabase.from('child_items').delete().eq('id', c.id);
-                      fetchData();
-                    }
+                    deleteComponent(c);
                   }}
                   className="shrink-0 p-2 text-red-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
                   title="Delete component"
@@ -2983,7 +3354,10 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
           >
             <div className="flex items-start justify-between gap-2">
               <div>
-                <div className="text-[10px] font-black text-indigo-600">#{wo.id}</div>
+                <div className="flex items-center gap-1 flex-wrap">
+                  <span className="text-[10px] font-black text-indigo-600">#{wo.id}</span>
+                  {wo.order_type === 'suborder' && <Badge color="purple" className="!text-[8px]">Suborder Of #{wo.parent_work_order_id || '-'}</Badge>}
+                </div>
                 <h3 className="text-xs font-black text-slate-800 leading-tight mt-0.5 line-clamp-1 md:line-clamp-2">{wo.job_details}</h3>
                 <p className="hidden md:block text-[10px] font-bold text-gray-400 uppercase">{wo.customer}</p>
               </div>
@@ -3112,14 +3486,93 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
 
   useEffect(() => { fetchData(); }, [loggedInUser]); // Re-fetch data if user changes
 
+  const createSubordersForItem = async (params: {
+    parentWorkOrderId: number;
+    currentItem: Item;
+    currentQty: number;
+    rootItemName: string;
+    customer: string;
+    etd: string;
+    visited?: Set<number>;
+  }) => {
+    const visited = params.visited || new Set<number>();
+    if (visited.has(Number(params.currentItem.id))) return;
+    visited.add(Number(params.currentItem.id));
+
+    const itemChildren = (params.currentItem.children || []).filter((child: any) => getBomChildType(child) === 'item');
+
+    for (const child of itemChildren) {
+      const childItem = items.find(item => Number(item.id) === Number(child.id));
+      if (!childItem || visited.has(Number(childItem.id))) continue;
+
+      const childQtyPerParent = Math.max(1, Number(child.qtyPerMaster) || 1);
+      const suborderQty = Math.max(1, Number(params.currentQty) || 1) * childQtyPerParent;
+      const directDepartments = collectDirectWorkDepartments(childItem);
+      const assignedDepartments = directDepartments.length > 0 ? directDepartments : collectItemBomDepartments(items, childItem);
+
+      if (assignedDepartments.length === 0) continue;
+
+      const { data: insertedSuborder, error: suborderError } = await supabase
+        .from('work_orders')
+        .insert([{
+          order_type: 'suborder',
+          parent_work_order_id: params.parentWorkOrderId,
+          parent_item_name: params.rootItemName,
+          source_item_id: childItem.id,
+          source_child_qty: childQtyPerParent,
+          customer: params.customer,
+          job_details: childItem.name,
+          drawing: childItem.drawing_no || '',
+          qty: suborderQty,
+          etd: params.etd,
+          status: 'Not Started',
+          assigned_departments: assignedDepartments,
+          department_statuses: makeDepartmentStatuses(assignedDepartments, loggedInUser.username),
+        }])
+        .select('id, job_details, assigned_departments')
+        .single();
+
+      if (suborderError) {
+        alert(`Parent order was created, but suborder for ${childItem.name} failed: ${suborderError.message}`);
+        continue;
+      }
+
+      if (insertedSuborder) {
+        for (const dept of assignedDepartments) {
+          await sendBackgroundPushEvent({
+            title: 'New Suborder Assigned',
+            body: `Parent WO #${params.parentWorkOrderId} | Suborder #${insertedSuborder.id} | ${dept.replace(/_/g, ' ')}\n${childItem.name}`.trim(),
+            departments: [dept],
+            workOrderId: insertedSuborder.id,
+            actor: loggedInUser.username,
+          });
+        }
+
+        await createSubordersForItem({
+          ...params,
+          parentWorkOrderId: insertedSuborder.id,
+          currentItem: childItem,
+          currentQty: suborderQty,
+          visited: new Set(visited),
+        });
+      }
+    }
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
+      const selectedOrderItem = items.find(item => (
+        item.name === formData.job_details &&
+        item.customer_name?.trim().toLowerCase() === formData.customer.trim().toLowerCase()
+      ));
+      const directOrderDepartments = collectDirectWorkDepartments(selectedOrderItem);
+      const autoAssignedDepartments = directOrderDepartments.length > 0 ? directOrderDepartments : collectItemBomDepartments(items, selectedOrderItem);
       const sanitizedAssignedDepartments: string[] = [
         ...new Set(
-          (formData.assigned_departments as string[])
+          ([...formData.assigned_departments, ...autoAssignedDepartments] as string[])
             .map((d: string) => normalizeDepartment(d))
             .filter((d: string) => isInvolvingDepartment(d))
         )
@@ -3131,15 +3584,15 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
         return;
       }
 
-      const initialStatuses = sanitizedAssignedDepartments.map(dept => ({
-          department: dept,
-          status: 'Not Started',
-          updated_at: new Date().toISOString(),
-          updated_by: loggedInUser.username
-      }));
+      const initialStatuses = makeDepartmentStatuses(sanitizedAssignedDepartments, loggedInUser.username);
 
       const woData = {
         ...formData,
+        order_type: 'parent',
+        parent_work_order_id: null,
+        parent_item_name: '',
+        source_item_id: selectedOrderItem?.id,
+        source_child_qty: 1,
         assigned_departments: sanitizedAssignedDepartments,
         department_statuses: initialStatuses
       };
@@ -3162,6 +3615,17 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                 departments: [dept],
                 workOrderId: insertedOrder.id,
                 actor: loggedInUser.username,
+              });
+            }
+
+            if (selectedOrderItem) {
+              await createSubordersForItem({
+                parentWorkOrderId: insertedOrder.id,
+                currentItem: selectedOrderItem,
+                currentQty: Number(formData.qty) || 1,
+                rootItemName: selectedOrderItem.name,
+                customer: formData.customer,
+                etd: formData.etd,
               });
             }
         }
@@ -3382,7 +3846,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                   ...formData, 
                   job_details: e.target.value, 
                   drawing: itm?.drawing_no || '', 
-                  assigned_departments: (itm?.departments || []).filter(isInvolvingDepartment) // Auto-fill departments from item
+                  assigned_departments: collectDirectWorkDepartments(itm).length > 0 ? collectDirectWorkDepartments(itm) : collectItemBomDepartments(items, itm)
                 });
               }} disabled={!formData.customer} className="w-full px-4 py-3 bg-gray-50 border rounded-2xl focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-60 disabled:cursor-not-allowed">
                  <option value="">{formData.customer ? 'Select Item Master' : 'Select Customer First'}</option>
@@ -3392,6 +3856,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
            
            <div>
              <label className="text-[10px] font-black uppercase text-gray-400 mb-2 block tracking-widest">Involved Departments</label>
+             <div className="mb-2 text-[10px] font-semibold text-gray-400">Auto-selected from parent item and nested item BOM. You can add extra departments if needed.</div>
              <div className="flex flex-wrap gap-2">
                 {involvingDepartments.map(d => (
                   <button 
@@ -3458,9 +3923,14 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                                 onClick={() => onView(wo.id)} 
                                 className="hover:bg-blue-50/50 cursor-pointer transition-colors group"
                             >
-                                <td className="px-4 py-2 font-black text-indigo-600 text-xs whitespace-nowrap">#{wo.id}</td>
+                                <td className="px-4 py-2 font-black text-indigo-600 text-xs whitespace-nowrap">
+                                  <div>#{wo.id}</div>
+                                  {wo.order_type === 'suborder' && <Badge color="purple" className="!text-[8px]">Suborder Of #{wo.parent_work_order_id || '-'}</Badge>}
+                                </td>
                                 <td className="px-4 py-2 font-bold text-gray-700 text-xs whitespace-nowrap">{wo.customer}</td>
-                                <td className="px-4 py-2 font-medium text-gray-800 text-xs whitespace-nowrap">{wo.job_details}</td>
+                                <td className="px-4 py-2 font-medium text-gray-800 text-xs whitespace-nowrap">
+                                  <div>{wo.job_details}</div>
+                                </td>
                                 <td className="px-4 py-2 whitespace-nowrap">
                                     <div className="flex items-center gap-2">
                                         <span className="font-mono text-xs text-gray-500 font-bold">{wo.drawing || wo.itemInfo?.drawing_no || 'TBD'}</span>
@@ -3516,7 +3986,10 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
             >
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <div className="text-[10px] font-black text-indigo-600">#{wo.id}</div>
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <span className="text-[10px] font-black text-indigo-600">#{wo.id}</span>
+                      {wo.order_type === 'suborder' && <Badge color="purple" className="!text-[8px]">Suborder Of #{wo.parent_work_order_id || '-'}</Badge>}
+                    </div>
                     <h3 className="text-xs font-black text-slate-800 leading-tight mt-0.5 line-clamp-1 md:line-clamp-2">{wo.job_details}</h3>
                     <p className="hidden md:block text-[10px] font-bold text-gray-400 uppercase">{wo.customer}</p>
                   </div>
@@ -3649,8 +4122,12 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
              <div className="md:hidden absolute inset-x-0 top-0 h-1.5 bg-blue-600" />
              <div className="flex flex-col md:flex-row justify-between items-start mb-3 md:mb-5 max-[375px]:mb-3 gap-2 md:gap-3 max-[375px]:gap-2">
                  <div>
-                    <span className="bg-indigo-50 text-indigo-600 px-3 max-[375px]:px-2 py-1 rounded-full md:rounded-lg text-[10px] max-[375px]:text-[9px] font-black tracking-widest border border-indigo-100">ORDER-#{wo.id}</span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="bg-indigo-50 text-indigo-600 px-3 max-[375px]:px-2 py-1 rounded-full md:rounded-lg text-[10px] max-[375px]:text-[9px] font-black tracking-widest border border-indigo-100">ORDER-#{wo.id}</span>
+                      {wo.order_type === 'suborder' && <Badge color="purple">Suborder Of #{wo.parent_work_order_id || '-'}</Badge>}
+                    </div>
                     <h1 className="text-lg md:text-2xl max-[375px]:text-base font-black text-gray-800 mt-2 mb-1 break-words leading-tight line-clamp-2">{wo.job_details}</h1>
+                    {wo.parent_work_order_id && <p className="text-[10px] font-black text-purple-500 uppercase tracking-wider">Parent Item: {wo.parent_item_name || 'Parent Item'}</p>}
                     <p className="text-xs md:text-base max-[375px]:text-[11px] font-bold text-gray-400 uppercase tracking-tight">{wo.customer}</p>
                  </div>
                  <StatusBadge status={wo.status} />
@@ -3884,7 +4361,7 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
   const [bomNewComponentNames, setBomNewComponentNames] = useState('');
   const [bomNewComponentDepartments, setBomNewComponentDepartments] = useState<string[]>([]);
   const [isAddingBomComponent, setIsAddingBomComponent] = useState(false);
-  const [componentRows, setComponentRows] = useState<{ id: string; name: string; qty: number | ''; departments: string[] }[]>([]);
+  const [componentRows, setComponentRows] = useState<BomSelectionRow[]>([]);
   const involvingDepartments = useMemo(
     () => departments.filter(d => isInvolvingDepartment(d.name)),
     [departments]
@@ -3937,6 +4414,7 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
   const buildDefaultComponentsFromItem = (item: Item, itemQty: number): CustomPlanComponent[] => {
     return Array.isArray(item.children)
       ? item.children.map((c: any) => ({
+          component_type: getBomChildType(c),
           component_id: String(c.id || ''),
           component_name: c.name,
           departments: Array.isArray(c.departments) ? c.departments : [],
@@ -4151,12 +4629,7 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
 
   const openItemBomComponentDialog = (item: Item) => {
     setComponentItem(item);
-    setComponentRows((item.children || []).map((child: any) => ({
-      id: String(child.id || ''),
-      name: child.name,
-      qty: Math.max(1, Number(child.qtyPerMaster) || 1),
-      departments: Array.isArray(child.departments) ? child.departments : [],
-    })));
+    setComponentRows((item.children || []).map(toBomSelectionRow));
     setComponentSearchQuery('');
     setBomNewComponentNames('');
     setBomNewComponentDepartments(item.departments?.length ? item.departments : []);
@@ -4164,14 +4637,52 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
 
   const addLibraryComponentToItemBom = (component: any) => {
     setComponentRows(prev => {
-      if (prev.some(row => normalizeDuplicateKey(row.name) === normalizeDuplicateKey(component.name || ''))) return prev;
-      return [...prev, {
+      const nextRow: BomSelectionRow = {
         id: String(component.id || ''),
+        type: 'component',
         name: component.name,
         qty: 1,
         departments: Array.isArray(component.departments) ? component.departments : [],
-      }];
+      };
+      if (prev.some(row => isSameBomReference(row, nextRow))) return prev;
+      return [...prev, nextRow];
     });
+  };
+
+  const filteredItemBomItems = useMemo(() => {
+    if (!componentItem) return [] as Item[];
+    const query = componentSearchQuery.trim().toLowerCase();
+
+    return items.filter(item => {
+      if (item.id === componentItem.id) return false;
+      if (itemContainsItem(items, item.id, componentItem.id)) return false;
+      if (componentRows.some(row => row.type === 'item' && String(row.id) === String(item.id))) return false;
+      if (!query) return true;
+
+      return item.name.toLowerCase().includes(query) ||
+        (item.customer_name || '').toLowerCase().includes(query) ||
+        (item.drawing_no || '').toLowerCase().includes(query) ||
+        (item.departments || []).some((dept: string) => dept.toLowerCase().includes(query));
+    });
+  }, [items, componentItem, componentRows, componentSearchQuery]);
+
+  const addItemToItemBom = (item: Item) => {
+    if (!componentItem) return;
+    if (item.id === componentItem.id || itemContainsItem(items, item.id, componentItem.id)) {
+      alert('This item cannot be added because it would create a circular BOM.');
+      return;
+    }
+
+    const nextRow: BomSelectionRow = {
+      id: item.id,
+      type: 'item',
+      name: item.name,
+      qty: 1,
+      departments: item.departments || [],
+      drawing_no: item.drawing_no,
+    };
+
+    setComponentRows(prev => prev.some(row => isSameBomReference(row, nextRow)) ? prev : [...prev, nextRow]);
   };
 
   const updateItemBomQty = (index: number, value: string) => {
@@ -4233,7 +4744,7 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
         const next = [...prev];
         for (const component of nextComponents) {
           if (!selectedKeys.has(normalizeDuplicateKey(component.name || '')) && !next.find(row => normalizeDuplicateKey(row.name) === normalizeDuplicateKey(component.name || ''))) {
-            next.push({ id: String(component.id || ''), name: component.name, qty: 1, departments: component.departments || bomNewComponentDepartments });
+            next.push({ id: String(component.id || ''), type: 'component', name: component.name, qty: 1, departments: component.departments || bomNewComponentDepartments });
           }
         }
         return next;
@@ -4252,12 +4763,7 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
       return;
     }
 
-    const children = componentRows.map(row => ({
-      id: row.id,
-      name: row.name,
-      qtyPerMaster: Number(row.qty) > 0 ? Number(row.qty) : 1,
-      departments: row.departments,
-    }));
+    const children = componentRows.map(toStoredBomChild);
 
     const { error } = await supabase.from('items').update({ children }).eq('id', componentItem.id);
     if (error) {
@@ -4315,6 +4821,11 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
   const addNewComponentToLibrary = async () => {
     if (!newComponent.name.trim()) {
       alert('Component name is required');
+      return;
+    }
+
+    if (newComponent.departments.length === 0) {
+      alert('Please select at least one department for this component.');
       return;
     }
 
@@ -4606,7 +5117,7 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
                 className="w-full rounded-xl border border-gray-200 bg-gray-50 py-3 pl-11 pr-4 text-sm outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-            <div className="max-h-[420px] overflow-y-auto rounded-xl border border-gray-200">
+            <div className="max-h-[260px] overflow-y-auto rounded-xl border border-gray-200">
               <div className="border-b bg-gray-50 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-gray-400">Available Library</div>
               <div className="space-y-1 p-2">
                 {filteredBomLibraryComponents.map(component => (
@@ -4621,6 +5132,24 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
                   </div>
                 ))}
                 {filteredBomLibraryComponents.length === 0 && <div className="p-8 text-center text-sm font-semibold text-gray-400">No matching components found.</div>}
+              </div>
+            </div>
+            <div className="max-h-[260px] overflow-y-auto rounded-xl border border-indigo-100">
+              <div className="border-b bg-indigo-50 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-indigo-500">Available Items</div>
+              <div className="space-y-1 p-2">
+                {filteredItemBomItems.map(item => (
+                  <div key={item.id} className="flex items-center justify-between rounded-lg border border-transparent p-3 transition-all hover:border-indigo-100 hover:bg-indigo-50/50">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-bold text-gray-800">{item.name}</div>
+                      <div className="text-[10px] font-semibold text-gray-400 truncate">{item.customer_name} {item.drawing_no ? `| ${item.drawing_no}` : ''}</div>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {(item.departments || []).map((dept: string) => <Badge key={dept} color="gray">{dept}</Badge>)}
+                      </div>
+                    </div>
+                    <button type="button" onClick={() => addItemToItemBom(item)} className="rounded-lg bg-indigo-600 p-2 text-white hover:bg-indigo-700"><Plus size={16} /></button>
+                  </div>
+                ))}
+                {filteredItemBomItems.length === 0 && <div className="p-8 text-center text-sm font-semibold text-indigo-300">No available item matches this search.</div>}
               </div>
             </div>
             {componentSearchQuery.trim() && filteredBomLibraryComponents.length === 0 && (
@@ -4669,7 +5198,7 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
           <div className="space-y-3 rounded-2xl border border-blue-100 bg-blue-50/40 p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="text-sm font-black text-blue-800">Selected Components ({componentRows.length})</div>
+                <div className="text-sm font-black text-blue-800">Selected BOM Rows ({componentRows.length})</div>
                 <div className="text-[11px] font-semibold text-gray-500">Saving here makes this item a Saved BOM.</div>
               </div>
             </div>
@@ -4679,6 +5208,7 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-black text-gray-800">{component.name}</div>
+                      <Badge color={component.type === 'item' ? 'indigo' : 'blue'}>{component.type === 'item' ? 'Item' : 'Component'}</Badge>
                       <div className="mt-1 flex flex-wrap gap-1">{component.departments.map(dept => <Badge key={dept} color="gray">{dept}</Badge>)}</div>
                     </div>
                     <button type="button" onClick={() => setComponentRows(prev => prev.filter((_, rowIndex) => rowIndex !== index))} className="p-1 text-red-400 hover:text-red-600"><X size={16} /></button>
@@ -4716,7 +5246,7 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
               </button>
             ))}
           </div>
-          <button onClick={addNewComponentToLibrary} className="w-full py-2.5 bg-orange-600 text-white rounded-xl font-black text-sm">Create Component</button>
+          <button onClick={addNewComponentToLibrary} disabled={!newComponent.name.trim() || newComponent.departments.length === 0} className="w-full py-2.5 bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-xl font-black text-sm">Create Component</button>
         </div>
       </Modal>
     </div>
@@ -5055,18 +5585,18 @@ const PlanGenerator: React.FC<{ ids: number[]; onBack: () => void }> = ({ ids, o
       if (woData && woData.length > 0) {
         const enhancedOrders = [];
         
+        const { data: allItemsData } = await supabase.from('items').select('*').order('name');
+        const allItems = (allItemsData || []) as Item[];
+
         // 2. Fetch Items for these orders
         for (const wo of woData) {
-            const { data: itemData } = await supabase.from('items').select('*').eq('name', wo.job_details).single();
+            const itemData = allItems.find(item => item.name === wo.job_details) || null;
             let components: any[] = [];
             
             if (itemData) {
-                // Get components from JSONB or Table
+                // Get components from JSONB and expand nested item BOMs.
                 if (itemData.children && Array.isArray(itemData.children)) {
-                    components = itemData.children.map((c: any) => ({
-                        ...c,
-                        totalQty: (c.qtyPerMaster || 1) * wo.qty
-                    }));
+                    addExpandedBomComponents(components, allItems, itemData.children, wo.qty, new Set([Number(itemData.id)]));
                 }
                 
                 const { data: linkedComponents } = await supabase.from('child_items').select('*').eq('parent_item_id', itemData.id);
