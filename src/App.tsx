@@ -53,7 +53,11 @@ import {
   LayoutGrid,
   CheckSquare,
   Square,
-  Truck
+  Truck,
+  Bell,
+  Send,
+  Inbox,
+  Archive
 } from 'lucide-react';
 import { AppView, User, Customer, Item, WorkOrder, Department, WOStatus, ChildItem } from './types';
 import { supabase, supabaseAnonKey } from './supabase';
@@ -446,8 +450,6 @@ const Login: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) => {
         @keyframes loginFloat { 0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); } 50% { transform: translate3d(0, -18px, 0) rotate(4deg); } }
         @keyframes loginDrift { 0% { transform: translateX(-8%) rotate(-4deg); } 100% { transform: translateX(8%) rotate(4deg); } }
         @keyframes loginPulse { 0%, 100% { opacity: .35; transform: scale(.95); } 50% { opacity: .9; transform: scale(1.05); } }
-        @keyframes erpLogoMotion { 0%, 100% { transform: translateY(0) rotate(0deg) scale(1); filter: drop-shadow(0 0 0 rgba(255,255,255,0)); } 50% { transform: translateY(-2px) rotate(5deg) scale(1.04); filter: drop-shadow(0 0 8px rgba(255,255,255,.45)); } }
-        .erp-logo-svg { animation: erpLogoMotion 2.8s ease-in-out infinite; transform-origin: center; }
         @media (prefers-reduced-motion: reduce) { .login-animate { animation: none !important; } }
       `}</style>
 
@@ -455,12 +457,12 @@ const Login: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) => {
         <div className="w-full max-w-[430px] overflow-hidden rounded-lg border border-slate-300 bg-white shadow-[0_2px_10px_rgba(15,23,42,0.14)]">
           <div className="px-8 pb-8 pt-14 sm:px-10">
             <div className="mx-auto flex h-[72px] w-[72px] items-center justify-center rounded-[24px] bg-[#0176d3] text-white shadow-lg shadow-blue-200">
-              <Package className="erp-logo-svg" size={38} strokeWidth={2.2} />
+              <Package size={38} strokeWidth={2.2} />
             </div>
             <h1 className="mt-8 text-center text-[28px] font-normal tracking-tight text-[#032d60]">Enter your Passkey</h1>
             <div className="mt-8 flex items-center gap-3 text-sm font-medium text-slate-700">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#032d60] via-[#0176d3] to-emerald-400 text-white">
-                <Package className="erp-logo-svg" size={20} />
+                <Package size={20} />
               </div>
               <span>{mobile || 'Registered mobile user'}</span>
             </div>
@@ -544,7 +546,7 @@ const Login: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) => {
 
         <div className="relative z-10 mt-12 h-[430px] max-w-4xl overflow-hidden rounded-[34px] border border-white/20 bg-white/10 shadow-2xl shadow-blue-950/40 backdrop-blur-sm">
           <div className="absolute left-10 top-10 h-24 w-24 rounded-[28px] border border-white/20 bg-white/15 login-animate" style={{ animation: 'loginFloat 5.5s ease-in-out infinite' }}>
-            <Package className="erp-logo-svg m-7 text-white" size={40} />
+            <Package className="m-7 text-white" size={40} />
           </div>
           <div className="absolute right-12 top-16 h-28 w-28 rounded-full bg-cyan-300/80 blur-sm login-animate" style={{ animation: 'loginPulse 4.5s ease-in-out infinite' }} />
           <div className="absolute left-32 top-36 h-56 w-[38rem] rounded-[999px] bg-gradient-to-r from-cyan-300 via-yellow-300 to-red-400 opacity-90 login-animate" style={{ animation: 'loginDrift 7s ease-in-out infinite alternate' }} />
@@ -1927,6 +1929,7 @@ const CustomerManagement: React.FC<{ onError: () => void }> = ({ onError }) => {
             <input placeholder="Proprietor" value={formData.proprietor} onChange={e => setFormData({...formData, proprietor: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl" />
             <input placeholder="Contact" value={formData.contact} onChange={e => setFormData({...formData, contact: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl" />
           </div>
+          <input type="email" placeholder="Email Address" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl" />
           <input placeholder="GST Number" value={formData.gst} onChange={e => setFormData({...formData, gst: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl" />
           <textarea placeholder="Address" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl" />
           <button type="submit" className="w-full py-4 bg-green-600 text-white rounded-xl font-black shadow-lg">Save Customer</button>
@@ -2682,13 +2685,13 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
 
   return (
     <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-300">
-      <div className="rounded-[20px] bg-white p-5 text-slate-900 shadow-[0_2px_8px_rgba(15,23,42,0.12)] border border-slate-200 flex flex-col gap-2 mb-4 sm:mb-6">
+      <div className="rounded-[20px] bg-white p-3 sm:p-5 text-slate-900 shadow-[0_2px_8px_rgba(15,23,42,0.12)] border border-slate-200 flex flex-col gap-1 sm:gap-2 mb-3 sm:mb-6">
         <div className="md:hidden text-[10px] font-black uppercase tracking-widest text-blue-700">Production Queue</div>
-        <h1 className="text-2xl font-black text-slate-900 md:text-gray-800">{loggedInUser.department.replace(/_/g, ' ')} Dashboard</h1>
-        <p className="text-slate-600 md:text-gray-500 text-sm">Manage your department's active work orders.</p>
+        <h1 className="text-lg md:text-2xl font-black text-slate-900 md:text-gray-800">{loggedInUser.department.replace(/_/g, ' ')} Dashboard</h1>
+        <p className="hidden md:block text-slate-600 md:text-gray-500 text-sm">Manage your department's active work orders.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3 mb-4 sm:mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-6">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
           <input 
@@ -2696,13 +2699,13 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
             placeholder="Search by order, customer, or job..." 
             value={searchQuery} 
             onChange={e => setSearchQuery(e.target.value)} 
-            className="w-full pl-12 pr-4 py-3.5 sm:py-4 bg-white border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm" 
+            className="w-full pl-12 pr-4 py-2.5 sm:py-4 bg-white border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm"
           />
         </div>
         <select
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value)}
-          className="w-full px-4 py-3.5 sm:py-4 bg-white border border-gray-200 rounded-2xl text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-4 py-2.5 sm:py-4 bg-white border border-gray-200 rounded-2xl text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="All">All Statuses</option>
           {statusOptions.map(status => (
@@ -2716,13 +2719,13 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
           <div 
             key={wo.id} 
             onClick={() => onView(wo.id)}
-            className="group bg-white rounded-2xl sm:rounded-xl border border-gray-100 p-3.5 sm:p-3 space-y-2 shadow-sm hover:shadow-md hover:border-blue-100 transition-all cursor-pointer active:scale-[0.99]"
+            className="group bg-white rounded-2xl sm:rounded-xl border border-gray-100 p-3 sm:p-3 space-y-1.5 sm:space-y-2 shadow-sm hover:shadow-md hover:border-blue-100 transition-all cursor-pointer active:scale-[0.99]"
           >
             <div className="flex items-start justify-between gap-2">
               <div>
                 <div className="text-[10px] font-black text-indigo-600">#{wo.id}</div>
-                <h3 className="text-xs font-black text-slate-800 leading-tight mt-0.5 line-clamp-2">{wo.job_details}</h3>
-                <p className="text-[10px] font-bold text-gray-400 uppercase">{wo.customer}</p>
+                <h3 className="text-xs font-black text-slate-800 leading-tight mt-0.5 line-clamp-1 md:line-clamp-2">{wo.job_details}</h3>
+                <p className="hidden md:block text-[10px] font-bold text-gray-400 uppercase">{wo.customer}</p>
               </div>
               <div className="flex flex-col items-end gap-1">
                 <StatusBadge status={wo.status} />
@@ -2737,8 +2740,9 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
 
             <div className="flex items-center justify-between gap-2 pt-1 border-t border-gray-100">
               <div className="flex items-center gap-1.5 min-w-0">
-                <span className="text-[9px] font-black text-gray-300 uppercase">DRW</span>
-                <span className="text-[10px] font-mono font-bold text-slate-500 truncate">{wo.drawing || wo.itemInfo?.drawing_no || 'TBD'}</span>
+                <span className="hidden md:inline text-[9px] font-black text-gray-300 uppercase">DRW</span>
+                <span className="text-[10px] font-bold text-slate-500 truncate md:hidden">{wo.customer}</span>
+                <span className="hidden md:inline text-[10px] font-mono font-bold text-slate-500 truncate">{wo.drawing || wo.itemInfo?.drawing_no || 'TBD'}</span>
               </div>
               <ChevronRight size={14} className="text-gray-300 group-hover:text-blue-500 transition-colors" />
             </div>
@@ -3041,8 +3045,40 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
         </div>
       </div>
 
-      <div className="mb-4 sm:mb-6">
-        <div className={`grid gap-2 ${canFilterByDepartment ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'}`}>
+      <div className="mb-3 sm:mb-6">
+        <details className="md:hidden rounded-2xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
+          <summary className="list-none cursor-pointer flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-500">
+            <span>Filters</span>
+            <span className="text-blue-600">{statusFilter !== 'All' || departmentFilter !== 'All' ? 'Active' : 'Open'}</span>
+          </summary>
+          <div className="mt-2 grid gap-2">
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              className="w-full min-w-0 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="All">All Statuses</option>
+              {statusOptions.map(status => (
+                <option key={status} value={status}>{status}</option>
+              ))}
+            </select>
+
+            {canFilterByDepartment && (
+              <select
+                value={departmentFilter}
+                onChange={e => setDepartmentFilter(e.target.value)}
+                className="w-full min-w-0 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="All">All Departments</option>
+                {departmentOptions.map(dept => (
+                  <option key={dept} value={dept}>{dept.replace(/_/g, ' ')}</option>
+                ))}
+              </select>
+            )}
+          </div>
+        </details>
+
+        <div className={`hidden md:grid gap-2 ${canFilterByDepartment ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'}`}>
           <select
             value={statusFilter}
             onChange={e => setStatusFilter(e.target.value)}
@@ -3216,13 +3252,13 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
             {paginatedOrders.map(wo => (
             <div 
                 key={wo.id} 
-                className="group bg-white rounded-2xl md:rounded-xl border border-gray-100 p-3.5 md:p-3 space-y-2.5 md:space-y-2 shadow-sm hover:shadow-md hover:border-blue-100 transition-all active:scale-[0.99]"
+                className="group bg-white rounded-2xl md:rounded-xl border border-gray-100 p-3 md:p-3 space-y-1.5 md:space-y-2 shadow-sm hover:shadow-md hover:border-blue-100 transition-all active:scale-[0.99]"
             >
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <div className="text-[10px] font-black text-indigo-600">#{wo.id}</div>
-                    <h3 className="text-xs font-black text-slate-800 leading-tight mt-0.5 line-clamp-2">{wo.job_details}</h3>
-                    <p className="text-[10px] font-bold text-gray-400 uppercase">{wo.customer}</p>
+                    <h3 className="text-xs font-black text-slate-800 leading-tight mt-0.5 line-clamp-1 md:line-clamp-2">{wo.job_details}</h3>
+                    <p className="hidden md:block text-[10px] font-bold text-gray-400 uppercase">{wo.customer}</p>
                   </div>
                   <div className="flex flex-col items-end gap-1">
                     <StatusBadge status={wo.status} />
@@ -3230,7 +3266,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-1">
+                <div className="hidden md:flex flex-wrap gap-1">
                   {(wo.assigned_departments || []).slice(0, 3).map(d => (
                     <Badge key={d} color="indigo" className="!text-[8px]">{d.replace(/_/g, ' ')}</Badge>
                   ))}
@@ -3246,8 +3282,9 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
 
                 <div className="flex items-center justify-between gap-2 pt-1 border-t border-gray-100">
                   <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="text-[9px] font-black text-gray-300 uppercase">DRW</span>
-                    <span className="text-[10px] font-mono font-bold text-slate-500 truncate">{wo.drawing || wo.itemInfo?.drawing_no || 'TBD'}</span>
+                    <span className="text-[9px] font-black text-gray-300 uppercase md:inline hidden">DRW</span>
+                    <span className="text-[10px] font-bold text-slate-500 truncate md:hidden">{wo.customer}</span>
+                    <span className="hidden md:inline text-[10px] font-mono font-bold text-slate-500 truncate">{wo.drawing || wo.itemInfo?.drawing_no || 'TBD'}</span>
                     {wo.itemInfo?.drawing_image_url && (
                       <button
                         onClick={() => { setSelectedImageUrl(wo.itemInfo!.drawing_image_url!); setIsImageModalOpen(true); }}
@@ -3348,31 +3385,31 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
        
       <div className="flex flex-col xl:flex-row gap-4 max-[375px]:gap-3">
         <div className="flex-1 space-y-4">
-          <Card className="p-4 sm:p-5 max-[375px]:p-3.5 border-t-0 md:border-t-4 md:border-t-indigo-600 rounded-3xl md:rounded-xl overflow-hidden relative">
+          <Card className="p-3 md:p-5 max-[375px]:p-3 border-t-0 md:border-t-4 md:border-t-indigo-600 rounded-3xl md:rounded-xl overflow-hidden relative">
              <div className="md:hidden absolute inset-x-0 top-0 h-1.5 bg-blue-600" />
-             <div className="flex flex-col md:flex-row justify-between items-start mb-4 sm:mb-5 max-[375px]:mb-3 gap-3 max-[375px]:gap-2">
+             <div className="flex flex-col md:flex-row justify-between items-start mb-3 md:mb-5 max-[375px]:mb-3 gap-2 md:gap-3 max-[375px]:gap-2">
                  <div>
                     <span className="bg-indigo-50 text-indigo-600 px-3 max-[375px]:px-2 py-1 rounded-full md:rounded-lg text-[10px] max-[375px]:text-[9px] font-black tracking-widest border border-indigo-100">ORDER-#{wo.id}</span>
-                    <h1 className="text-2xl max-[375px]:text-xl font-black text-gray-800 mt-2 mb-1 break-words leading-tight">{wo.job_details}</h1>
-                    <p className="text-base max-[375px]:text-sm font-bold text-gray-400 uppercase tracking-tight">{wo.customer}</p>
+                    <h1 className="text-lg md:text-2xl max-[375px]:text-base font-black text-gray-800 mt-2 mb-1 break-words leading-tight line-clamp-2">{wo.job_details}</h1>
+                    <p className="text-xs md:text-base max-[375px]:text-[11px] font-bold text-gray-400 uppercase tracking-tight">{wo.customer}</p>
                  </div>
                  <StatusBadge status={wo.status} />
               </div>
                
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 max-[375px]:gap-2 py-3 sm:py-4 border-y border-gray-100">
-                 <div className="rounded-2xl bg-gray-50 p-3 sm:bg-transparent sm:p-0 sm:rounded-none">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4 max-[375px]:gap-2 py-2 md:py-4 border-y border-gray-100">
+                 <div className="rounded-2xl bg-gray-50 p-2.5 md:bg-transparent md:p-0 md:rounded-none">
                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Batch Size</label>
-                    <p className="text-xl max-[375px]:text-base font-black text-indigo-600">{wo.qty} <span className="text-[10px] text-gray-400 font-bold">PCS</span></p>
+                    <p className="text-base md:text-xl max-[375px]:text-base font-black text-indigo-600">{wo.qty} <span className="text-[10px] text-gray-400 font-bold">PCS</span></p>
                  </div>
-                 <div className="rounded-2xl bg-orange-50 p-3 sm:bg-transparent sm:p-0 sm:rounded-none">
+                 <div className="rounded-2xl bg-orange-50 p-2.5 md:bg-transparent md:p-0 md:rounded-none">
                     <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest block mb-1">Delivery ETD</label>
                     <p className="text-xs font-black text-orange-600 flex items-center gap-1"><Clock size={12}/> {wo.etd || 'N/A'}</p>
                  </div>
-                 <div className="col-span-2 lg:col-span-1 rounded-2xl bg-gray-50 p-3 sm:bg-transparent sm:p-0 sm:rounded-none">
+                 <div className="hidden md:block col-span-2 lg:col-span-1 rounded-2xl bg-gray-50 p-3 md:bg-transparent md:p-0 md:rounded-none">
                     <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest block mb-1">Blueprint Ref</label>
                     <p className="text-xs font-mono font-bold bg-gray-50 px-2 py-1 rounded inline-block break-all">{wo.drawing || 'NO DRAWING'}</p>
                  </div>
-                 <div className="col-span-2 lg:col-span-1 rounded-2xl bg-emerald-50 p-3 sm:bg-transparent sm:p-0 sm:rounded-none">
+                 <div className="hidden md:block col-span-2 lg:col-span-1 rounded-2xl bg-emerald-50 p-3 md:bg-transparent md:p-0 md:rounded-none">
                     <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest block mb-1">QC/Ready Date</label>
                     <p className="text-xs font-black text-green-600">{wo.ready_date || 'IN PROGRESS'}</p>
                 </div>
@@ -4855,6 +4892,1011 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
   );
 };
 
+// --- Office Mailbox ---
+
+type MailboxMessage = {
+  id: number;
+  subject: string;
+  body: string;
+  sender_user_id: number;
+  sender_name: string;
+  recipient_user_ids?: number[];
+  recipient_customer_ids?: number[];
+  recipient_departments?: string[];
+  read_by_user_ids?: number[];
+  attachments?: MailboxAttachment[];
+  delivery_status?: 'erp_only' | 'email_sent' | 'email_failed' | 'partial_failed' | string;
+  delivery_error?: string;
+  sent_email_count?: number;
+  failed_email_count?: number;
+  sent_at?: string;
+  direction?: 'inbound' | 'outbound' | string;
+  external_message_id?: string;
+  from_email?: string;
+  from_name?: string;
+  to_email?: string;
+  priority?: 'normal' | 'urgent' | string;
+  created?: string;
+  created_at?: string;
+};
+
+type MailboxAttachment = {
+  name: string;
+  size: number;
+  type: string;
+  data_url: string;
+};
+
+const toNumberArray = (value: any): number[] => {
+  if (Array.isArray(value)) return value.map(Number).filter(Number.isFinite);
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(String(value));
+    return Array.isArray(parsed) ? parsed.map(Number).filter(Number.isFinite) : [];
+  } catch (_error) {
+    return [];
+  }
+};
+
+const toStringArray = (value: any): string[] => {
+  if (Array.isArray(value)) return value.map(String);
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(String(value));
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch (_error) {
+    return [];
+  }
+};
+
+const toAttachmentArray = (value: any): MailboxAttachment[] => {
+  if (Array.isArray(value)) return value as MailboxAttachment[];
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(String(value));
+    return Array.isArray(parsed) ? parsed as MailboxAttachment[] : [];
+  } catch (_error) {
+    return [];
+  }
+};
+
+const formatFileSize = (size: number) => {
+  if (!Number.isFinite(size)) return '';
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const normalizeMailboxSubject = (subject = '') => subject
+  .toLowerCase()
+  .replace(/^\s*((re|fw|fwd):\s*)+/i, '')
+  .trim();
+
+const getMailApiUrl = () => {
+  const explicitUrl = import.meta.env.VITE_MAIL_API_URL as string | undefined;
+  if (explicitUrl) return explicitUrl;
+  const pushApiUrl = import.meta.env.VITE_PUSH_API_URL as string | undefined;
+  return pushApiUrl?.replace('/api/send-push', '/api/send-mail') || '';
+};
+
+const getMailSyncApiUrl = () => {
+  const mailApiUrl = getMailApiUrl();
+  return mailApiUrl?.replace('/api/send-mail', '/api/sync-inbox') || '';
+};
+
+const MailboxView: React.FC<{ user: User; onError: () => void }> = ({ user, onError }) => {
+  const [messages, setMessages] = useState<MailboxMessage[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [syncingInbox, setSyncingInbox] = useState(false);
+  const [lastMailboxRefresh, setLastMailboxRefresh] = useState<Date | null>(null);
+  const [lastInboxSyncResult, setLastInboxSyncResult] = useState('Auto sync active');
+  const [isComposeOpen, setIsComposeOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'inbox' | 'unread' | 'urgent' | 'sent' | 'all'>('inbox');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedMessage, setSelectedMessage] = useState<MailboxMessage | null>(null);
+  const [conversationClosed, setConversationClosed] = useState(false);
+  const [mobileMessage, setMobileMessage] = useState<MailboxMessage | null>(null);
+  const [sendMode, setSendMode] = useState<'all' | 'users' | 'departments' | 'clients'>('clients');
+  const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
+  const [selectedCustomerIds, setSelectedCustomerIds] = useState<number[]>([]);
+  const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
+  const [formData, setFormData] = useState({ subject: '', body: '', priority: 'normal' as 'normal' | 'urgent' });
+  const [replyBody, setReplyBody] = useState('');
+  const [attachments, setAttachments] = useState<MailboxAttachment[]>([]);
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const mobileAttachmentInputRef = useRef<HTMLInputElement | null>(null);
+
+  const fetchData = useCallback(async (background = false) => {
+    if (!background) setLoading(true);
+    try {
+      const [messageRes, userRes, deptRes, customerRes] = await Promise.all([
+        supabase.from('mailbox_messages').select('*').order('id', { ascending: false }),
+        supabase.from('users').select('*').order('username'),
+        supabase.from('departments').select('*').order('name'),
+        supabase.from('customers').select('*').order('name'),
+      ]);
+
+      if (messageRes.error?.code === '42P01') {
+        onError();
+        return;
+      }
+
+      setMessages(((messageRes.data || []) as MailboxMessage[]).map(message => ({
+        ...message,
+        recipient_user_ids: toNumberArray(message.recipient_user_ids),
+        recipient_customer_ids: toNumberArray(message.recipient_customer_ids),
+        recipient_departments: toStringArray(message.recipient_departments),
+        read_by_user_ids: toNumberArray(message.read_by_user_ids),
+        attachments: toAttachmentArray(message.attachments),
+      })));
+      setUsers((userRes.data || []) as User[]);
+      setDepartments((deptRes.data || []) as Department[]);
+      setCustomers((customerRes.data || []) as Customer[]);
+      setLastMailboxRefresh(new Date());
+    } catch (_error) {
+      onError();
+    } finally {
+      if (!background) setLoading(false);
+    }
+  }, [onError]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => fetchData(true), 5000);
+    return () => window.clearInterval(interval);
+  }, [fetchData]);
+
+  const userDepartment = normalizeDepartment(user.department);
+
+  const isInboxMessage = useCallback((message: MailboxMessage) => {
+    const recipientUserIds = toNumberArray(message.recipient_user_ids);
+    const recipientDepartments = toStringArray(message.recipient_departments).map(normalizeDepartment);
+    return recipientUserIds.includes(user.id) || recipientDepartments.includes(userDepartment) || recipientDepartments.includes('All');
+  }, [user.id, userDepartment]);
+
+  const isRead = useCallback((message: MailboxMessage) => toNumberArray(message.read_by_user_ids).includes(user.id), [user.id]);
+
+  const visibleMessages = useMemo(() => {
+    const tabFiltered = messages.filter(message => {
+      if (activeTab === 'sent') return Number(message.sender_user_id) === Number(user.id);
+      if (activeTab === 'unread') return isInboxMessage(message) && !isRead(message);
+      if (activeTab === 'urgent') return (isInboxMessage(message) || Number(message.sender_user_id) === Number(user.id)) && message.priority === 'urgent';
+      if (activeTab === 'inbox') return isInboxMessage(message);
+      return isInboxMessage(message) || Number(message.sender_user_id) === Number(user.id);
+    });
+
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return tabFiltered;
+    return tabFiltered.filter(message =>
+      String(message.subject || '').toLowerCase().includes(q) ||
+      String(message.body || '').toLowerCase().includes(q) ||
+      String(message.sender_name || '').toLowerCase().includes(q) ||
+      toNumberArray(message.recipient_customer_ids).some(id => {
+        const customer = customers.find(row => Number(row.id) === Number(id));
+        return String(customer?.name || '').toLowerCase().includes(q) || String(customer?.email || '').toLowerCase().includes(q);
+      })
+    );
+  }, [activeTab, messages, searchQuery, user.id, isInboxMessage, isRead, customers]);
+
+  const unreadCount = useMemo(() => messages.filter(message => isInboxMessage(message) && !isRead(message)).length, [messages, isInboxMessage, isRead]);
+  const urgentCount = useMemo(() => messages.filter(message => isInboxMessage(message) && message.priority === 'urgent').length, [messages, isInboxMessage]);
+  const showMobileCompose = typeof window !== 'undefined' && window.innerWidth < 1024 && isComposeOpen;
+  const threadMessages = useMemo(() => {
+    if (!selectedMessage) return [] as MailboxMessage[];
+    const selectedSubject = normalizeMailboxSubject(selectedMessage.subject);
+    const selectedCustomers = toNumberArray(selectedMessage.recipient_customer_ids);
+    const selectedParticipantEmails = [selectedMessage.from_email, selectedMessage.direction === 'outbound' ? selectedMessage.to_email : '']
+      .filter(Boolean)
+      .flatMap(email => String(email).split(','))
+      .map(email => email.trim().toLowerCase())
+      .filter(email => email.includes('@'));
+
+    return messages
+      .filter(message => {
+        if (message.id === selectedMessage.id) return true;
+        const sameSubject = Boolean(selectedSubject && normalizeMailboxSubject(message.subject) === selectedSubject);
+        const messageCustomers = toNumberArray(message.recipient_customer_ids);
+        const sameCustomer = selectedCustomers.length > 0 && messageCustomers.some(id => selectedCustomers.includes(id));
+        const messageParticipantEmails = [message.from_email, message.direction === 'outbound' ? message.to_email : '']
+          .filter(Boolean)
+          .flatMap(email => String(email).split(','))
+          .map(email => email.trim().toLowerCase())
+          .filter(email => email.includes('@'));
+        const sameParticipant = selectedParticipantEmails.length > 0 && messageParticipantEmails.some(email => selectedParticipantEmails.includes(email));
+
+        return sameSubject && (sameCustomer || sameParticipant);
+      })
+      .sort((a, b) => new Date(a.sent_at || a.created_at || a.created || '').getTime() - new Date(b.sent_at || b.created_at || b.created || '').getTime());
+  }, [messages, selectedMessage]);
+
+  useEffect(() => {
+    if (conversationClosed) return;
+    if (selectedMessage) {
+      const refreshedMessage = visibleMessages.find(message => message.id === selectedMessage.id);
+      if (refreshedMessage) {
+        if (refreshedMessage !== selectedMessage) setSelectedMessage(refreshedMessage);
+        return;
+      }
+    }
+    setSelectedMessage(visibleMessages[0] || null);
+  }, [visibleMessages, selectedMessage, conversationClosed]);
+
+  const formatMailboxDate = (message: MailboxMessage) => {
+    const raw = message.created_at || message.created;
+    if (!raw) return '';
+    const date = new Date(raw);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleString([], { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+  };
+
+  const getRecipientLabel = (message: MailboxMessage) => {
+    const recipientDepartments = toStringArray(message.recipient_departments);
+    const recipientUserIds = toNumberArray(message.recipient_user_ids);
+    const recipientCustomerIds = toNumberArray(message.recipient_customer_ids);
+    if (recipientCustomerIds.length > 0) {
+      return recipientCustomerIds
+        .map(id => customers.find(row => Number(row.id) === Number(id))?.name)
+        .filter(Boolean)
+        .join(', ') || `${recipientCustomerIds.length} clients`;
+    }
+    if (recipientDepartments.length > 0) return recipientDepartments.map(dept => dept.replace(/_/g, ' ')).join(', ');
+    if (recipientUserIds.length === 0) return 'No recipients';
+    if (recipientUserIds.length === users.filter(row => row.id !== user.id).length) return 'All users';
+    return recipientUserIds
+      .map(id => users.find(row => Number(row.id) === Number(id))?.username)
+      .filter(Boolean)
+      .join(', ') || `${recipientUserIds.length} users`;
+  };
+
+  const getDeliveryLabel = (message: MailboxMessage) => {
+    if (message.direction === 'inbound') return 'Received email';
+    if (!message.delivery_status) return 'ERP mailbox';
+    if (message.delivery_status === 'inbound_received') return 'Received email';
+    if (message.delivery_status === 'email_sent') return `Email sent${message.sent_email_count ? ` (${message.sent_email_count})` : ''}`;
+    if (message.delivery_status === 'partial_failed') return `Partially sent (${message.sent_email_count || 0} sent, ${message.failed_email_count || 0} failed)`;
+    if (message.delivery_status === 'email_failed') return 'Email failed';
+    if (message.delivery_status === 'erp_only') return 'ERP only';
+    return message.delivery_status;
+  };
+
+  const syncInbox = async () => {
+    const syncUrl = getMailSyncApiUrl();
+    if (!syncUrl) {
+      alert('Mail sync API URL is not configured. Set VITE_MAIL_API_URL.');
+      return;
+    }
+
+    setSyncingInbox(true);
+    try {
+      const response = await fetch(syncUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: 25 }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Inbox sync failed');
+      await fetchData();
+      setLastInboxSyncResult(`Last sync imported ${result.imported || 0} email${Number(result.imported || 0) === 1 ? '' : 's'}`);
+      alert(`Inbox sync complete. Imported ${result.imported || 0} email${Number(result.imported || 0) === 1 ? '' : 's'}.`);
+    } catch (error: any) {
+      setLastInboxSyncResult(`Sync failed: ${error?.message || 'Unknown error'}`);
+      alert(error?.message || 'Inbox sync failed');
+    } finally {
+      setSyncingInbox(false);
+    }
+  };
+
+  const openMessage = async (message: MailboxMessage) => {
+    setConversationClosed(false);
+    setSelectedMessage(message);
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) setMobileMessage(message);
+    if (!isInboxMessage(message) || isRead(message)) return;
+
+    const nextReadBy = Array.from(new Set([...toNumberArray(message.read_by_user_ids), user.id]));
+    setMessages(prev => prev.map(row => row.id === message.id ? { ...row, read_by_user_ids: nextReadBy } : row));
+    await supabase.from('mailbox_messages').update({ read_by_user_ids: nextReadBy }).eq('id', message.id);
+  };
+
+  const closeConversation = () => {
+    setConversationClosed(true);
+    setSelectedMessage(null);
+    setReplyBody('');
+  };
+
+  const handleAttachmentSelection = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+
+    const maxFileSize = 2 * 1024 * 1024;
+    const acceptedFiles = files.filter(file => file.size <= maxFileSize);
+    if (acceptedFiles.length !== files.length) {
+      alert('Some files were skipped. Attachment limit is 2 MB per file.');
+    }
+
+    const nextAttachments = await Promise.all(acceptedFiles.map(file => new Promise<MailboxAttachment>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve({
+        name: file.name,
+        size: file.size,
+        type: file.type || 'application/octet-stream',
+        data_url: String(reader.result || ''),
+      });
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    })));
+
+    setAttachments(prev => [...prev, ...nextAttachments].slice(0, 5));
+    event.target.value = '';
+  };
+
+  const handleSend = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    let recipientUserIds: number[] = [];
+    let recipientDepartments: string[] = [];
+    let recipientCustomerIds: number[] = [];
+
+    if (sendMode === 'all') {
+      recipientUserIds = users.map(row => row.id).filter(id => id !== user.id);
+    } else if (sendMode === 'users') {
+      recipientUserIds = selectedUserIds;
+    } else if (sendMode === 'departments') {
+      recipientDepartments = selectedDepartments.map(normalizeDepartment);
+    } else {
+      recipientCustomerIds = selectedCustomerIds;
+    }
+
+    if (recipientUserIds.length === 0 && recipientDepartments.length === 0 && recipientCustomerIds.length === 0) {
+      alert('Please select at least one recipient.');
+      return;
+    }
+
+    const { data: insertedMessages, error } = await supabase.from('mailbox_messages').insert([{
+      subject: formData.subject.trim(),
+      body: formData.body.trim(),
+      sender_user_id: user.id,
+      sender_name: user.username,
+      recipient_user_ids: recipientUserIds,
+      recipient_customer_ids: recipientCustomerIds,
+      recipient_departments: recipientDepartments,
+      read_by_user_ids: [user.id],
+      attachments,
+      priority: formData.priority,
+    }]);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    const insertedMessage = Array.isArray(insertedMessages) ? insertedMessages[0] as MailboxMessage | undefined : insertedMessages as MailboxMessage | undefined;
+    let deliveryNotice = '';
+
+    if (recipientCustomerIds.length > 0) {
+      const mailApiUrl = getMailApiUrl();
+      const recipients = customers
+        .filter(customer => recipientCustomerIds.includes(Number(customer.id)))
+        .map(customer => ({ name: customer.name, email: customer.email || customer.contact }))
+        .filter(customer => String(customer.email || '').includes('@'));
+
+      let deliveryUpdate: Partial<MailboxMessage> = {
+        delivery_status: 'email_failed',
+        delivery_error: '',
+        sent_email_count: 0,
+        failed_email_count: Math.max(recipientCustomerIds.length - recipients.length, 0),
+      };
+
+      if (!mailApiUrl) {
+        deliveryUpdate.delivery_error = 'Mail API URL is not configured.';
+        deliveryNotice = 'Message saved, but real email was not sent because VITE_MAIL_API_URL is not configured.';
+      } else if (recipients.length === 0) {
+        deliveryUpdate.delivery_error = 'Selected clients do not have valid email addresses.';
+        deliveryNotice = 'Message saved, but no selected client has a valid email address.';
+      } else {
+        try {
+          const mailResponse = await fetch(mailApiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              subject: formData.subject.trim(),
+              body: formData.body.trim(),
+              senderName: user.username,
+              recipients,
+              attachments,
+            }),
+          });
+          const mailResult = await mailResponse.json().catch(() => ({}));
+
+          if (!mailResponse.ok) throw new Error(mailResult.error || 'Email send failed');
+
+          const sentCount = Number(mailResult.sent || 0);
+          const failedCount = Number(mailResult.failed || 0) + Number(mailResult.skipped || 0);
+          deliveryUpdate = {
+            delivery_status: sentCount > 0 && failedCount === 0 ? 'email_sent' : sentCount > 0 ? 'partial_failed' : 'email_failed',
+            delivery_error: Array.isArray(mailResult.errors) && mailResult.errors.length > 0 ? mailResult.errors.map((row: any) => `${row.email}: ${row.error}`).join('; ') : '',
+            sent_email_count: sentCount,
+            failed_email_count: failedCount,
+            sent_at: sentCount > 0 ? new Date().toISOString() : undefined,
+          };
+          deliveryNotice = sentCount > 0
+            ? `Real email sent to ${sentCount} client${sentCount === 1 ? '' : 's'}.`
+            : 'Message saved, but email delivery failed.';
+        } catch (mailError: any) {
+          deliveryUpdate.delivery_error = mailError?.message || 'Email send failed';
+          deliveryUpdate.failed_email_count = recipients.length;
+          deliveryNotice = `Message saved, but real email failed: ${deliveryUpdate.delivery_error}`;
+        }
+      }
+
+      if (insertedMessage?.id) {
+        await supabase.from('mailbox_messages').update(deliveryUpdate).eq('id', insertedMessage.id);
+      }
+    }
+
+    setFormData({ subject: '', body: '', priority: 'normal' });
+    setSelectedUserIds([]);
+    setSelectedCustomerIds([]);
+    setSelectedDepartments([]);
+    setAttachments([]);
+    setSendMode('clients');
+    setIsComposeOpen(false);
+    await fetchData();
+    if (deliveryNotice) alert(deliveryNotice);
+  };
+
+  const handleReply = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedMessage || !replyBody.trim()) return;
+
+    const originalCustomerIds = toNumberArray(selectedMessage.recipient_customer_ids);
+    const inboundReplyEmail = selectedMessage.direction === 'inbound' && selectedMessage.from_email?.includes('@') ? selectedMessage.from_email : '';
+    const isReplyToClient = Boolean(inboundReplyEmail) || (Number(selectedMessage.sender_user_id) === Number(user.id) && originalCustomerIds.length > 0);
+    const recipientUserIds = !isReplyToClient && Number(selectedMessage.sender_user_id) !== Number(user.id) ? [Number(selectedMessage.sender_user_id)] : [];
+    const recipientCustomerIds = isReplyToClient ? originalCustomerIds : [];
+    const directEmailRecipients = inboundReplyEmail ? [{ name: selectedMessage.from_name || selectedMessage.sender_name || inboundReplyEmail, email: inboundReplyEmail }] : [];
+
+    if (recipientUserIds.length === 0 && recipientCustomerIds.length === 0 && directEmailRecipients.length === 0) {
+      alert('No reply recipient found for this conversation.');
+      return;
+    }
+
+    const subject = selectedMessage.subject?.toLowerCase().startsWith('re:') ? selectedMessage.subject : `Re: ${selectedMessage.subject}`;
+    const body = replyBody.trim();
+    const { data: insertedMessages, error } = await supabase.from('mailbox_messages').insert([{
+      subject,
+      body,
+      sender_user_id: user.id,
+      sender_name: user.username,
+      recipient_user_ids: recipientUserIds,
+      recipient_customer_ids: recipientCustomerIds,
+      recipient_departments: [],
+      read_by_user_ids: [user.id],
+      attachments: [],
+      priority: selectedMessage.priority || 'normal',
+      delivery_status: recipientCustomerIds.length > 0 || directEmailRecipients.length > 0 ? 'email_failed' : 'erp_only',
+      direction: 'outbound',
+      to_email: directEmailRecipients.map(recipient => recipient.email).join(', '),
+    }]);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    const insertedMessage = Array.isArray(insertedMessages) ? insertedMessages[0] as MailboxMessage | undefined : insertedMessages as MailboxMessage | undefined;
+    let deliveryNotice = '';
+
+    if (recipientCustomerIds.length > 0 || directEmailRecipients.length > 0) {
+      const mailApiUrl = getMailApiUrl();
+      const recipients = directEmailRecipients.length > 0 ? directEmailRecipients : customers
+        .filter(customer => recipientCustomerIds.includes(Number(customer.id)))
+        .map(customer => ({ name: customer.name, email: customer.email || customer.contact }))
+        .filter(customer => String(customer.email || '').includes('@'));
+      let deliveryUpdate: Partial<MailboxMessage> = {
+        delivery_status: 'email_failed',
+        delivery_error: '',
+        sent_email_count: 0,
+        failed_email_count: Math.max((directEmailRecipients.length || recipientCustomerIds.length) - recipients.length, 0),
+      };
+
+      if (!mailApiUrl) {
+        deliveryUpdate.delivery_error = 'Mail API URL is not configured.';
+        deliveryNotice = 'Reply saved, but real email was not sent because VITE_MAIL_API_URL is not configured.';
+      } else if (recipients.length === 0) {
+        deliveryUpdate.delivery_error = 'Selected client does not have a valid email address.';
+        deliveryNotice = 'Reply saved, but the client does not have a valid email address.';
+      } else {
+        try {
+          const mailResponse = await fetch(mailApiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ subject, body, senderName: user.username, recipients, attachments: [] }),
+          });
+          const mailResult = await mailResponse.json().catch(() => ({}));
+          if (!mailResponse.ok) throw new Error(mailResult.error || 'Email send failed');
+          const sentCount = Number(mailResult.sent || 0);
+          const failedCount = Number(mailResult.failed || 0) + Number(mailResult.skipped || 0);
+          deliveryUpdate = {
+            delivery_status: sentCount > 0 && failedCount === 0 ? 'email_sent' : sentCount > 0 ? 'partial_failed' : 'email_failed',
+            delivery_error: Array.isArray(mailResult.errors) && mailResult.errors.length > 0 ? mailResult.errors.map((row: any) => `${row.email}: ${row.error}`).join('; ') : '',
+            sent_email_count: sentCount,
+            failed_email_count: failedCount,
+            sent_at: sentCount > 0 ? new Date().toISOString() : undefined,
+          };
+          deliveryNotice = sentCount > 0 ? `Reply email sent to ${sentCount} client${sentCount === 1 ? '' : 's'}.` : 'Reply saved, but email delivery failed.';
+        } catch (mailError: any) {
+          deliveryUpdate.delivery_error = mailError?.message || 'Email send failed';
+          deliveryUpdate.failed_email_count = recipients.length;
+          deliveryNotice = `Reply saved, but real email failed: ${deliveryUpdate.delivery_error}`;
+        }
+      }
+
+      if (insertedMessage?.id) {
+        await supabase.from('mailbox_messages').update(deliveryUpdate).eq('id', insertedMessage.id);
+      }
+    }
+
+    setReplyBody('');
+    setConversationClosed(false);
+    await fetchData();
+    if (deliveryNotice) alert(deliveryNotice);
+  };
+
+  const renderRecipientPicker = () => (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-2">
+        {(['clients', 'all', 'users', 'departments'] as const).map(mode => (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => setSendMode(mode)}
+            className={`rounded-md border px-3 py-1.5 text-xs font-black uppercase transition-colors ${sendMode === mode ? 'border-[#00a4bd] bg-[#e5f5f8] text-[#0091ae]' : 'border-[#dbe4ec] bg-white text-[#516f90] hover:bg-[#f5f8fa]'}`}
+          >
+            {mode}
+          </button>
+        ))}
+      </div>
+
+      {sendMode === 'clients' && (
+        <div className="grid max-h-44 grid-cols-1 gap-2 overflow-y-auto rounded-md border border-[#dbe4ec] bg-[#f5f8fa] p-2 sm:grid-cols-2">
+          {customers.map(customer => (
+            <button
+              key={customer.id}
+              type="button"
+              onClick={() => setSelectedCustomerIds(prev => prev.includes(customer.id) ? prev.filter(id => id !== customer.id) : [...prev, customer.id])}
+              className={`rounded-md px-3 py-2 text-left text-xs font-bold transition-colors ${selectedCustomerIds.includes(customer.id) ? 'bg-[#00a4bd] text-white' : 'bg-white text-[#33475b] hover:bg-[#eaf0f6]'}`}
+            >
+              {customer.name}
+              <div className="truncate text-[10px] opacity-70">{customer.email || customer.contact || 'No email/contact'}</div>
+            </button>
+          ))}
+          {customers.length === 0 && <div className="col-span-full py-6 text-center text-xs font-semibold text-[#516f90]">No clients found in customer master.</div>}
+        </div>
+      )}
+
+      {sendMode === 'users' && (
+        <div className="grid max-h-44 grid-cols-1 gap-2 overflow-y-auto rounded-md border border-[#dbe4ec] bg-[#f5f8fa] p-2 sm:grid-cols-2">
+          {users.filter(row => row.id !== user.id).map(row => (
+            <button
+              key={row.id}
+              type="button"
+              onClick={() => setSelectedUserIds(prev => prev.includes(row.id) ? prev.filter(id => id !== row.id) : [...prev, row.id])}
+              className={`rounded-md px-3 py-2 text-left text-xs font-bold transition-colors ${selectedUserIds.includes(row.id) ? 'bg-[#00a4bd] text-white' : 'bg-white text-[#33475b] hover:bg-[#eaf0f6]'}`}
+            >
+              {row.username}
+              <div className="text-[10px] opacity-70">{row.department}</div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {sendMode === 'departments' && (
+        <div className="flex max-h-44 flex-wrap gap-2 overflow-y-auto rounded-md border border-[#dbe4ec] bg-[#f5f8fa] p-2">
+          {departments.map(department => (
+            <button
+              key={department.id}
+              type="button"
+              onClick={() => setSelectedDepartments(prev => prev.includes(department.name) ? prev.filter(name => name !== department.name) : [...prev, department.name])}
+              className={`rounded-md px-3 py-2 text-xs font-black transition-colors ${selectedDepartments.includes(department.name) ? 'bg-[#00a4bd] text-white' : 'bg-white text-[#33475b] hover:bg-[#eaf0f6]'}`}
+            >
+              {department.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {sendMode === 'all' && (
+        <div className="rounded-md border border-[#dbe4ec] bg-[#f5f8fa] px-3 py-2 text-xs font-semibold text-[#516f90]">
+          This message will be sent to all ERP users except you.
+        </div>
+      )}
+    </div>
+  );
+
+  if (loading) return <LoadingState message="Loading mailbox..." />;
+
+  return (
+    <div className="-m-3 md:-m-4 lg:-m-4 bg-white text-[#213343] lg:h-[calc(100vh-54px)] lg:min-h-0 lg:overflow-hidden">
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_400px_minmax(480px,1fr)_330px] lg:h-[calc(100vh-54px)] lg:min-h-0">
+        <aside className="border-r border-[#dbe4ec] bg-white lg:flex lg:h-[calc(100vh-54px)] lg:min-h-0 lg:flex-col">
+          <div className="flex items-center justify-between border-b border-[#dbe4ec] px-6 py-5">
+            <div className="flex items-center gap-2">
+              <Inbox className="text-[#00a4bd]" size={22} />
+              <h2 className="text-xl font-black text-[#213343]">Inbox</h2>
+            </div>
+            <Search size={22} className="text-[#00a4bd]" />
+          </div>
+          <div className="px-5 py-4">
+            <button onClick={() => setIsComposeOpen(true)} className="mb-4 flex w-full items-center justify-center gap-2 rounded-md bg-[#ff5c35] px-4 py-2.5 text-sm font-black text-white shadow-sm transition-colors hover:bg-[#e04826]">
+              <Send size={16} /> Compose
+            </button>
+            <button type="button" onClick={syncInbox} disabled={syncingInbox} className="mb-4 flex w-full items-center justify-center gap-2 rounded-md border border-[#cbd6e2] bg-[#f5f8fa] px-4 py-2.5 text-sm font-black text-[#516f90] transition-colors hover:bg-[#eaf0f6] disabled:cursor-not-allowed disabled:opacity-60 lg:hidden">
+              <RefreshCw size={16} className={syncingInbox ? 'animate-spin' : ''} /> {syncingInbox ? 'Syncing' : 'Sync inbox'}
+            </button>
+            <div className="mb-4 rounded-md border border-[#dbe4ec] bg-[#f5f8fa] px-3 py-2 text-xs font-semibold text-[#516f90]">
+              <div className="flex items-center gap-2 font-black text-[#0091ae]"><span className="h-2.5 w-2.5 rounded-full bg-emerald-400" /> Near realtime</div>
+              <div className="mt-1">{lastInboxSyncResult}</div>
+              <div className="mt-1">Mailbox refresh: {lastMailboxRefresh ? lastMailboxRefresh.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'loading'}</div>
+            </div>
+            <div className="space-y-1">
+              {([
+                { key: 'inbox', label: 'All open', icon: Inbox, count: visibleMessages.length },
+                { key: 'unread', label: 'Unread', icon: Bell, count: unreadCount },
+                { key: 'urgent', label: 'Urgent', icon: AlertCircle, count: urgentCount },
+                { key: 'sent', label: 'Sent', icon: Send, count: 0 },
+                { key: 'all', label: 'All mail', icon: Archive, count: messages.length },
+              ] as const).map(tab => (
+                <button key={tab.key} onClick={() => { setConversationClosed(false); setActiveTab(tab.key); }} className={`flex w-full items-center justify-between rounded-sm px-3 py-2.5 text-left text-sm transition-colors ${activeTab === tab.key ? 'bg-[#eaf0f6] font-black text-[#213343]' : 'font-semibold text-[#213343] hover:bg-[#f5f8fa]'}`}>
+                  <span className="flex items-center gap-2"><tab.icon size={16} className="text-[#516f90]" /> {tab.label}</span>
+                  {tab.count > 0 && <span className="font-black text-[#213343]">{tab.count}</span>}
+                </button>
+              ))}
+            </div>
+            <div className="mt-6 border-t border-[#dbe4ec] pt-5">
+              <div className="mb-2 text-xs font-black uppercase tracking-widest text-[#516f90]">Channels</div>
+              {['Clients', 'Email', 'Departments', 'Office'].map((label, index) => (
+                <div key={label} className="flex items-center justify-between px-3 py-2 text-sm font-semibold text-[#213343]">
+                  <span>{label}</span>
+                  <span>{index === 0 ? customers.length : index === 1 ? messages.length : index === 2 ? departments.length : users.filter(row => normalizeDepartment(row.department) === 'Office').length}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="mt-auto hidden border-t border-[#dbe4ec] px-6 py-4 lg:block">
+            <button type="button" onClick={syncInbox} disabled={syncingInbox} className="flex w-full items-center justify-between rounded-md border border-[#cbd6e2] bg-[#f5f8fa] px-3 py-2 text-left text-sm font-semibold text-[#516f90] hover:bg-[#eaf0f6] disabled:cursor-not-allowed disabled:opacity-60">
+              <span>{syncingInbox ? 'Syncing inbox...' : 'Sync client inbox'}</span>
+              <RefreshCw size={15} className={syncingInbox ? 'animate-spin' : ''} />
+            </button>
+            <div className="mt-5 flex items-center gap-2 text-sm font-semibold text-[#516f90]"><Settings size={16} /> Inbox Settings</div>
+          </div>
+        </aside>
+
+        <section className="border-r border-[#dbe4ec] bg-white lg:flex lg:h-[calc(100vh-54px)] lg:min-h-0 lg:flex-col">
+          <div className="flex items-center justify-between border-b border-[#dbe4ec] px-4 py-4">
+            <label className="flex items-center gap-3">
+              <input type="checkbox" className="h-4 w-4 rounded border-[#cbd6e2]" readOnly />
+              <span className="text-xs font-semibold text-[#516f90]">{visibleMessages.length} conversations</span>
+            </label>
+            <button className="flex items-center gap-1 text-sm font-black text-[#0091ae]">Newest <ChevronRight size={14} className="rotate-90" /></button>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-[#516f90]" size={17} />
+            <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search conversations" className="w-full border-b border-[#dbe4ec] bg-[#f5f8fa] py-3 pl-12 pr-4 text-sm font-semibold outline-none placeholder:text-[#7c98b6]" />
+          </div>
+          <div className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+            {visibleMessages.map(message => {
+              const unread = isInboxMessage(message) && !isRead(message);
+              const selected = selectedMessage?.id === message.id;
+              return (
+                <button key={message.id} onClick={() => openMessage(message)} className={`relative flex w-full gap-4 border-b border-[#dbe4ec] px-4 py-5 text-left transition-colors hover:bg-[#f5f8fa] ${selected ? 'bg-[#e5f5f8]' : 'bg-white'}`}>
+                  {selected && <span className="absolute bottom-0 left-0 top-0 w-1 bg-[#00a4bd]" />}
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-[#6a78d1] text-white"><Mail size={20} /></div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <h3 className={`truncate text-base ${unread ? 'font-black' : 'font-bold'} text-[#213343]`}>{message.subject}</h3>
+                      <span className="whitespace-nowrap text-xs font-semibold text-[#516f90]">{formatMailboxDate(message) || 'Now'}</span>
+                    </div>
+                    <p className="mt-1 line-clamp-1 text-sm font-semibold text-[#33475b]">{message.body}</p>
+                    <div className="mt-2 flex items-center gap-2 text-xs font-semibold text-[#516f90]">
+                      {unread && <span className="h-2 w-2 rounded-full bg-[#00a4bd]" />}
+                      <span>{message.sender_name || '-'}</span>
+                      {message.direction === 'inbound' && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black uppercase text-blue-700">Inbound</span>}
+                      {message.priority === 'urgent' && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black uppercase text-red-700">Urgent</span>}
+                      {message.delivery_status && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase text-emerald-700">{getDeliveryLabel(message)}</span>}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+            {visibleMessages.length === 0 && <div className="px-4 py-16 text-center text-sm font-semibold text-[#516f90]">No conversations found.</div>}
+          </div>
+        </section>
+
+        <main className="hidden bg-[#f5f8fa] lg:flex lg:h-[calc(100vh-54px)] lg:min-h-0 lg:flex-col lg:overflow-hidden">
+          {isComposeOpen ? (
+            <form onSubmit={handleSend} className="flex min-h-[calc(100vh-54px)] flex-col bg-white">
+              <div className="border-b border-[#dbe4ec] px-6 py-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#ff5c35] text-white"><Send size={21} /></div>
+                    <div>
+                      <h2 className="text-xl font-black text-[#213343]">New email</h2>
+                      <p className="text-sm font-semibold text-[#516f90]">Compose a client or internal ERP message.</p>
+                    </div>
+                  </div>
+                  <button type="button" onClick={() => setIsComposeOpen(false)} className="rounded-md border border-[#cbd6e2] bg-[#eaf0f6] px-4 py-2 text-sm font-semibold text-[#516f90]">Close composer</button>
+                </div>
+              </div>
+
+              <div className="border-b border-[#dbe4ec] bg-[#f5f8fa] px-6 py-4">
+                <div className="mb-2 text-xs font-black uppercase tracking-widest text-[#516f90]">Send to</div>
+                {renderRecipientPicker()}
+              </div>
+
+              <div className="border-b border-[#dbe4ec] bg-white px-6 py-4">
+                <input
+                  required
+                  value={formData.subject}
+                  onChange={e => setFormData(prev => ({ ...prev, subject: e.target.value }))}
+                  placeholder="Subject"
+                  className="w-full border-0 bg-transparent text-2xl font-black text-[#213343] outline-none placeholder:text-[#7c98b6]"
+                />
+              </div>
+
+              <div className="flex-1 bg-[#f5f8fa] px-6 py-6">
+                <div className="min-h-[320px] rounded-md border border-[#cbd6e2] bg-white p-5 shadow-sm">
+                  <textarea
+                    required
+                    value={formData.body}
+                    onChange={e => setFormData(prev => ({ ...prev, body: e.target.value }))}
+                    placeholder="Write your message. Use clear details for clients, departments, or ERP users."
+                    className="h-[300px] w-full resize-none border-0 text-sm font-medium leading-7 text-[#213343] outline-none placeholder:text-[#7c98b6]"
+                  />
+                </div>
+                {attachments.length > 0 && (
+                  <div className="mt-3 rounded-md border border-[#dbe4ec] bg-white p-3">
+                    <div className="mb-2 text-xs font-black uppercase tracking-widest text-[#516f90]">Attachments</div>
+                    <div className="flex flex-wrap gap-2">
+                      {attachments.map((attachment, index) => (
+                        <div key={`${attachment.name}-${index}`} className="flex items-center gap-2 rounded-md border border-[#dbe4ec] bg-[#f5f8fa] px-3 py-2 text-xs font-bold text-[#33475b]">
+                          <Archive size={14} />
+                          <span className="max-w-[180px] truncate">{attachment.name}</span>
+                          <span className="text-[#7c98b6]">{formatFileSize(attachment.size)}</span>
+                          <button type="button" onClick={() => setAttachments(prev => prev.filter((_, itemIndex) => itemIndex !== index))} className="text-[#7c98b6] hover:text-red-600" aria-label="Remove attachment"><X size={14} /></button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t border-[#dbe4ec] bg-white px-6 py-4">
+                <input ref={attachmentInputRef} type="file" multiple className="hidden" onChange={handleAttachmentSelection} />
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <select value={formData.priority} onChange={e => setFormData(prev => ({ ...prev, priority: e.target.value as 'normal' | 'urgent' }))} className="rounded-md border border-[#cbd6e2] bg-white px-3 py-2 text-sm font-semibold text-[#33475b]">
+                      <option value="normal">Normal priority</option>
+                      <option value="urgent">Urgent</option>
+                    </select>
+                    <button type="button" onClick={() => attachmentInputRef.current?.click()} className="rounded-md border border-[#cbd6e2] bg-white px-3 py-2 text-sm font-bold text-[#516f90] transition-colors hover:bg-[#f5f8fa]">
+                      Attach file
+                    </button>
+                    <span className="text-xs font-semibold text-[#7c98b6]">Messages are saved in ERP mailbox.</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => setIsComposeOpen(false)} className="rounded-md border border-[#cbd6e2] bg-white px-4 py-2 text-sm font-bold text-[#516f90]">Cancel</button>
+                    <button type="submit" className="rounded-md bg-[#ff5c35] px-5 py-2 text-sm font-black text-white transition-colors hover:bg-[#e04826]">Send</button>
+                  </div>
+                </div>
+              </div>
+            </form>
+          ) : selectedMessage ? (
+            <>
+              <div className="border-b border-[#dbe4ec] bg-white px-6 py-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#ff5c35] text-white"><Mail size={22} /></div>
+                    <div>
+                      <h2 className="text-xl font-black text-[#213343]">{selectedMessage.subject}</h2>
+                      <p className="mt-1 text-sm font-semibold text-[#33475b]">{selectedMessage.sender_name || 'Unknown sender'} • Created {formatMailboxDate(selectedMessage) || 'recently'}</p>
+                    </div>
+                  </div>
+                  <button type="button" onClick={closeConversation} className="rounded-md border border-[#cbd6e2] bg-[#eaf0f6] px-4 py-2 text-sm font-semibold text-[#516f90] hover:bg-[#dbe4ec]">Close conversation</button>
+                </div>
+              </div>
+              <div className="border-b border-[#dbe4ec] bg-white px-6 py-4">
+                <div className="text-sm font-black text-[#213343]">Owner</div>
+                <div className="mt-2 flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#eaf0f6] text-xs font-black text-[#516f90]">{(selectedMessage.sender_name || 'ERP').slice(0, 1).toUpperCase()}</div>
+                  <div className="text-sm font-black text-[#213343]">{selectedMessage.sender_name || 'ERP mailbox'}</div>
+                </div>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+                <div className="relative mb-6 flex items-center justify-center">
+                  <div className="absolute left-0 right-0 h-px bg-[#dbe4ec]" />
+                  <span className="relative rounded-full border border-[#dbe4ec] bg-white px-4 py-1 text-sm font-black text-[#33475b]">{formatMailboxDate(selectedMessage) || 'Today'}</span>
+                </div>
+                <div className="space-y-4">
+                  {threadMessages.map(threadMessage => (
+                    <div key={threadMessage.id} className="rounded-md border border-[#cbd6e2] bg-white p-5 shadow-sm">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-start gap-3">
+                          <div className={`flex h-10 w-10 items-center justify-center rounded-full text-white ${threadMessage.direction === 'inbound' ? 'bg-[#00a4bd]' : 'bg-[#ff5c35]'}`}><Mail size={20} /></div>
+                          <div>
+                            <div className="text-base font-black text-[#213343]">{threadMessage.sender_name || 'Office User'}</div>
+                            <div className="mt-1 text-xs font-semibold text-[#516f90]">{formatMailboxDate(threadMessage)} • {threadMessage.direction === 'inbound' ? threadMessage.from_email || 'Client email' : 'ERP Mailbox'}</div>
+                          </div>
+                        </div>
+                        <span className={`rounded-full px-2 py-1 text-[10px] font-black uppercase ${threadMessage.direction === 'inbound' ? 'bg-blue-50 text-blue-700' : 'bg-[#e5f5f8] text-[#0091ae]'}`}>{threadMessage.direction === 'inbound' ? 'Reply received' : 'Message sent'}</span>
+                      </div>
+                      <p className="mt-4 whitespace-pre-line text-sm font-medium leading-7 text-[#213343]">{threadMessage.body}</p>
+                      {toAttachmentArray(threadMessage.attachments).length > 0 && (
+                        <div className="mt-5 rounded-md border border-[#dbe4ec] bg-[#f5f8fa] p-3">
+                          <div className="mb-2 text-xs font-black uppercase tracking-widest text-[#516f90]">Attachments</div>
+                          <div className="space-y-2">
+                            {toAttachmentArray(threadMessage.attachments).map((attachment, index) => (
+                              <a key={`${attachment.name}-${index}`} href={attachment.data_url} download={attachment.name} className="flex items-center justify-between rounded-md bg-white px-3 py-2 text-xs font-bold text-[#33475b] hover:text-[#0091ae]">
+                                <span className="flex min-w-0 items-center gap-2"><Archive size={14} className="flex-shrink-0" /> <span className="truncate">{attachment.name}</span></span>
+                                <span className="text-[#7c98b6]">{formatFileSize(attachment.size)}</span>
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <div className="mt-5 flex flex-wrap gap-2">
+                        {threadMessage.priority === 'urgent' && <Badge color="red">Urgent</Badge>}
+                        <Badge color="gray">To: {getRecipientLabel(threadMessage)}</Badge>
+                        <Badge color={threadMessage.delivery_status === 'email_failed' ? 'red' : 'green'}>{getDeliveryLabel(threadMessage)}</Badge>
+                      </div>
+                      {threadMessage.delivery_error && (
+                        <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{threadMessage.delivery_error}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <form onSubmit={handleReply} className="border-t border-[#dbe4ec] bg-white px-6 py-4">
+                <div className="mb-2 flex items-center gap-6 text-sm font-semibold text-[#33475b]"><span className="border-b-4 border-[#33475b] pb-2">Reply</span></div>
+                <div className="flex items-end gap-3 rounded-md border border-[#dbe4ec] bg-white px-3 py-3">
+                  <textarea value={replyBody} onChange={e => setReplyBody(e.target.value)} placeholder="Write a reply to this conversation" className="h-16 flex-1 resize-none border-0 text-sm font-medium text-[#213343] outline-none placeholder:text-[#7c98b6]" />
+                  <button type="submit" disabled={!replyBody.trim()} className="rounded-md bg-[#ff5c35] px-4 py-2 text-sm font-black text-white transition-colors hover:bg-[#e04826] disabled:cursor-not-allowed disabled:opacity-50">Send reply</button>
+                </div>
+              </form>
+            </>
+          ) : (
+            <div className="flex flex-1 flex-col items-center justify-center p-8 text-center text-[#516f90]"><Mail size={42} className="mb-3 text-[#7c98b6]" /><div className="text-sm font-black">Select a conversation</div></div>
+          )}
+        </main>
+
+        <aside className="hidden border-l border-[#dbe4ec] bg-white lg:block lg:h-[calc(100vh-54px)] lg:min-h-0 lg:overflow-y-auto">
+          {isComposeOpen ? (
+            <div>
+              <div className="border-b border-[#dbe4ec] px-6 py-8">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#ff5c35] text-white"><Send size={26} /></div>
+                  <div className="min-w-0">
+                    <div className="truncate text-base font-black text-[#0091ae]">New message</div>
+                    <div className="mt-1 text-sm font-medium text-[#33475b]">Client-first composer</div>
+                  </div>
+                </div>
+              </div>
+              <div className="border-b border-[#dbe4ec] px-6 py-5">
+                <div className="mb-4 flex items-center gap-2 text-base font-black text-[#213343]"><ChevronRight size={16} className="rotate-90 text-[#00a4bd]" /> Compose Summary</div>
+                <div className="space-y-5 text-sm">
+                  <div><div className="text-xs font-semibold text-[#516f90]">Recipient mode</div><div className="mt-1 font-medium capitalize text-[#213343]">{sendMode}</div></div>
+                  <div><div className="text-xs font-semibold text-[#516f90]">Selected clients</div><div className="mt-1 font-medium text-[#213343]">{selectedCustomerIds.length}</div></div>
+                  <div><div className="text-xs font-semibold text-[#516f90]">Selected users</div><div className="mt-1 font-medium text-[#213343]">{selectedUserIds.length}</div></div>
+                  <div><div className="text-xs font-semibold text-[#516f90]">Selected departments</div><div className="mt-1 font-medium text-[#213343]">{selectedDepartments.length}</div></div>
+                  <div><div className="text-xs font-semibold text-[#516f90]">Attachments</div><div className="mt-1 font-medium text-[#213343]">{attachments.length}</div></div>
+                  <div><div className="text-xs font-semibold text-[#516f90]">Priority</div><div className="mt-1 font-medium capitalize text-[#213343]">{formData.priority}</div></div>
+                </div>
+              </div>
+            </div>
+          ) : selectedMessage ? (
+            <div>
+              <div className="border-b border-[#dbe4ec] px-6 py-8">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#ff5c35] text-white"><Mail size={26} /></div>
+                  <div className="min-w-0">
+                    <div className="truncate text-base font-black text-[#0091ae]">{selectedMessage.sender_name || 'Office User'}</div>
+                    <div className="mt-1 text-sm font-medium text-[#33475b]">ERP mailbox contact</div>
+                  </div>
+                </div>
+              </div>
+              <div className="border-b border-[#dbe4ec] px-6 py-5">
+                <div className="mb-4 flex items-center gap-2 text-base font-black text-[#213343]"><ChevronRight size={16} className="rotate-90 text-[#00a4bd]" /> About this Contact</div>
+                <div className="space-y-5 text-sm">
+                  <div><div className="text-xs font-semibold text-[#516f90]">Sender</div><div className="mt-1 font-medium text-[#213343]">{selectedMessage.sender_name || '-'}</div></div>
+                  {selectedMessage.from_email && <div><div className="text-xs font-semibold text-[#516f90]">From email</div><div className="mt-1 break-all font-medium text-[#213343]">{selectedMessage.from_email}</div></div>}
+                  <div><div className="text-xs font-semibold text-[#516f90]">Recipients</div><div className="mt-1 font-medium text-[#213343]">{getRecipientLabel(selectedMessage)}</div></div>
+                  <div><div className="text-xs font-semibold text-[#516f90]">Priority</div><div className="mt-1 font-medium text-[#213343]">{selectedMessage.priority || 'normal'}</div></div>
+                  <div><div className="text-xs font-semibold text-[#516f90]">Delivery</div><div className="mt-1 font-medium text-[#213343]">{getDeliveryLabel(selectedMessage)}</div></div>
+                  <div><div className="text-xs font-semibold text-[#516f90]">Last contacted</div><div className="mt-1 font-medium text-[#213343]">{formatMailboxDate(selectedMessage) || '-'}</div></div>
+                  <div><div className="text-xs font-semibold text-[#516f90]">Record source</div><div className="mt-1 font-medium text-[#213343]">Excell ERP Mailbox</div></div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </aside>
+      </div>
+
+      <Modal isOpen={!!mobileMessage} onClose={() => setMobileMessage(null)} title={mobileMessage?.subject || 'Message'}>
+        {mobileMessage && (
+          <div className="space-y-4">
+            <div className="rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-600">
+              From <span className="font-black text-slate-900">{mobileMessage.sender_name}</span>
+            </div>
+            <p className="whitespace-pre-line text-sm font-medium leading-7 text-slate-700">{mobileMessage.body}</p>
+            {toAttachmentArray(mobileMessage.attachments).length > 0 && (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="mb-2 text-xs font-black uppercase tracking-widest text-slate-500">Attachments</div>
+                <div className="space-y-2">
+                  {toAttachmentArray(mobileMessage.attachments).map((attachment, index) => (
+                    <a key={`${attachment.name}-${index}`} href={attachment.data_url} download={attachment.name} className="flex items-center justify-between rounded-xl bg-white px-3 py-2 text-xs font-bold text-slate-700">
+                      <span className="flex min-w-0 items-center gap-2"><Archive size={14} className="flex-shrink-0" /> <span className="truncate">{attachment.name}</span></span>
+                      <span className="text-slate-400">{formatFileSize(attachment.size)}</span>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      <Modal isOpen={showMobileCompose} onClose={() => setIsComposeOpen(false)} title="New message">
+        <form onSubmit={handleSend} className="space-y-4">
+          {renderRecipientPicker()}
+          <input
+            required
+            value={formData.subject}
+            onChange={e => setFormData(prev => ({ ...prev, subject: e.target.value }))}
+            placeholder="Subject"
+            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 outline-none"
+          />
+          <textarea
+            required
+            value={formData.body}
+            onChange={e => setFormData(prev => ({ ...prev, body: e.target.value }))}
+            placeholder="Write your message"
+            className="h-40 w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium leading-6 text-slate-800 outline-none"
+          />
+          {attachments.length > 0 && (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              <div className="mb-2 text-xs font-black uppercase tracking-widest text-slate-500">Attachments</div>
+              <div className="space-y-2">
+                {attachments.map((attachment, index) => (
+                  <div key={`${attachment.name}-${index}`} className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-bold text-slate-700">
+                    <Archive size={14} />
+                    <span className="min-w-0 flex-1 truncate">{attachment.name}</span>
+                    <span className="text-slate-400">{formatFileSize(attachment.size)}</span>
+                    <button type="button" onClick={() => setAttachments(prev => prev.filter((_, itemIndex) => itemIndex !== index))} className="text-slate-400 hover:text-red-600" aria-label="Remove attachment"><X size={14} /></button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <input ref={mobileAttachmentInputRef} type="file" multiple className="hidden" onChange={handleAttachmentSelection} />
+          <div className="flex items-center justify-between gap-2">
+            <select value={formData.priority} onChange={e => setFormData(prev => ({ ...prev, priority: e.target.value as 'normal' | 'urgent' }))} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700">
+              <option value="normal">Normal</option>
+              <option value="urgent">Urgent</option>
+            </select>
+            <button type="button" onClick={() => mobileAttachmentInputRef.current?.click()} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600">Attach file</button>
+            <button type="submit" className="rounded-xl bg-[#ff5c35] px-4 py-2 text-xs font-black text-white">Send</button>
+          </div>
+        </form>
+      </Modal>
+    </div>
+  );
+};
+
 const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<any[]>([]);
@@ -5564,6 +6606,9 @@ export default function App() {
   const [installPromptEvent, setInstallPromptEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstallAvailable, setIsInstallAvailable] = useState(false);
   const [notificationBusy, setNotificationBusy] = useState(false);
+  const [isNotificationMenuOpen, setIsNotificationMenuOpen] = useState(false);
+  const [notificationEventsPreview, setNotificationEventsPreview] = useState<any[]>([]);
+  const [notificationEventsLoading, setNotificationEventsLoading] = useState(false);
   const [showExitHint, setShowExitHint] = useState(false);
   const [notificationHealth, setNotificationHealth] = useState({
     permission: typeof Notification !== 'undefined' ? Notification.permission : ('unsupported' as NotificationPermission | 'unsupported'),
@@ -6017,6 +7062,36 @@ export default function App() {
       .filter(group => group.items.length > 0);
   }, [loggedInUser, canAccess]);
 
+  const mobileNavGroups: NavGroup[] = useMemo(() => {
+    if (!loggedInUser) return [];
+
+    const normDept = normalizeDepartment(loggedInUser.department);
+    const preferredViews: AppView[] = normDept === 'Office'
+      ? ['dashboard', 'work-orders', 'production-plan', 'reports']
+      : normDept === 'Dispatch'
+        ? ['dispatch-dashboard', 'reports', 'notification-audit']
+        : normDept === 'Quality_Control'
+          ? ['worker-dashboard', 'work-orders', 'notification-audit']
+          : ['worker-dashboard', 'notification-audit'];
+
+    const allAccessibleItems = navGroups.flatMap(group => group.items);
+    const preferredItems = preferredViews
+      .map(targetView => allAccessibleItems.find(item => item.id === targetView))
+      .filter(Boolean) as NavItem[];
+
+    const fallbackItems = allAccessibleItems
+      .filter(item => !preferredItems.some(preferred => preferred.id === item.id))
+      .slice(0, Math.max(0, 4 - preferredItems.length));
+
+    const quickItems = [...preferredItems, ...fallbackItems].slice(0, 4);
+    const moreItems = allAccessibleItems.filter(item => !quickItems.some(quick => quick.id === item.id));
+
+    return [
+      { key: 'mobile-quick', label: 'Quick Menu', items: quickItems },
+      ...(moreItems.length ? [{ key: 'mobile-more', label: 'More', items: moreItems }] : []),
+    ];
+  }, [loggedInUser, navGroups]);
+
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
   const [globalSearchResults, setGlobalSearchResults] = useState<GlobalSearchResult[]>([]);
   const [globalSearchLoading, setGlobalSearchLoading] = useState(false);
@@ -6166,6 +7241,51 @@ export default function App() {
     });
   }, [navGroups]);
 
+  const getNotificationEventTime = useCallback((event: any) => {
+    const rawTime = event.event_time || event.created || event.created_at || null;
+    if (!rawTime) return 0;
+    const timestamp = new Date(rawTime).getTime();
+    return Number.isFinite(timestamp) ? timestamp : 0;
+  }, []);
+
+  const formatNotificationEventTime = useCallback((event: any) => {
+    const timestamp = getNotificationEventTime(event);
+    if (!timestamp) return 'No time';
+    return new Date(timestamp).toLocaleString([], {
+      month: 'short',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }, [getNotificationEventTime]);
+
+  const fetchNotificationEventsPreview = useCallback(async () => {
+    setNotificationEventsLoading(true);
+    try {
+      const { data } = await supabase
+        .from('notification_events')
+        .select('*')
+        .limit(40);
+
+      const sortedEvents = [...(data || [])]
+        .sort((a: any, b: any) => getNotificationEventTime(b) - getNotificationEventTime(a))
+        .slice(0, 8);
+
+      setNotificationEventsPreview(sortedEvents);
+    } catch (_error) {
+      setNotificationEventsPreview([]);
+    } finally {
+      setNotificationEventsLoading(false);
+    }
+  }, [getNotificationEventTime]);
+
+  useEffect(() => {
+    if (!loggedInUser) return;
+    fetchNotificationEventsPreview();
+    const timer = window.setInterval(fetchNotificationEventsPreview, 30000);
+    return () => window.clearInterval(timer);
+  }, [loggedInUser, fetchNotificationEventsPreview]);
+
   if (!dbReady) return <DatabaseSetup onRetry={() => setDbReady(true)} />;
   if (!loggedInUser) return <Login onLogin={handleLogin} />;
 
@@ -6209,6 +7329,7 @@ export default function App() {
       case 'custom-bom-print': return <CustomBOMPrintView plan={(window as any)._customPlan} onBack={() => navigateTo('custom-bom-plan')} />;
       case 'reports': return <ReportsView onError={onError} />;
       case 'notification-audit': return <NotificationAuditView onError={onError} />;
+      case 'mailbox': return <MailboxView user={loggedInUser} onError={onError} />;
       default: return <Dashboard user={loggedInUser} setView={navigateTo} onError={onError} />;
     }
   };
@@ -6226,6 +7347,13 @@ export default function App() {
       : notificationHealth.permission === 'default'
         ? 'Permission not granted yet'
         : 'Notifications unsupported';
+
+  const notificationsReady = notificationHealth.permission === 'granted' && notificationHealth.hasSubscription;
+  const notificationDotClass = notificationsReady
+    ? 'bg-emerald-400'
+    : notificationHealth.permission === 'denied'
+      ? 'bg-red-400'
+      : 'bg-amber-300';
 
   return (
     <div className="liquid-app min-h-screen flex bg-[#f3f6f9] overflow-x-hidden">
@@ -6312,11 +7440,6 @@ export default function App() {
             100% { background-position: calc(240px + 100%) 0; }
           }
 
-          @keyframes erpLogoMotion {
-            0%, 100% { transform: translateY(0) rotate(0deg) scale(1); filter: drop-shadow(0 0 0 rgba(255,255,255,0)); }
-            50% { transform: translateY(-2px) rotate(5deg) scale(1.04); filter: drop-shadow(0 0 8px rgba(255,255,255,.45)); }
-          }
-
           .erp-fade-up {
             animation: erpFadeUp 360ms cubic-bezier(.2,.8,.2,1) both;
           }
@@ -6357,11 +7480,6 @@ export default function App() {
             background: linear-gradient(90deg, #f1f5f9 0%, #e2e8f0 45%, #f8fafc 70%, #f1f5f9 100%);
             background-size: 240px 100%;
             animation: erpShimmer 1.4s ease-in-out infinite;
-          }
-
-          .erp-logo-svg {
-            animation: erpLogoMotion 2.8s ease-in-out infinite;
-            transform-origin: center;
           }
 
           .liquid-app .liquid-sidebar {
@@ -6410,8 +7528,7 @@ export default function App() {
             .erp-stagger > *,
             .erp-search-results > *,
             .erp-active-pulse,
-            .erp-skeleton,
-            .erp-logo-svg {
+            .erp-skeleton {
               animation: none !important;
             }
           }
@@ -6422,7 +7539,7 @@ export default function App() {
       <aside className="liquid-sidebar hidden lg:flex w-24 bg-[#032d60] flex-col fixed h-full z-40 no-print transition-all duration-300">
         <div className="flex h-[54px] w-[95px] flex-col items-center justify-center border-b border-white/10">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/20 bg-[#0176d3] text-white shadow-lg shadow-blue-950/20" aria-label="Excell Packaging">
-            <Package className="erp-logo-svg" size={25} strokeWidth={2.4} />
+            <Package size={25} strokeWidth={2.4} />
           </div>
         </div>
         <nav className="flex-1 px-2 py-4 space-y-4 overflow-y-auto">
@@ -6480,7 +7597,7 @@ export default function App() {
           <aside className="liquid-sidebar relative w-[85vw] max-w-64 bg-white/85 backdrop-blur-2xl flex flex-col h-full shadow-2xl animate-in slide-in-from-left duration-300">
             <div className="liquid-brand p-6 border-b border-white/70 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center text-white shadow-lg"><Package className="erp-logo-svg" size={20}/></div>
+                <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center text-white shadow-lg"><Package size={20}/></div>
                 <span className="text-slate-900 font-black tracking-widest text-lg">EXCELL</span>
               </div>
               <button onClick={() => setIsMobileMenuOpen(false)} className="text-slate-500 hover:text-slate-900 transition-colors">
@@ -6489,8 +7606,8 @@ export default function App() {
             </div>
             
             <nav className="flex-1 p-3 space-y-2 mt-1 overflow-y-auto">
-              {navGroups.map(group => {
-                const isOpen = mobileNavOpen[group.key] ?? true;
+              {mobileNavGroups.map(group => {
+                const isOpen = mobileNavOpen[group.key] ?? group.key === 'mobile-quick';
                 return (
                   <div key={group.key} className="liquid-nav-group rounded-xl border border-slate-200/80 overflow-hidden">
                     <button
@@ -6535,6 +7652,7 @@ export default function App() {
 
       <main className="flex-1 min-w-0 lg:ml-24 flex flex-col min-h-screen transition-all duration-300">
           <div className="hidden lg:flex h-[54px] bg-[#0176d3] text-white items-center justify-center px-5 no-print shadow-sm relative">
+            <div className="flex items-center gap-2">
             <div className="relative w-[560px] max-w-[52vw]">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
               <input
@@ -6605,6 +7723,17 @@ export default function App() {
                 </div>
               )}
             </div>
+            {canAccess(loggedInUser, 'mailbox') && (
+              <button
+                onClick={() => navigateTo('mailbox')}
+                className={`rounded-full p-2.5 transition-colors ${view === 'mailbox' ? 'bg-white text-[#0176d3]' : 'bg-white/15 text-white hover:bg-white/25'}`}
+                aria-label="Open mailbox"
+                title="Mailbox"
+              >
+                <Mail size={18} />
+              </button>
+            )}
+            </div>
             <div className="absolute right-5 flex items-center gap-2">
               <button onClick={refreshNotificationHealth} className="rounded-full bg-white/15 p-2 hover:bg-white/25 transition-colors" aria-label="Refresh notification status">
                 <RefreshCw size={17} />
@@ -6619,21 +7748,21 @@ export default function App() {
                <Menu size={24} />
              </button>
              <div className="flex items-center gap-2">
-               <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-900/40"><Package className="erp-logo-svg" size={16}/></div>
+               <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-900/40"><Package size={16}/></div>
                <span className="font-black tracking-widest text-lg text-white">EXCELL</span>
              </div>
              <button onClick={refreshNotificationHealth} className="p-2 text-white hover:bg-white/15 rounded-xl transition-colors" aria-label="Refresh notification status">
                <RefreshCw size={20} />
              </button>
           </header>
-          <div className={`p-3 pb-24 sm:p-3 md:p-4 lg:pb-4 mx-auto w-full flex-1 ${view === 'work-orders' ? 'max-w-none' : 'max-w-[1700px]'}`}>
+          <div className={`p-3 pb-24 sm:p-3 md:p-4 lg:pb-4 mx-auto w-full flex-1 ${view === 'work-orders' || view === 'mailbox' ? 'max-w-none' : 'max-w-[1700px]'}`}>
            {showExitHint && (
              <div className="mb-2 rounded-lg bg-slate-900 text-white px-3 py-2 text-xs font-bold no-print inline-block">
                Press back again to exit
              </div>
            )}
            {shouldShowNotificationBanner && (
-              <div className="mb-3 rounded-2xl border border-blue-200 bg-white/95 lg:bg-blue-50/80 px-3 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 no-print shadow-sm lg:shadow-none">
+              <div className="mb-3 rounded-2xl border border-blue-200 bg-white/95 lg:bg-blue-50/80 px-3 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 no-print shadow-sm lg:hidden">
                 <div className="min-w-0">
                   <div className="text-[11px] font-black uppercase tracking-wider text-blue-700 flex items-center gap-1.5"><AlertCircle size={14}/> Notification Setup</div>
                   <div className="text-xs font-semibold text-blue-800 mt-0.5 break-words">
@@ -6662,6 +7791,95 @@ export default function App() {
             <div key={view} className="erp-fade-only">
               {renderContent()}
             </div>
+          </div>
+          <div className="hidden lg:block no-print">
+            {isNotificationMenuOpen && (
+              <div className="erp-scale-in fixed bottom-24 right-6 z-50 w-[380px] overflow-hidden rounded-3xl border border-slate-200 bg-white text-slate-800 shadow-2xl shadow-blue-950/20">
+                <div className="bg-[#0176d3] px-4 py-4 text-white">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="relative rounded-2xl bg-white/15 p-2">
+                        <Bell size={20} />
+                        <span className={`absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-[#0176d3] ${notificationDotClass}`} />
+                      </div>
+                      <div>
+                        <div className="text-sm font-black">Notifications</div>
+                        <div className="text-xs font-semibold text-blue-100">{notificationStatusText}</div>
+                      </div>
+                    </div>
+                    <button onClick={() => setIsNotificationMenuOpen(false)} className="rounded-full p-1.5 text-white/80 transition-colors hover:bg-white/15 hover:text-white" aria-label="Close notifications">
+                      <X size={18} />
+                    </button>
+                  </div>
+                  {notificationHealth.lastError && (
+                    <div className="mt-2 rounded-xl bg-white/12 px-3 py-2 text-[11px] font-semibold text-blue-50">{notificationHealth.lastError}</div>
+                  )}
+                </div>
+
+                <div className="max-h-[360px] overflow-y-auto p-3">
+                  {notificationEventsLoading && (
+                    <div className="space-y-2 p-2">
+                      <div className="erp-skeleton h-12 rounded-2xl" />
+                      <div className="erp-skeleton h-12 rounded-2xl" />
+                      <div className="erp-skeleton h-12 rounded-2xl" />
+                    </div>
+                  )}
+                  {!notificationEventsLoading && notificationEventsPreview.length === 0 && (
+                    <div className="px-4 py-10 text-center text-sm font-semibold text-slate-400">No notification events yet.</div>
+                  )}
+                  {!notificationEventsLoading && notificationEventsPreview.map((event) => {
+                    const failed = Number(event.failed || 0);
+                    const sent = Number(event.sent || 0);
+                    const tone = failed > 0 ? 'bg-red-500' : sent > 0 ? 'bg-emerald-500' : 'bg-amber-400';
+                    return (
+                      <div key={event.id} className="mb-2 rounded-2xl border border-slate-100 bg-slate-50/80 p-3 last:mb-0">
+                        <div className="flex items-start gap-3">
+                          <span className={`mt-1 h-2.5 w-2.5 flex-shrink-0 rounded-full ${tone}`} />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="truncate text-sm font-black text-slate-900">{event.title || 'Notification'}</div>
+                              <div className="whitespace-nowrap text-[10px] font-bold text-slate-400">{formatNotificationEventTime(event)}</div>
+                            </div>
+                            <div className="mt-1 line-clamp-2 whitespace-pre-line text-xs font-semibold text-slate-600">{event.body || '-'}</div>
+                            <div className="mt-2 flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                              <span>WO #{event.work_order_id || '-'}</span>
+                              <span>{sent} sent / {failed} failed</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 border-t border-slate-100 bg-slate-50 p-3">
+                  {!notificationsReady ? (
+                    <button
+                      onClick={() => void handleEnableNotifications()}
+                      disabled={notificationBusy || notificationHealth.permission === 'denied'}
+                      className="col-span-3 rounded-xl bg-blue-600 px-3 py-2.5 text-xs font-black text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {notificationBusy ? 'Enabling...' : 'Enable Notifications'}
+                    </button>
+                  ) : null}
+                  <button onClick={() => { navigateTo('notification-audit'); setIsNotificationMenuOpen(false); }} className="col-span-2 rounded-xl bg-white px-3 py-2.5 text-xs font-black text-slate-700 shadow-sm transition-colors hover:bg-blue-50 hover:text-blue-700">
+                    Open Alerts Log
+                  </button>
+                  <button onClick={() => { void refreshNotificationHealth(); void fetchNotificationEventsPreview(); }} className="rounded-xl bg-white px-3 py-2.5 text-xs font-black text-slate-700 shadow-sm transition-colors hover:bg-blue-50 hover:text-blue-700">
+                    Refresh
+                  </button>
+                </div>
+              </div>
+            )}
+            <button
+              onClick={() => setIsNotificationMenuOpen(prev => !prev)}
+              className="fixed bottom-6 right-6 z-50 flex h-16 w-16 items-center justify-center rounded-full bg-[#0176d3] text-white shadow-2xl shadow-blue-300/80 transition-all hover:bg-[#0b5cab] hover:shadow-blue-400/80"
+              aria-label="Open notifications"
+              title="Notifications"
+            >
+              <Bell size={25} />
+              <span className={`absolute right-3 top-3 h-3.5 w-3.5 rounded-full border-2 border-[#0176d3] ${notificationDotClass}`} />
+            </button>
           </div>
           <nav className="lg:hidden fixed bottom-3 left-3 right-3 z-40 no-print border border-white/70 bg-white/82 backdrop-blur-2xl rounded-3xl px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-2xl shadow-slate-300/50">
             <div className="grid grid-cols-5 gap-1">

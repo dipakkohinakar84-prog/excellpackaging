@@ -70,6 +70,7 @@ const idFieldCollections = new Set([
   'dispatch_logs',
   'custom_bom_plans',
   'notification_events',
+  'mailbox_messages',
 ]);
 
 const legacyIdStart: Record<string, number> = {
@@ -82,6 +83,7 @@ const legacyIdStart: Record<string, number> = {
   dispatch_logs: 1,
   custom_bom_plans: 1,
   notification_events: 1,
+  mailbox_messages: 1,
 };
 
 const isValidLegacyId = (value: any) => (

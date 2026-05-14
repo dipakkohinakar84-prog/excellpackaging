@@ -130,10 +130,11 @@ export const canAccessView = (user: User | null, view: string): boolean => {
       'plan-generator',
        'custom-bom-plan',
        'custom-bom-print',
-       'reports',
-       'notification-audit',
-       'departments'
-     ];
+        'reports',
+        'notification-audit',
+        'mailbox',
+        'departments'
+      ];
     return allowedViews.includes(view);
   }
   

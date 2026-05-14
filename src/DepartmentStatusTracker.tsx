@@ -38,6 +38,19 @@ const DepartmentStatusTracker: React.FC<DepartmentStatusTrackerProps> = ({
     };
   };
 
+  const mobilePrimaryDepartments = assignedDepartments.filter(dept => {
+    const normDept = normalizeDepartment(dept);
+    const deptStatus = getDepartmentStatus(dept);
+
+    if (isOffice) return true;
+    if (isQC) return deptStatus.status === 'Ready for QC' || !!deptStatus.qc_status;
+    return normDept === userDept;
+  });
+
+  const mobileVisibleDepartments = mobilePrimaryDepartments.length > 0
+    ? mobilePrimaryDepartments
+    : assignedDepartments.slice(0, 1);
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'Not Started': return 'bg-gray-100 text-gray-700 border-gray-200';
@@ -78,11 +91,81 @@ const DepartmentStatusTracker: React.FC<DepartmentStatusTrackerProps> = ({
   return (
     <div className="space-y-2.5">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-lg sm:text-xl font-black text-gray-800">Department Status Tracking</h3>
+        <h3 className="text-sm sm:text-xl font-black text-gray-800">Department Status Tracking</h3>
         <span className="sm:hidden rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500">#{workOrderId}</span>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
+      <div className="sm:hidden space-y-2">
+        {mobileVisibleDepartments.map(dept => {
+          const deptStatus = getDepartmentStatus(dept);
+          const canEdit = canEditDepartment(dept);
+          const normalizedDept = normalizeDepartment(dept);
+          const isDepartmentBusy = isBusy && busyDepartmentKey === normalizedDept;
+
+          return (
+            <div key={dept} className="bg-white border border-gray-200 rounded-2xl p-3 shadow-sm">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="min-w-0">
+                  <h4 className="font-black text-gray-800 text-sm truncate">{dept.replace(/_/g, ' ')}</h4>
+                  <div className={`mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] font-black border ${getStatusColor(deptStatus.status)}`}>
+                    {deptStatus.status}
+                  </div>
+                </div>
+                {deptStatus.qc_status && (
+                  <span className={`shrink-0 px-2 py-1 rounded-full text-[9px] font-black border ${getStatusColor(deptStatus.qc_status)}`}>
+                    {deptStatus.qc_status}
+                  </span>
+                )}
+              </div>
+
+              {canEdit && !isQC && (
+                <div className="grid grid-cols-3 gap-1.5">
+                  {['Not Started', 'Work Started', 'Ready for QC'].map(status => (
+                    <button
+                      key={status}
+                      onClick={() => handleStatusChange(dept, status)}
+                      disabled={deptStatus.status === status || isDepartmentBusy}
+                      className={`min-h-10 px-2 py-2 rounded-xl text-[9px] font-black transition-all ${
+                        deptStatus.status === status
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-600'
+                      } disabled:opacity-50`}
+                    >
+                      {isDepartmentBusy ? 'Updating' : status.replace('Not Started', 'Not').replace('Work Started', 'Start').replace('Ready for QC', 'Ready QC')}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {canEdit && isQC && deptStatus.status === 'Ready for QC' && (
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button onClick={() => handleQCStatusChange(dept, 'QC Approved')} disabled={isDepartmentBusy} className="min-h-10 rounded-xl bg-green-600 text-white text-[10px] font-black disabled:opacity-50">Approve</button>
+                  <button onClick={() => handleQCStatusChange(dept, 'QC Denied')} disabled={isDepartmentBusy} className="min-h-10 rounded-xl bg-red-600 text-white text-[10px] font-black disabled:opacity-50">Deny</button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {assignedDepartments.length > mobileVisibleDepartments.length && (
+          <details className="rounded-2xl border border-gray-200 bg-gray-50 p-3">
+            <summary className="list-none cursor-pointer text-[10px] font-black uppercase tracking-widest text-slate-500">Show all departments ({assignedDepartments.length})</summary>
+            <div className="mt-2 space-y-1.5">
+              {assignedDepartments.map(dept => {
+                const deptStatus = getDepartmentStatus(dept);
+                return (
+                  <div key={dept} className="flex items-center justify-between gap-2 rounded-xl bg-white px-3 py-2 text-xs">
+                    <span className="font-bold text-slate-700 truncate">{dept.replace(/_/g, ' ')}</span>
+                    <span className={`shrink-0 px-2 py-0.5 rounded-full text-[9px] font-black border ${getStatusColor(deptStatus.status)}`}>{deptStatus.status}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </details>
+        )}
+      </div>
+
+      <div className="hidden sm:grid grid-cols-1 xl:grid-cols-2 gap-2">
       {assignedDepartments.map(dept => {
         const deptStatus = getDepartmentStatus(dept);
         const canEdit = canEditDepartment(dept);

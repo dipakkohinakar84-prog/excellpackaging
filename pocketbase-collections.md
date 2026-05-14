@@ -131,6 +131,34 @@ Fields:
 - `failed`: number
 - `targets`: number
 
+## mailbox_messages
+
+Fields:
+
+- `legacy_id`: number
+- `subject`: text, required
+- `body`: text, required
+- `sender_user_id`: number, required
+- `sender_name`: text
+- `recipient_user_ids`: json
+- `recipient_customer_ids`: json
+- `recipient_departments`: json
+- `read_by_user_ids`: json
+- `attachments`: json
+- `priority`: text (`normal` or `urgent`)
+- `delivery_status`: text (`erp_only`, `email_sent`, `email_failed`, or `partial_failed`)
+- `delivery_error`: text
+- `sent_email_count`: number
+- `failed_email_count`: number
+- `sent_at`: date
+- `direction`: text (`inbound` or `outbound`)
+- `external_message_id`: text
+- `from_email`: text
+- `from_name`: text
+- `to_email`: text
+
+Inbound client replies are synced through the relay endpoint `/api/sync-inbox` using IMAP. Matching customer emails are linked through `customers.email`. The relay can also auto-sync recent inbox messages using `AUTO_SYNC_INBOX=true`, `MAIL_SYNC_INTERVAL_MS=30000`, `MAIL_SYNC_LOOKBACK_DAYS=2`, and `MAIL_SYNC_FETCH_LIMIT=50`.
+
 ## Realtime
 
 Enable realtime access for `work_orders`. The frontend subscribes to `work_orders` and maps PocketBase create/update/delete events to the previous Supabase realtime payload shape.
