@@ -57,7 +57,8 @@ import {
   Bell,
   Send,
   Inbox,
-  Archive
+  Archive,
+  Upload
 } from 'lucide-react';
 import { AppView, User, Customer, Item, WorkOrder, Department, WOStatus, ChildItem } from './types';
 import { supabase, supabaseAnonKey } from './supabase';
@@ -130,12 +131,12 @@ const LoadingState: React.FC<{ message?: string }> = ({ message = "Loading..." }
   </div>
 );
 
-const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode }> = ({ isOpen, onClose, title, children }) => {
+const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode; maxWidthClassName?: string }> = ({ isOpen, onClose, title, children, maxWidthClassName = 'max-w-2xl' }) => {
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[92vh] sm:max-h-[90vh]">
+      <div className={`relative bg-white rounded-2xl shadow-2xl w-full ${maxWidthClassName} overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[92vh] sm:max-h-[90vh]`}>
         <div className="px-4 sm:px-6 py-4 border-b flex justify-between items-center gap-3 bg-gray-50/50 flex-shrink-0">
           <h3 className="text-base sm:text-lg font-bold text-gray-800 break-words">{title}</h3>
           <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-lg transition-colors text-gray-500">
@@ -1649,6 +1650,16 @@ const UserList: React.FC<{ onError: () => void }> = ({ onError }) => {
   const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.department) { alert("Please select a department."); return; }
+    const mobileKey = normalizeMobileNumber(formData.mobile);
+    if (!mobileKey) { alert("Please enter a valid mobile number."); return; }
+    const duplicateUser = users.find(existingUser =>
+      normalizeMobileNumber(existingUser.mobile || '') === mobileKey &&
+      (!editingUser || Number(existingUser.id) !== Number(editingUser.id))
+    );
+    if (duplicateUser) {
+      alert(`A user with mobile number ${formData.mobile} already exists: ${duplicateUser.username}.`);
+      return;
+    }
     setIsSubmitting(true);
     
     let result;
@@ -1982,18 +1993,21 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
   
   // Component Management States
   const [componentSearch, setComponentSearch] = useState('');
-  const [selectedComponents, setSelectedComponents] = useState<{id: string, name: string, qty: number, departments: string[]}[]>([]);
+  const [newComponentNames, setNewComponentNames] = useState('');
+  const [isAddingComponents, setIsAddingComponents] = useState(false);
+  const [newComponentDepartments, setNewComponentDepartments] = useState<string[]>([]);
+  const [selectedComponents, setSelectedComponents] = useState<{id: string, name: string, qty: number | '', departments: string[]}[]>([]);
 
   // Form Data
   const [formData, setFormData] = useState<{
     name: string, 
     customer_name: string, 
     drawing_no: string, 
-    drawing_image_url: string,
     departments: string[]
   }>({ 
-    name: '', customer_name: '', drawing_no: '', drawing_image_url: '', departments: [] 
+    name: '', customer_name: '', drawing_no: '', departments: [] 
   });
+  const [itemRows, setItemRows] = useState<Array<{ name: string; drawing_no: string; drawing_file: File | null }>>([{ name: '', drawing_no: '', drawing_file: null }]);
 
   const involvingDepartments = useMemo(
     () => departments.filter(d => isInvolvingDepartment(d.name)),
@@ -2046,6 +2060,8 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
     }
     
     setComponentSearch('');
+    setNewComponentNames('');
+    setNewComponentDepartments(item.departments?.length ? item.departments : []);
     setIsChildModalOpen(true);
   };
 
@@ -2056,13 +2072,34 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
     }));
   };
 
+  const resetItemForm = () => {
+    setFormData({ name: '', customer_name: '', drawing_no: '', departments: [] });
+    setItemRows([{ name: '', drawing_no: '', drawing_file: null }]);
+  };
+
+  const updateItemRow = (index: number, field: 'name' | 'drawing_no', value: string) => {
+    setItemRows(prev => prev.map((row, rowIndex) => rowIndex === index ? { ...row, [field]: value } : row));
+  };
+
+  const updateItemDrawingFile = (index: number, file: File | null) => {
+    setItemRows(prev => prev.map((row, rowIndex) => rowIndex === index ? { ...row, drawing_file: file } : row));
+  };
+
+  const addItemRow = () => {
+    setItemRows(prev => [...prev, { name: '', drawing_no: '', drawing_file: null }]);
+  };
+
+  const removeItemRow = (index: number) => {
+    setItemRows(prev => prev.length === 1 ? [{ name: '', drawing_no: '', drawing_file: null }] : prev.filter((_, rowIndex) => rowIndex !== index));
+  };
+
   const filteredComponents = allLibraryComponents.filter(c => 
     c.name.toLowerCase().includes(componentSearch.toLowerCase()) ||
     (c.departments || []).some((d: string) => d.toLowerCase().includes(componentSearch.toLowerCase()))
   );
 
   const addComponentToSelection = (component: any) => {
-    if (!selectedComponents.find(c => c.name === component.name)) {
+    if (!selectedComponents.find(c => normalizeDuplicateKey(c.name) === normalizeDuplicateKey(component.name))) {
       setSelectedComponents([...selectedComponents, {
         id: component.id,
         name: component.name,
@@ -2072,14 +2109,82 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
     }
   };
 
-  const updateComponentQty = (index: number, qty: number) => {
+  const addMissingComponentsFromSearch = async () => {
+    const names = Array.from(new Set(newComponentNames
+      .split(/[\n,;]+/)
+      .map(name => name.trim())
+      .filter(Boolean)
+      .map(name => name.replace(/\s+/g, ' '))));
+
+    if (names.length === 0) {
+      alert('Type one or more component names first. Use comma or new line for bulk add.');
+      return;
+    }
+
+    if (newComponentDepartments.length === 0) {
+      alert('Please select at least one department for the new component(s).');
+      return;
+    }
+
+    const existingKeys = new Set(allLibraryComponents.map(component => normalizeDuplicateKey(component.name || '')));
+    const selectedKeys = new Set(selectedComponents.map(component => normalizeDuplicateKey(component.name || '')));
+    const namesToCreate = names.filter(name => !existingKeys.has(normalizeDuplicateKey(name)));
+    const existingToSelect = allLibraryComponents.filter(component => names.some(name => normalizeDuplicateKey(name) === normalizeDuplicateKey(component.name || '')));
+
+    if (namesToCreate.length === 0 && existingToSelect.length === 0) {
+      alert('All typed components are already selected or unavailable.');
+      return;
+    }
+
+    setIsAddingComponents(true);
+    try {
+      const createdComponents: any[] = [];
+      if (namesToCreate.length > 0) {
+        const { data: createdRows, error } = await supabase.from('child_items').insert(namesToCreate.map(name => ({
+          name,
+          departments: newComponentDepartments,
+          qty_per_master: 0,
+          parent_item_id: null,
+        })));
+
+        if (error) {
+          alert(`Failed to add components: ${error.message}`);
+          return;
+        }
+
+        createdComponents.push(...((createdRows || []) as any[]));
+      }
+
+      const nextComponents = [...existingToSelect, ...createdComponents];
+      setAllLibraryComponents(prev => [...prev, ...createdComponents]);
+      setSelectedComponents(prev => {
+        const next = [...prev];
+        for (const component of nextComponents) {
+          if (!selectedKeys.has(normalizeDuplicateKey(component.name || '')) && !next.find(row => normalizeDuplicateKey(row.name) === normalizeDuplicateKey(component.name || ''))) {
+            next.push({ id: component.id, name: component.name, qty: 1, departments: component.departments || newComponentDepartments });
+          }
+        }
+        return next;
+      });
+      setComponentSearch('');
+      setNewComponentNames('');
+    } finally {
+      setIsAddingComponents(false);
+    }
+  };
+
+  const updateComponentQty = (index: number, value: string) => {
     const updated = [...selectedComponents];
-    updated[index].qty = qty > 0 ? qty : 1;
+    updated[index].qty = value === '' ? '' : Math.max(1, Number(value));
     setSelectedComponents(updated);
   };
 
   const removeComponentFromSelection = (index: number) => {
     setSelectedComponents(selectedComponents.filter((_, i) => i !== index));
+  };
+
+  const toggleNewComponentDepartment = (deptName: string) => {
+    setNewComponentDepartments(prev => prev.includes(deptName) ? prev.filter(name => name !== deptName) : [...prev, deptName]);
   };
 
   const saveComponentsToItem = async () => {
@@ -2088,7 +2193,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
     const componentsToSave = selectedComponents.map(sc => ({
       id: sc.id,
       name: sc.name,
-      qtyPerMaster: sc.qty,
+      qtyPerMaster: Number(sc.qty) > 0 ? Number(sc.qty) : 1,
       departments: sc.departments
     }));
     
@@ -2112,17 +2217,60 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-black text-gray-800">Item Master</h2>
-        <button onClick={() => setIsModalOpen(true)} className="bg-orange-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg hover:bg-orange-700 transition-colors"><Plus size={18} /></button>
+        <button onClick={() => { resetItemForm(); setIsModalOpen(true); }} className="bg-orange-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg hover:bg-orange-700 transition-colors"><Plus size={18} /></button>
       </div>
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Item">
         <form onSubmit={async (e) => { 
           e.preventDefault(); 
-          const { error } = await supabase.from('items').insert([formData]); 
+          const customerKey = normalizeDuplicateKey(formData.customer_name);
+          const validRows = itemRows
+            .map(row => ({
+              name: row.name.trim().replace(/\s+/g, ' '),
+              drawing_no: row.drawing_no.trim(),
+              drawing_file: row.drawing_file,
+            }))
+            .filter(row => row.name || row.drawing_no || row.drawing_file);
+
+          if (validRows.length === 0) {
+            alert('Please add at least one item row.');
+            return;
+          }
+
+          const incompleteRows = validRows.filter(row => !row.name || !row.drawing_no);
+          if (incompleteRows.length > 0) {
+            alert('Each item row needs an item name and drawing number.');
+            return;
+          }
+
+          const duplicateInForm = validRows.find((row, index) => validRows.findIndex(other => normalizeDuplicateKey(other.name) === normalizeDuplicateKey(row.name)) !== index);
+          if (duplicateInForm) {
+            alert(`Item "${duplicateInForm.name}" is repeated in this form.`);
+            return;
+          }
+
+          const duplicateExisting = validRows.find(row => data.some(item =>
+            normalizeDuplicateKey(item.name || '') === normalizeDuplicateKey(row.name) &&
+            normalizeDuplicateKey(item.customer_name || '') === customerKey
+          ));
+          if (duplicateExisting) {
+            alert(`Item "${duplicateExisting.name}" already exists for ${formData.customer_name}.`);
+            return;
+          }
+
+          const rowsToInsert = validRows.map(row => ({
+            name: row.name,
+            customer_name: formData.customer_name,
+            drawing_no: row.drawing_no,
+            drawing_image_url: '',
+            drawing_file: row.drawing_file || undefined,
+            departments: formData.departments,
+          }));
+          const { error } = await supabase.from('items').insert(rowsToInsert); 
           if(error) alert(error.message);
           else {
             setIsModalOpen(false); 
-            setFormData({ name: '', customer_name: '', drawing_no: '', drawing_image_url: '', departments: [] });
+            resetItemForm();
             fetchData(); 
           }
         }} className="space-y-4">
@@ -2130,10 +2278,33 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
               <option value="">Select Client</option>
               {customers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
            </select>
-           <input required placeholder="Item Name / Assembly" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl" />
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <input required placeholder="Drawing No." value={formData.drawing_no} onChange={e => setFormData({...formData, drawing_no: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl" />
-               <input placeholder="Drawing PDF URL (Link)" value={formData.drawing_image_url} onChange={e => setFormData({...formData, drawing_image_url: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl" />
+           <div className="space-y-3 rounded-2xl border border-orange-100 bg-orange-50/40 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-black uppercase tracking-widest text-orange-600">Items</div>
+                  <div className="text-[11px] font-semibold text-gray-400">Add item masters one by one in rows.</div>
+                </div>
+                <button type="button" onClick={addItemRow} className="inline-flex items-center gap-2 rounded-xl border border-orange-200 bg-white px-3 py-2 text-xs font-black text-orange-700 hover:bg-orange-100"><Plus size={14} /> Add another item</button>
+              </div>
+              <div className="space-y-2">
+                {itemRows.map((row, index) => (
+                  <div key={index} className="rounded-xl border border-orange-100 bg-white p-3 shadow-sm">
+                    <div className="mb-2 flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-gray-400">
+                      <span>Item {index + 1}</span>
+                      <button type="button" onClick={() => removeItemRow(index)} className="text-red-400 hover:text-red-600">Remove</button>
+                    </div>
+                    <input required={index === 0} placeholder="Item Name / Assembly" value={row.name} onChange={e => updateItemRow(index, 'name', e.target.value)} className="mb-2 w-full px-4 py-3 bg-gray-50 border rounded-xl" />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <input required={index === 0} placeholder="Drawing No." value={row.drawing_no} onChange={e => updateItemRow(index, 'drawing_no', e.target.value)} className="w-full px-4 py-3 bg-gray-50 border rounded-xl" />
+                      <label className="flex min-h-[48px] cursor-pointer items-center justify-between gap-3 rounded-xl border bg-gray-50 px-4 py-3 text-sm font-bold text-gray-500 hover:bg-orange-50">
+                        <span className="min-w-0 truncate">{row.drawing_file ? row.drawing_file.name : 'Upload drawing PDF/file'}</span>
+                        <Upload size={16} className="flex-shrink-0 text-orange-600" />
+                        <input type="file" accept="application/pdf,image/*" onChange={e => updateItemDrawingFile(index, e.target.files?.[0] || null)} className="hidden" />
+                      </label>
+                    </div>
+                  </div>
+                ))}
+              </div>
            </div>
            <div className="space-y-2">
               <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Process Routing (Depts)</label>
@@ -2159,7 +2330,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
          )}
       </Modal>
 
-      <Modal isOpen={isChildModalOpen} onClose={() => setIsChildModalOpen(false)} title={`Components: ${selectedItem?.name}`}>
+      <Modal isOpen={isChildModalOpen} onClose={() => setIsChildModalOpen(false)} title={`Components: ${selectedItem?.name}`} maxWidthClassName={componentSearch.trim() && filteredComponents.length === 0 ? 'max-w-5xl' : 'max-w-2xl'}>
         <div className="flex flex-col gap-6">
           <div className="relative">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
@@ -2172,6 +2343,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
             />
           </div>
 
+          <div className={componentSearch.trim() && filteredComponents.length === 0 ? 'grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)]' : ''}>
           <div className="border border-gray-200 rounded-xl overflow-hidden flex flex-col max-h-60">
              <div className="bg-gray-50 px-4 py-2 border-b border-gray-200 text-[10px] font-black uppercase text-gray-400 tracking-widest">Available Library</div>
              <div className="overflow-y-auto p-2 space-y-1">
@@ -2197,9 +2369,52 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
                   </div>
                 ))}
                 {filteredComponents.length === 0 && (
-                   <div className="p-6 text-center text-gray-400 text-sm italic">No components found. Add new ones in the 'Components' tab.</div>
+                   <div className="p-6 text-center text-sm font-semibold text-gray-400">No matching components found.</div>
                 )}
              </div>
+          </div>
+
+          {componentSearch.trim() && filteredComponents.length === 0 && (
+            <div className="space-y-5 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+              <div>
+                <div className="text-base font-black text-gray-800">New Standard Component</div>
+                <div className="mt-1 text-xs font-semibold text-gray-400">Add one or many components to the library and this BOM.</div>
+              </div>
+              <div>
+                <label className="mb-2 ml-1 block text-[10px] font-black uppercase tracking-widest text-gray-400">Component name</label>
+                <textarea
+                  value={newComponentNames}
+                  onChange={e => setNewComponentNames(e.target.value)}
+                  placeholder="e.g., Foam Insert, Plastic Corner Guard"
+                  className="h-20 w-full resize-none rounded-2xl border bg-gray-50 px-4 py-3 text-sm font-semibold outline-none transition-all focus:ring-2 focus:ring-blue-500"
+                />
+                <div className="mt-1 text-[10px] font-semibold text-gray-400">Bulk add: separate names with comma, semicolon, or new line.</div>
+              </div>
+              <div>
+                <label className="mb-3 ml-1 block text-[10px] font-black uppercase tracking-widest text-gray-400">Related departments (select at least one)</label>
+                <div className="flex flex-wrap gap-2">
+                  {involvingDepartments.map(department => (
+                    <button
+                      key={department.id}
+                      type="button"
+                      onClick={() => toggleNewComponentDepartment(department.name)}
+                      className={`rounded-xl border px-4 py-3 text-xs font-bold transition-all ${newComponentDepartments.includes(department.name) ? 'border-indigo-600 bg-indigo-600 text-white shadow-lg' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+                    >
+                      {department.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={addMissingComponentsFromSearch}
+                disabled={!newComponentNames.trim() || isAddingComponents || newComponentDepartments.length === 0}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-4 text-sm font-black text-white shadow-xl transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+              >
+                <Plus size={16} /> {isAddingComponents ? 'Adding...' : 'Add to Library'}
+              </button>
+            </div>
+          )}
           </div>
 
           <div className="bg-blue-50/50 rounded-2xl p-4 border border-blue-100">
@@ -2225,7 +2440,8 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
                         type="number"
                         min="1"
                         value={item.qty}
-                        onChange={e => updateComponentQty(idx, parseInt(e.target.value))}
+                        onChange={e => updateComponentQty(idx, e.target.value)}
+                        onBlur={e => { if (!e.target.value) updateComponentQty(idx, '1'); }}
                         className="w-12 px-1 py-1 bg-white text-center font-bold border rounded outline-none text-sm"
                       />
                     </div>
@@ -2378,6 +2594,7 @@ const ChildItemListView: React.FC<{ onError: () => void }> = ({ onError }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('All');
   const [formData, setFormData] = useState({ name: '', departments: [] as string[] });
+  const [componentNameRows, setComponentNameRows] = useState(['']);
 
   const involvingDepartments = useMemo(
     () => departments.filter(d => isInvolvingDepartment(d.name)),
@@ -2402,22 +2619,53 @@ const ChildItemListView: React.FC<{ onError: () => void }> = ({ onError }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (formData.departments.length === 0) { alert("Please select at least one department."); return; }
+    const componentNames = Array.from(new Set(componentNameRows
+      .map(name => name.trim().replace(/\s+/g, ' '))
+      .filter(Boolean)));
+
+    if (componentNames.length === 0) {
+      alert('Please enter at least one component name.');
+      return;
+    }
+
+    const existingKeys = new Set(data.map(component => normalizeDuplicateKey(component.name || '')));
+    const duplicateNames = componentNames.filter(name => existingKeys.has(normalizeDuplicateKey(name)));
+    const namesToCreate = componentNames.filter(name => !existingKeys.has(normalizeDuplicateKey(name)));
+
+    if (namesToCreate.length === 0) {
+      alert(`All entered components already exist: ${duplicateNames.join(', ')}`);
+      return;
+    }
     
-    const { error } = await supabase.from('child_items').insert([{
-        name: formData.name,
+    const { error } = await supabase.from('child_items').insert(namesToCreate.map(name => ({
+        name,
         departments: formData.departments,
         qty_per_master: 0,
         parent_item_id: null
-    }]);
+    })));
     
     if (error) {
        console.error(error);
        alert("Error: " + error.message);
     } else {
+       if (duplicateNames.length > 0) alert(`Added ${namesToCreate.length} component(s). Skipped duplicate(s): ${duplicateNames.join(', ')}`);
        setIsModalOpen(false);
        setFormData({ name: '', departments: [] });
+       setComponentNameRows(['']);
        fetchData();
     }
+  };
+
+  const updateComponentNameRow = (index: number, value: string) => {
+    setComponentNameRows(prev => prev.map((name, rowIndex) => rowIndex === index ? value : name));
+  };
+
+  const addComponentNameRow = () => {
+    setComponentNameRows(prev => [...prev, '']);
+  };
+
+  const removeComponentNameRow = (index: number) => {
+    setComponentNameRows(prev => prev.length === 1 ? [''] : prev.filter((_, rowIndex) => rowIndex !== index));
   };
 
   const toggleDepartment = (deptName: string) => {
@@ -2466,7 +2714,7 @@ const ChildItemListView: React.FC<{ onError: () => void }> = ({ onError }) => {
           <p className="hidden sm:block text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Manage standard parts and sub-assemblies</p>
         </div>
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => { setComponentNameRows(['']); setFormData({ name: '', departments: [] }); setIsModalOpen(true); }}
           aria-label="Add Component"
           title="Add Component"
           className="w-10 h-10 sm:w-auto sm:h-auto sm:px-4 sm:py-2 rounded-lg font-bold flex items-center justify-center gap-2 shadow-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors whitespace-nowrap text-xs sm:text-sm shrink-0"
@@ -2502,16 +2750,28 @@ const ChildItemListView: React.FC<{ onError: () => void }> = ({ onError }) => {
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Standard Component">
          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-               <label className="text-[10px] font-black uppercase text-gray-400 mb-2 block tracking-widest ml-1">Component Name</label>
-               <input 
-                  required 
-                  className="w-full px-4 py-4 rounded-2xl border bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
-                  placeholder="e.g., Foam Insert, Plastic Corner Guard" 
-                  value={formData.name} 
-                  onChange={e => setFormData({...formData, name: e.target.value})} 
-               />
-            </div>
+             <div>
+                <label className="text-[10px] font-black uppercase text-gray-400 mb-2 block tracking-widest ml-1">Component Name</label>
+               <div className="space-y-2">
+                  {componentNameRows.map((name, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <input
+                        required={index === 0}
+                        className="w-full px-4 py-4 rounded-2xl border bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                        placeholder={index === 0 ? 'e.g., Foam Insert' : 'Another component name'}
+                        value={name}
+                        onChange={e => updateComponentNameRow(index, e.target.value)}
+                      />
+                      <button type="button" onClick={() => removeComponentNameRow(index)} className="p-3 rounded-xl text-red-400 hover:bg-red-50 hover:text-red-600" aria-label="Remove component row">
+                        <X size={18} />
+                      </button>
+                    </div>
+                  ))}
+               </div>
+               <button type="button" onClick={addComponentNameRow} className="mt-3 inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-black text-blue-700 hover:bg-blue-100">
+                 <Plus size={14} /> Add another component
+               </button>
+             </div>
             
             <div>
                 <label className="text-[10px] font-black uppercase text-gray-400 mb-3 block tracking-widest ml-1">Related Departments (Select at least one)</label>
@@ -3619,6 +3879,12 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
   const [bomMode, setBomMode] = useState<'unsaved' | 'saved'>('unsaved');
   const [bomSearchQuery, setBomSearchQuery] = useState('');
   const [bomCompanyFilter, setBomCompanyFilter] = useState('All');
+  const [componentItem, setComponentItem] = useState<Item | null>(null);
+  const [componentSearchQuery, setComponentSearchQuery] = useState('');
+  const [bomNewComponentNames, setBomNewComponentNames] = useState('');
+  const [bomNewComponentDepartments, setBomNewComponentDepartments] = useState<string[]>([]);
+  const [isAddingBomComponent, setIsAddingBomComponent] = useState(false);
+  const [componentRows, setComponentRows] = useState<{ id: string; name: string; qty: number | ''; departments: string[] }[]>([]);
   const involvingDepartments = useMemo(
     () => departments.filter(d => isInvolvingDepartment(d.name)),
     [departments]
@@ -3680,22 +3946,9 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
       : [];
   };
 
-  const savedItemKeySet = useMemo(() => {
-    const keys = new Set<string>();
-    plans.forEach((plan: any) => {
-      const company = String(plan.company_name || '').trim().toLowerCase();
-      const planItems = Array.isArray(plan.plan_items) ? plan.plan_items : [];
-      planItems.forEach((it: any) => {
-        const itemName = String(it.item_name || '').trim().toLowerCase();
-        if (company && itemName) keys.add(`${company}::${itemName}`);
-      });
-    });
-    return keys;
-  }, [plans]);
-
   const unsavedRows = useMemo(() => {
     return items
-      .filter((it: Item) => !savedItemKeySet.has(`${String(it.customer_name || '').trim().toLowerCase()}::${String(it.name || '').trim().toLowerCase()}`))
+      .filter((it: Item) => !Array.isArray(it.children) || it.children.length === 0)
       .map((it: Item) => ({
         item_id: it.id,
         item_name: it.name,
@@ -3704,13 +3957,27 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
         item_ref: it,
       }))
       .sort((a, b) => a.company_name.localeCompare(b.company_name) || a.item_name.localeCompare(b.item_name));
-  }, [items, savedItemKeySet]);
+  }, [items]);
+
+  const savedRows = useMemo(() => {
+    return items
+      .filter((it: Item) => Array.isArray(it.children) && it.children.length > 0)
+      .map((it: Item) => ({
+        item_id: it.id,
+        item_name: it.name,
+        company_name: it.customer_name,
+        default_qty: 1,
+        components_count: it.children?.length || 0,
+        item_ref: it,
+      }))
+      .sort((a, b) => a.company_name.localeCompare(b.company_name) || a.item_name.localeCompare(b.item_name));
+  }, [items]);
 
   const companyOptions = useMemo(() => {
     const fromUnsaved = unsavedRows.map(r => r.company_name);
-    const fromSaved = plans.map((p: any) => p.company_name);
+    const fromSaved = savedRows.map(r => r.company_name);
     return Array.from(new Set([...fromUnsaved, ...fromSaved])).filter(Boolean).sort((a, b) => a.localeCompare(b));
-  }, [unsavedRows, plans]);
+  }, [unsavedRows, savedRows]);
 
   const filteredUnsavedRows = useMemo(() => {
     const query = bomSearchQuery.trim().toLowerCase();
@@ -3722,25 +3989,15 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
     });
   }, [unsavedRows, bomSearchQuery, bomCompanyFilter]);
 
-  const filteredSavedPlans = useMemo(() => {
+  const filteredSavedRows = useMemo(() => {
     const query = bomSearchQuery.trim().toLowerCase();
-    return plans.filter((plan: any) => {
-      const company = String(plan.company_name || '');
-      const firstItem = Array.isArray(plan.plan_items) && plan.plan_items[0]?.item_name
-        ? String(plan.plan_items[0].item_name)
-        : String(plan.plan_name || '');
-
-      const companyMatch = bomCompanyFilter === 'All' || company === bomCompanyFilter;
+    return savedRows.filter(row => {
+      const companyMatch = bomCompanyFilter === 'All' || row.company_name === bomCompanyFilter;
       if (!companyMatch) return false;
       if (!query) return true;
-
-      return (
-        company.toLowerCase().includes(query) ||
-        firstItem.toLowerCase().includes(query) ||
-        String(plan.plan_name || '').toLowerCase().includes(query)
-      );
+      return row.item_name.toLowerCase().includes(query) || row.company_name.toLowerCase().includes(query);
     });
-  }, [plans, bomSearchQuery, bomCompanyFilter]);
+  }, [savedRows, bomSearchQuery, bomCompanyFilter]);
 
   const resetBuilder = () => {
     setEditingPlanId(null);
@@ -3889,20 +4146,129 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
   };
 
   const createBomFromUnsavedRow = (row: { item_id: number; item_name: string; company_name: string; default_qty: number; item_ref: Item; }) => {
-    const qty = Math.max(1, Number(row.default_qty) || 1);
-    setSelectedCompany(row.company_name);
-    setPlanName(`${row.company_name} - ${row.item_name}`);
-    setPlanItems([
-      {
-        local_id: makeLocalId(),
-        item_id: row.item_id,
-        item_name: row.item_name,
-        drawing_no: row.item_ref.drawing_no || '',
-        item_qty: qty,
-        components: buildDefaultComponentsFromItem(row.item_ref, qty),
+    openItemBomComponentDialog(row.item_ref);
+  };
+
+  const openItemBomComponentDialog = (item: Item) => {
+    setComponentItem(item);
+    setComponentRows((item.children || []).map((child: any) => ({
+      id: String(child.id || ''),
+      name: child.name,
+      qty: Math.max(1, Number(child.qtyPerMaster) || 1),
+      departments: Array.isArray(child.departments) ? child.departments : [],
+    })));
+    setComponentSearchQuery('');
+    setBomNewComponentNames('');
+    setBomNewComponentDepartments(item.departments?.length ? item.departments : []);
+  };
+
+  const addLibraryComponentToItemBom = (component: any) => {
+    setComponentRows(prev => {
+      if (prev.some(row => normalizeDuplicateKey(row.name) === normalizeDuplicateKey(component.name || ''))) return prev;
+      return [...prev, {
+        id: String(component.id || ''),
+        name: component.name,
+        qty: 1,
+        departments: Array.isArray(component.departments) ? component.departments : [],
+      }];
+    });
+  };
+
+  const updateItemBomQty = (index: number, value: string) => {
+    setComponentRows(prev => prev.map((row, rowIndex) => rowIndex === index ? { ...row, qty: value === '' ? '' : Math.max(1, Number(value)) } : row));
+  };
+
+  const toggleBomNewComponentDepartment = (deptName: string) => {
+    setBomNewComponentDepartments(prev => prev.includes(deptName) ? prev.filter(name => name !== deptName) : [...prev, deptName]);
+  };
+
+  const addBomComponentsToLibrary = async () => {
+    const names = Array.from(new Set(bomNewComponentNames
+      .split(/[\n,;]+/)
+      .map(name => name.trim().replace(/\s+/g, ' '))
+      .filter(Boolean)));
+
+    if (names.length === 0) {
+      alert('Type one or more component names first.');
+      return;
+    }
+
+    if (bomNewComponentDepartments.length === 0) {
+      alert('Please select at least one department for the new component(s).');
+      return;
+    }
+
+    const existingKeys = new Set(allComponents.map(component => normalizeDuplicateKey(component.name || '')));
+    const selectedKeys = new Set(componentRows.map(component => normalizeDuplicateKey(component.name || '')));
+    const namesToCreate = names.filter(name => !existingKeys.has(normalizeDuplicateKey(name)));
+    const existingToSelect = allComponents.filter(component => names.some(name => normalizeDuplicateKey(name) === normalizeDuplicateKey(component.name || '')));
+
+    if (namesToCreate.length === 0 && existingToSelect.length === 0) {
+      alert('All typed components are already selected or unavailable.');
+      return;
+    }
+
+    setIsAddingBomComponent(true);
+    try {
+      const createdComponents: any[] = [];
+      if (namesToCreate.length > 0) {
+        const { data: createdRows, error } = await supabase.from('child_items').insert(namesToCreate.map(name => ({
+          name,
+          departments: bomNewComponentDepartments,
+          qty_per_master: 0,
+          parent_item_id: null,
+        })));
+
+        if (error) {
+          alert(error.message);
+          return;
+        }
+
+        createdComponents.push(...((createdRows || []) as any[]));
+        setAllComponents(prev => [...prev, ...createdComponents]);
       }
-    ]);
-    setEditingPlanId(null);
+
+      const nextComponents = [...existingToSelect, ...createdComponents];
+      setComponentRows(prev => {
+        const next = [...prev];
+        for (const component of nextComponents) {
+          if (!selectedKeys.has(normalizeDuplicateKey(component.name || '')) && !next.find(row => normalizeDuplicateKey(row.name) === normalizeDuplicateKey(component.name || ''))) {
+            next.push({ id: String(component.id || ''), name: component.name, qty: 1, departments: component.departments || bomNewComponentDepartments });
+          }
+        }
+        return next;
+      });
+      setComponentSearchQuery('');
+      setBomNewComponentNames('');
+    } finally {
+      setIsAddingBomComponent(false);
+    }
+  };
+
+  const saveItemBomComponents = async () => {
+    if (!componentItem) return;
+    if (componentRows.length === 0) {
+      alert('Please add at least one component before saving BOM.');
+      return;
+    }
+
+    const children = componentRows.map(row => ({
+      id: row.id,
+      name: row.name,
+      qtyPerMaster: Number(row.qty) > 0 ? Number(row.qty) : 1,
+      departments: row.departments,
+    }));
+
+    const { error } = await supabase.from('items').update({ children }).eq('id', componentItem.id);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    setComponentItem(null);
+    setComponentRows([]);
+    setBomMode('saved');
+    fetchData();
   };
 
   const editPlan = (plan: any) => {
@@ -3936,6 +4302,15 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
     if (!selectedSavedPlanId) return null;
     return plans.find((p: any) => p.id === selectedSavedPlanId) || null;
   }, [plans, selectedSavedPlanId]);
+
+  const filteredBomLibraryComponents = useMemo(() => {
+    const query = componentSearchQuery.trim().toLowerCase();
+    return allComponents.filter(component => {
+      if (!query) return true;
+      return String(component.name || '').toLowerCase().includes(query) ||
+        (component.departments || []).some((dept: string) => String(dept).toLowerCase().includes(query));
+    });
+  }, [allComponents, componentSearchQuery]);
 
   const addNewComponentToLibrary = async () => {
     if (!newComponent.name.trim()) {
@@ -4131,8 +4506,8 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
 
       <Card className="p-0 overflow-hidden">
         <div className="px-4 py-3 border-b bg-gray-50 flex items-center justify-between">
-          <h3 className="font-black text-gray-800">{bomMode === 'unsaved' ? 'Unsaved BOM Plans' : 'Saved BOM Plans'}</h3>
-          <span className="text-xs font-bold text-gray-400">{bomMode === 'unsaved' ? filteredUnsavedRows.length : filteredSavedPlans.length} row(s)</span>
+          <h3 className="font-black text-gray-800">{bomMode === 'unsaved' ? 'Items Without BOM Components' : 'Items With Saved BOM Components'}</h3>
+          <span className="text-xs font-bold text-gray-400">{bomMode === 'unsaved' ? filteredUnsavedRows.length : filteredSavedRows.length} row(s)</span>
         </div>
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full min-w-[850px] text-sm">
@@ -4146,15 +4521,14 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {bomMode === 'saved' && filteredSavedPlans.map(plan => (
-                <tr key={plan.id} className={`${selectedSavedPlanId === plan.id ? 'bg-indigo-50/60' : ''}`} onClick={() => setSelectedSavedPlanId(plan.id)}>
-                  <td className="px-4 py-2 font-black text-indigo-700">{Array.isArray(plan.plan_items) && plan.plan_items[0]?.item_name ? plan.plan_items[0].item_name : plan.plan_name}</td>
-                  <td className="px-4 py-2 font-semibold text-gray-700">{plan.company_name}</td>
-                  <td className="px-4 py-2">{Array.isArray(plan.plan_items) ? plan.plan_items.reduce((sum: number, it: any) => sum + (Number(it.item_qty) || 0), 0) : 0}</td>
-                  <td className="px-4 py-2 text-xs text-gray-500">{plan.updated_at ? new Date(plan.updated_at).toLocaleString() : '-'}</td>
+              {bomMode === 'saved' && filteredSavedRows.map(row => (
+                <tr key={`${row.company_name}-${row.item_id}`}>
+                  <td className="px-4 py-2 font-black text-indigo-700">{row.item_name}</td>
+                  <td className="px-4 py-2 font-semibold text-gray-700">{row.company_name}</td>
+                  <td className="px-4 py-2">{row.components_count} component(s)</td>
+                  <td className="px-4 py-2 text-xs text-gray-500">Saved in Item Master</td>
                   <td className="px-4 py-2 text-right space-x-2">
-                    <button onClick={(e) => { e.stopPropagation(); editPlan(plan); }} className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-black">Edit BOM</button>
-                    <button onClick={(e) => { e.stopPropagation(); printPlan(plan); }} className="px-3 py-1.5 bg-slate-900 text-white rounded-lg text-xs font-black">Print</button>
+                    <button onClick={() => openItemBomComponentDialog(row.item_ref)} className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-black">Edit BOM</button>
                   </td>
                 </tr>
               ))}
@@ -4169,9 +4543,9 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
                   </td>
                 </tr>
               ))}
-              {(bomMode === 'saved' ? filteredSavedPlans.length === 0 : filteredUnsavedRows.length === 0) && (
+              {(bomMode === 'saved' ? filteredSavedRows.length === 0 : filteredUnsavedRows.length === 0) && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-gray-400 italic">{bomMode === 'saved' ? 'No saved BOM plans found.' : 'No unsaved BOM rows found.'}</td>
+                  <td colSpan={5} className="px-4 py-10 text-center text-gray-400 italic">{bomMode === 'saved' ? 'No items with saved BOM components found.' : 'No items without BOM components found.'}</td>
                 </tr>
               )}
             </tbody>
@@ -4179,29 +4553,24 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
         </div>
 
         <div className="md:hidden p-2 space-y-2">
-          {bomMode === 'saved' && filteredSavedPlans.map(plan => (
+          {bomMode === 'saved' && filteredSavedRows.map(row => (
             <div
-              key={plan.id}
-              onClick={() => setSelectedSavedPlanId(plan.id)}
-              className={`rounded-xl border p-3 ${selectedSavedPlanId === plan.id ? 'border-indigo-300 bg-indigo-50/60' : 'border-gray-200 bg-white'}`}
+              key={`${row.company_name}-${row.item_id}`}
+              className="rounded-xl border border-gray-200 bg-white p-3"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="font-black text-indigo-700 text-sm leading-tight break-words">
-                    {Array.isArray(plan.plan_items) && plan.plan_items[0]?.item_name ? plan.plan_items[0].item_name : plan.plan_name}
+                    {row.item_name}
                   </div>
-                  <div className="text-[11px] font-semibold text-gray-500 mt-1 break-words">{plan.company_name}</div>
-                </div>
-                <div className="text-[10px] text-gray-500 font-semibold text-right">
-                  {plan.updated_at ? new Date(plan.updated_at).toLocaleDateString() : '-'}
+                  <div className="text-[11px] font-semibold text-gray-500 mt-1 break-words">{row.company_name}</div>
                 </div>
               </div>
               <div className="mt-2 text-xs text-gray-600 font-semibold">
-                Qty: {Array.isArray(plan.plan_items) ? plan.plan_items.reduce((sum: number, it: any) => sum + (Number(it.item_qty) || 0), 0) : 0}
+                {row.components_count} component(s)
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <button onClick={(e) => { e.stopPropagation(); editPlan(plan); }} className="px-2 py-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-black">Edit BOM</button>
-                <button onClick={(e) => { e.stopPropagation(); printPlan(plan); }} className="px-2 py-2 bg-slate-900 text-white rounded-lg text-xs font-black">Print</button>
+              <div className="mt-3">
+                <button onClick={() => openItemBomComponentDialog(row.item_ref)} className="w-full px-2 py-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-black">Edit BOM</button>
               </div>
             </div>
           ))}
@@ -4217,13 +4586,115 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
             </div>
           ))}
 
-          {(bomMode === 'saved' ? filteredSavedPlans.length === 0 : filteredUnsavedRows.length === 0) && (
+          {(bomMode === 'saved' ? filteredSavedRows.length === 0 : filteredUnsavedRows.length === 0) && (
             <div className="py-10 text-center text-gray-400 italic text-sm">
-              {bomMode === 'saved' ? 'No saved BOM plans found.' : 'No unsaved BOM rows found.'}
+              {bomMode === 'saved' ? 'No items with saved BOM components found.' : 'No items without BOM components found.'}
             </div>
           )}
         </div>
       </Card>
+
+      <Modal isOpen={!!componentItem} onClose={() => setComponentItem(null)} title={`Components: ${componentItem?.name || ''}`} maxWidthClassName="max-w-5xl">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)]">
+          <div className="space-y-3">
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <input
+                value={componentSearchQuery}
+                onChange={e => setComponentSearchQuery(e.target.value)}
+                placeholder="Search library components..."
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 py-3 pl-11 pr-4 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="max-h-[420px] overflow-y-auto rounded-xl border border-gray-200">
+              <div className="border-b bg-gray-50 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-gray-400">Available Library</div>
+              <div className="space-y-1 p-2">
+                {filteredBomLibraryComponents.map(component => (
+                  <div key={component.id} className="flex items-center justify-between rounded-lg border border-transparent p-3 transition-all hover:border-gray-200 hover:bg-gray-50">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-bold text-gray-800">{component.name}</div>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {(component.departments || []).map((dept: string) => <Badge key={dept} color="gray">{dept}</Badge>)}
+                      </div>
+                    </div>
+                    <button type="button" onClick={() => addLibraryComponentToItemBom(component)} className="rounded-lg bg-blue-600 p-2 text-white hover:bg-blue-700"><Plus size={16} /></button>
+                  </div>
+                ))}
+                {filteredBomLibraryComponents.length === 0 && <div className="p-8 text-center text-sm font-semibold text-gray-400">No matching components found.</div>}
+              </div>
+            </div>
+            {componentSearchQuery.trim() && filteredBomLibraryComponents.length === 0 && (
+              <div className="space-y-5 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                <div>
+                  <div className="text-base font-black text-gray-800">New Standard Component</div>
+                  <div className="mt-1 text-xs font-semibold text-gray-400">Add one or many components to the library and this BOM.</div>
+                </div>
+                <div>
+                  <label className="mb-2 ml-1 block text-[10px] font-black uppercase tracking-widest text-gray-400">Component name</label>
+                  <textarea
+                    value={bomNewComponentNames}
+                    onChange={e => setBomNewComponentNames(e.target.value)}
+                    placeholder="e.g., Foam Insert, Plastic Corner Guard"
+                    className="h-20 w-full resize-none rounded-2xl border bg-gray-50 px-4 py-3 text-sm font-semibold outline-none transition-all focus:ring-2 focus:ring-blue-500"
+                  />
+                  <div className="mt-1 text-[10px] font-semibold text-gray-400">Bulk add: separate names with comma, semicolon, or new line.</div>
+                </div>
+                <div>
+                  <label className="mb-3 ml-1 block text-[10px] font-black uppercase tracking-widest text-gray-400">Related departments (select at least one)</label>
+                  <div className="flex flex-wrap gap-2">
+                    {involvingDepartments.map(department => (
+                      <button
+                        key={department.id}
+                        type="button"
+                        onClick={() => toggleBomNewComponentDepartment(department.name)}
+                        className={`rounded-xl border px-4 py-3 text-xs font-bold transition-all ${bomNewComponentDepartments.includes(department.name) ? 'border-indigo-600 bg-indigo-600 text-white shadow-lg' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+                      >
+                        {department.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={addBomComponentsToLibrary}
+                  disabled={!bomNewComponentNames.trim() || isAddingBomComponent || bomNewComponentDepartments.length === 0}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-4 text-sm font-black text-white shadow-xl transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+                >
+                  <Plus size={16} /> {isAddingBomComponent ? 'Adding...' : 'Add to Library'}
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-3 rounded-2xl border border-blue-100 bg-blue-50/40 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-black text-blue-800">Selected Components ({componentRows.length})</div>
+                <div className="text-[11px] font-semibold text-gray-500">Saving here makes this item a Saved BOM.</div>
+              </div>
+            </div>
+            <div className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
+              {componentRows.map((component, index) => (
+                <div key={`${component.name}-${index}`} className="rounded-xl border border-blue-100 bg-white p-3 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-black text-gray-800">{component.name}</div>
+                      <div className="mt-1 flex flex-wrap gap-1">{component.departments.map(dept => <Badge key={dept} color="gray">{dept}</Badge>)}</div>
+                    </div>
+                    <button type="button" onClick={() => setComponentRows(prev => prev.filter((_, rowIndex) => rowIndex !== index))} className="p-1 text-red-400 hover:text-red-600"><X size={16} /></button>
+                  </div>
+                  <div className="mt-3 flex items-center gap-2">
+                    <span className="text-[10px] font-black uppercase text-gray-400">Qty per item</span>
+                    <input type="number" min="1" value={component.qty} onChange={e => updateItemBomQty(index, e.target.value)} onBlur={e => { if (!e.target.value) updateItemBomQty(index, '1'); }} className="w-20 rounded-lg border px-2 py-1 text-center text-sm font-bold" />
+                  </div>
+                </div>
+              ))}
+              {componentRows.length === 0 && <div className="py-12 text-center text-sm font-semibold text-blue-300">No components selected for this item.</div>}
+            </div>
+            <button type="button" onClick={saveItemBomComponents} className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-3 text-sm font-black text-white hover:bg-green-700"><Save size={16} /> Save BOM Components</button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal isOpen={isComponentModalOpen} onClose={() => setIsComponentModalOpen(false)} title="Create Component">
         <div className="space-y-4">
@@ -4966,6 +5437,10 @@ const formatFileSize = (size: number) => {
   if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 };
+
+const normalizeDuplicateKey = (value: string) => value.trim().replace(/\s+/g, ' ').toLowerCase();
+
+const normalizeMobileNumber = (value: string) => value.replace(/\D/g, '');
 
 const normalizeMailboxSubject = (subject = '') => subject
   .toLowerCase()

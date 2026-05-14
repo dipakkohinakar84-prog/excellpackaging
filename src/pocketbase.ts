@@ -105,6 +105,11 @@ const normalizeRecord = <T = any>(record: RecordModel | Record<string, any>): T 
     normalized.updated_at = normalized.updated;
   }
 
+  if (normalized.drawing_file && !normalized.drawing_image_url) {
+    const fileName = Array.isArray(normalized.drawing_file) ? normalized.drawing_file[0] : normalized.drawing_file;
+    if (fileName) normalized.drawing_image_url = pb.files.getURL(record as RecordModel, fileName);
+  }
+
   normalized.pb_id = record.id;
   return normalized as T;
 };

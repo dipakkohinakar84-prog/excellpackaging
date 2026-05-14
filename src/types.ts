@@ -67,6 +67,7 @@ export interface Item {
   customer_name: string;
   drawing_no: string;
   drawing_image_url?: string;
+  drawing_file?: string;
   remarks: string;
   departments: string[];
   children?: ChildItem[];

@@ -49,7 +49,8 @@ Fields:
 - `name`: text, required
 - `customer_name`: text
 - `drawing_no`: text
-- `drawing_image_url`: url or text
+- `drawing_image_url`: url or text (legacy link fallback)
+- `drawing_file`: file (drawing PDF/image upload)
 - `remarks`: text
 - `departments`: json
 - `children`: json
