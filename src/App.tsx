@@ -2604,7 +2604,11 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
               type="text"
               placeholder="Search library components..."
               value={componentSearch}
-              onChange={e => setComponentSearch(e.target.value)}
+              onChange={e => {
+                const nextSearch = e.target.value;
+                setComponentSearch(nextSearch);
+                setNewComponentNames(prev => (!prev.trim() || prev === componentSearch) ? nextSearch : prev);
+              }}
               className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition-all"
             />
           </div>
@@ -2679,7 +2683,6 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
                   placeholder="e.g., Foam Insert, Plastic Corner Guard"
                   className="h-20 w-full resize-none rounded-2xl border bg-gray-50 px-4 py-3 text-sm font-semibold outline-none transition-all focus:ring-2 focus:ring-blue-500"
                 />
-                <div className="mt-1 text-[10px] font-semibold text-gray-400">Bulk add: separate names with comma, semicolon, or new line.</div>
               </div>
               <div>
                 <label className="mb-3 ml-1 block text-[10px] font-black uppercase tracking-widest text-gray-400">Related departments (select at least one)</label>
@@ -5166,7 +5169,6 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
                     placeholder="e.g., Foam Insert, Plastic Corner Guard"
                     className="h-20 w-full resize-none rounded-2xl border bg-gray-50 px-4 py-3 text-sm font-semibold outline-none transition-all focus:ring-2 focus:ring-blue-500"
                   />
-                  <div className="mt-1 text-[10px] font-semibold text-gray-400">Bulk add: separate names with comma, semicolon, or new line.</div>
                 </div>
                 <div>
                   <label className="mb-3 ml-1 block text-[10px] font-black uppercase tracking-widest text-gray-400">Related departments (select at least one)</label>
