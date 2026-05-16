@@ -16,7 +16,6 @@ export type AppView =
   | 'custom-bom-print'
   | 'reports'
   | 'notification-audit'
-  | 'mailbox'
   | 'profile' 
   | 'backup';
 

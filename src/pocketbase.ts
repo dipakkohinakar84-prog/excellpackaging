@@ -70,7 +70,6 @@ const idFieldCollections = new Set([
   'dispatch_logs',
   'custom_bom_plans',
   'notification_events',
-  'mailbox_messages',
 ]);
 
 const legacyIdStart: Record<string, number> = {
@@ -83,7 +82,6 @@ const legacyIdStart: Record<string, number> = {
   dispatch_logs: 1,
   custom_bom_plans: 1,
   notification_events: 1,
-  mailbox_messages: 1,
 };
 
 const isValidLegacyId = (value: any) => (
@@ -282,8 +280,14 @@ class PocketBaseQuery<T = any> implements PromiseLike<QueryResult<T>> {
           return { data: normalizeRecord(record) as T, error: null, count: 1 };
         }
 
+        if (this.maxRows) {
+          const result = await collection.getList(1, this.maxRows, { filter, sort, requestKey: null });
+          const rows = result.items.map((record) => normalizeRecord(record));
+          return { data: rows as T, error: null, count: result.totalItems };
+        }
+
         const records = await collection.getFullList({ filter, sort, requestKey: null });
-        const rows = (this.maxRows ? records.slice(0, this.maxRows) : records).map((record) => normalizeRecord(record));
+        const rows = records.map((record) => normalizeRecord(record));
         return { data: rows as T, error: null, count: rows.length };
       }
 

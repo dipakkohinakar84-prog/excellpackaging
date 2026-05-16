@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue } from 'react';
 import { 
   Users, 
   Building2, 
@@ -55,15 +55,13 @@ import {
   Square,
   Truck,
   Bell,
-  Send,
-  Inbox,
-  Archive,
   Upload
 } from 'lucide-react';
 import { AppView, User, Customer, Item, WorkOrder, Department, WOStatus, ChildItem } from './types';
 import { supabase, supabaseAnonKey } from './supabase';
 import { canAccessView, filterWorkOrdersByDepartment, getQCApprovalProgress, sendNotification, normalizeDepartment } from './utils';
 import DepartmentStatusTracker from './DepartmentStatusTracker';
+import { getCachedData, invalidateCachedData, primeCachedData } from './dataCache';
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -185,6 +183,10 @@ const parseAssignedDepartments = (val: any): string[] => {
   
   return [str];
 };
+
+const normalizeDuplicateKey = (value: string) => value.trim().replace(/\s+/g, ' ').toLowerCase();
+
+const normalizeMobileNumber = (value: string) => value.replace(/\D/g, '');
 
 type CustomPlanComponent = {
   component_type?: 'component' | 'item';
@@ -354,11 +356,48 @@ const getBomParentReferences = (items: Item[], childType: BomRowType, childId: s
   )));
 };
 
+const buildBomReferenceIndex = (items: Item[]) => {
+  const componentParents = new Map<string, Item[]>();
+  const itemParents = new Map<string, Item[]>();
+
+  items.forEach(parent => {
+    (parent.children || []).forEach((child: any) => {
+      const target = getBomChildType(child) === 'item' ? itemParents : componentParents;
+      const key = String(child.id);
+      target.set(key, [...(target.get(key) || []), parent]);
+    });
+  });
+
+  return { componentParents, itemParents };
+};
+
 const alertBomDeleteBlocked = (rowName: string, parents: Item[]) => {
   const parentNames = parents.map(parent => parent.name).slice(0, 8).join('\n- ');
   const extraCount = Math.max(0, parents.length - 8);
   alert(`Cannot delete "${rowName}" because it is used in parent BOM(s).\n\nFirst remove it from:\n- ${parentNames}${extraCount > 0 ? `\n...and ${extraCount} more` : ''}`);
 };
+
+const loadCachedCollection = async <T,>(collection: string, sortField = 'name', limit?: number): Promise<T[]> => {
+  const key = `collection:${collection}:${sortField}:${limit || 'all'}`;
+  return getCachedData(key, async () => {
+    let query = supabase.from(collection).select('*').order(sortField, { ascending: sortField !== 'id' });
+    if (limit) query = query.limit(limit) as any;
+    const { data } = await query;
+    return (data || []) as T[];
+  });
+};
+
+const primeCachedCollection = (collection: string, sortField = 'name', limit?: number) => {
+  const key = `collection:${collection}:${sortField}:${limit || 'all'}`;
+  primeCachedData(key, async () => {
+    let query = supabase.from(collection).select('*').order(sortField, { ascending: sortField !== 'id' });
+    if (limit) query = query.limit(limit) as any;
+    const { data } = await query;
+    return data || [];
+  });
+};
+
+const invalidateCollectionCache = (collection: string) => invalidateCachedData(`collection:${collection}`);
 
 const STATUS_FILTER_ORDER: WOStatus[] = [
   'Not Started',
@@ -871,18 +910,17 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
   useEffect(() => {
     const fetchCounts = async () => {
       try {
-        const [users, depts, customers, items, wos, woRows] = await Promise.all([
+        const [users, depts, customers, items, wos, woRows, childCheck] = await Promise.all([
           supabase.from('users').select('*', { count: 'exact', head: true }),
           supabase.from('departments').select('*', { count: 'exact', head: true }),
           supabase.from('customers').select('*', { count: 'exact', head: true }),
           supabase.from('items').select('*', { count: 'exact', head: true }),
           supabase.from('work_orders').select('*', { count: 'exact', head: true }),
-          supabase.from('work_orders').select('*').order('id', { ascending: false }),
+          loadCachedCollection<WorkOrder>('work_orders', 'id', 500),
+          supabase.from('child_items').select('id', { count: 'exact', head: true }).limit(1),
         ]);
 
-        const { error: childError } = await supabase.from('child_items').select('id', { count: 'exact', head: true }).limit(1);
-
-        if (users.error?.code === '42P01' || childError?.code === '42P01') {
+        if (users.error?.code === '42P01' || childCheck.error?.code === '42P01') {
           onError();
           return;
         }
@@ -895,8 +933,8 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
           wos: wos.count || 0,
         });
 
-        if (woRows.data) {
-          setOrders(woRows.data.map((wo: any) => ({
+        if (woRows) {
+          setOrders(woRows.map((wo: any) => ({
             ...wo,
             assigned_departments: parseAssignedDepartments(wo.assigned_departments),
             department_statuses: Array.isArray(wo.department_statuses) ? wo.department_statuses : [],
@@ -1158,6 +1196,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [page, setPage] = useState(1);
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [vehicleOptions, setVehicleOptions] = useState<string[]>([]);
   const [isDispatchMetaModalOpen, setIsDispatchMetaModalOpen] = useState(false);
   const [dispatchMeta, setDispatchMeta] = useState({ invoiceNo: '', vehicleNo: '' });
@@ -1170,19 +1209,20 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
   const fetchData = async () => {
     setLoading(true);
     try {
-      const { data: woRes, error: woErr } = await supabase.from('work_orders').select('*').order('id', { ascending: false });
-      const { data: itemRes } = await supabase.from('items').select('*').order('name');
-      const { data: usersRes } = await supabase
-        .from('users')
-        .select('vehicle_number, department')
-        .order('vehicle_number', { ascending: true });
+      const [woResult, itemRes, usersRes] = await Promise.all([
+        supabase.from('work_orders').select('*').order('id', { ascending: false }),
+        loadCachedCollection<Item>('items'),
+        loadCachedCollection<User>('users', 'id', 200),
+      ]);
+      const { data: woRes, error: woErr } = woResult;
 
       if (woErr?.code === '42P01') { onError(); return; }
 
       if (woRes && itemRes) {
+        const itemsByName = new Map(itemRes.map(item => [item.name, item]));
         const enriched = woRes.map(wo => ({
           ...wo,
-          itemInfo: itemRes.find(i => i.name === wo.job_details),
+          itemInfo: itemsByName.get(wo.job_details),
           qty_dispatched: wo.qty_dispatched ?? 0,
         }));
 
@@ -1349,14 +1389,14 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
 
   const filteredOrders = useMemo(() => {
     const statusFiltered = statusFilter === 'All' ? data : data.filter(wo => wo.status === statusFilter);
-    if (!searchQuery) return statusFiltered;
-    const lowerQuery = searchQuery.toLowerCase();
+    if (!deferredSearchQuery) return statusFiltered;
+    const lowerQuery = deferredSearchQuery.toLowerCase();
     return statusFiltered.filter(wo =>
       wo.id.toString().includes(lowerQuery) ||
       wo.customer.toLowerCase().includes(lowerQuery) ||
       wo.job_details.toLowerCase().includes(lowerQuery)
     );
-  }, [data, searchQuery, statusFilter]);
+  }, [data, deferredSearchQuery, statusFilter]);
 
   const statusOptions = useMemo(() => {
     const uniqueStatuses = Array.from(new Set(data.map(wo => wo.status)));
@@ -1973,9 +2013,8 @@ const DepartmentList: React.FC<{ onError: () => void }> = ({ onError }) => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const { data: res, error } = await supabase.from('departments').select('*').order('name');
-      if (error?.code === '42P01') { onError(); return; }
-      if (res) setData(res);
+      const res = await loadCachedCollection<Department>('departments');
+      setData(res);
     } catch (e) { onError(); }
     setLoading(false);
   };
@@ -1993,6 +2032,7 @@ const DepartmentList: React.FC<{ onError: () => void }> = ({ onError }) => {
       setIsModalOpen(false); 
       setEditingDepartment(null);
       setFormData({ name: '', incharge: '', supervisor: '', info: '' }); 
+      invalidateCollectionCache('departments');
       fetchData(); 
     }
   };
@@ -2027,7 +2067,7 @@ const DepartmentList: React.FC<{ onError: () => void }> = ({ onError }) => {
               <h3 className="text-lg font-black text-gray-800">{d.name}</h3>
               <div className="flex gap-1">
                 <button onClick={() => { setEditingDepartment(d); setFormData({ name: d.name, incharge: d.incharge || '', supervisor: d.supervisor || '', info: d.info || '' }); setIsModalOpen(true); }} className="text-blue-500 hover:text-blue-700 transition-colors"><Edit size={16} /></button>
-                <button onClick={async () => { if(confirm("Delete?")) { await supabase.from('departments').delete().eq('id', d.id); fetchData(); } }} className="text-red-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
+                <button onClick={async () => { if(confirm("Delete?")) { await supabase.from('departments').delete().eq('id', d.id); invalidateCollectionCache('departments'); fetchData(); } }} className="text-red-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
               </div>
             </div>
             <div className="space-y-2 mt-4">
@@ -2060,11 +2100,12 @@ const CustomerManagement: React.FC<{ onError: () => void }> = ({ onError }) => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const { data: res, error } = await supabase.from('customers').select('*').order('name');
-      const { data: itemRes } = await supabase.from('items').select('*').order('name');
-      if (error?.code === '42P01') { onError(); return; }
-      if (res) setData(res);
-      if (itemRes) setItems(itemRes);
+      const [res, itemRes] = await Promise.all([
+        loadCachedCollection<Customer>('customers'),
+        loadCachedCollection<Item>('items'),
+      ]);
+      setData(res);
+      setItems(itemRes);
     } catch (e) { onError(); }
     setLoading(false);
   };
@@ -2089,6 +2130,8 @@ const CustomerManagement: React.FC<{ onError: () => void }> = ({ onError }) => {
       setIsModalOpen(false); 
       setEditingCustomer(null);
       setFormData({ name: '', proprietor: '', address: '', city: '', contact: '', email: '', gst: '', type: 'Direct', reference: '', remarks: '' }); 
+      invalidateCollectionCache('customers');
+      invalidateCollectionCache('items');
       fetchData(); 
     }
   };
@@ -2106,6 +2149,7 @@ const CustomerManagement: React.FC<{ onError: () => void }> = ({ onError }) => {
 
     if (confirm("Delete?")) {
       await supabase.from('customers').delete().eq('id', customer.id);
+      invalidateCollectionCache('customers');
       fetchData();
     }
   };
@@ -2205,18 +2249,19 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
     () => departments.filter(d => isInvolvingDepartment(d.name)),
     [departments]
   );
+  const bomReferenceIndex = useMemo(() => buildBomReferenceIndex(data), [data]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const { data: itemsRes, error: itemsErr } = await supabase.from('items').select('*').order('id', { ascending: false });
-      const { data: custRes } = await supabase.from('customers').select('*').order('name');
-      const { data: deptRes } = await supabase.from('departments').select('*').order('name');
-      
-      if (itemsErr?.code === '42P01') { onError(); return; }
-      if (itemsRes) setData(itemsRes);
-      if (custRes) setCustomers(custRes);
-      if (deptRes) setDepartments(deptRes);
+      const [itemsRes, custRes, deptRes] = await Promise.all([
+        loadCachedCollection<Item>('items', 'id'),
+        loadCachedCollection<Customer>('customers'),
+        loadCachedCollection<Department>('departments'),
+      ]);
+      setData([...itemsRes].sort((a, b) => Number(b.id) - Number(a.id)));
+      setCustomers(custRes);
+      setDepartments(deptRes);
     } catch (e) { onError(); }
     setLoading(false);
   };
@@ -2316,6 +2361,11 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
       (item.drawing_no || '').toLowerCase().includes(query) ||
       (item.departments || []).some((d: string) => d.toLowerCase().includes(query));
   });
+
+  const availableBomRows = [
+    ...filteredComponents.map(component => ({ kind: 'component' as const, row: component })),
+    ...filteredBomItems.map(item => ({ kind: 'item' as const, row: item })),
+  ];
 
   const addComponentToSelection = (component: any) => {
     const nextRow: BomSelectionRow = {
@@ -2449,12 +2499,13 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
     } else {
       setIsChildModalOpen(false);
       setSelectedComponents([]);
+      invalidateCollectionCache('items');
       fetchData(); 
     }
   };
 
   const deleteItem = async (item: Item) => {
-    const parentReferences = getBomParentReferences(data, 'item', item.id).filter(parent => parent.id !== item.id);
+    const parentReferences = (bomReferenceIndex.itemParents.get(String(item.id)) || []).filter(parent => parent.id !== item.id);
     if (parentReferences.length > 0) {
       alertBomDeleteBlocked(item.name, parentReferences);
       return;
@@ -2462,6 +2513,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
 
     if (confirm("Delete Item?")) {
       await supabase.from('items').delete().eq('id', item.id);
+      invalidateCollectionCache('items');
       fetchData();
     }
   };
@@ -2537,6 +2589,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
             setIsModalOpen(false); 
             setEditingItem(null);
             resetItemForm();
+            invalidateCollectionCache('items');
             fetchData(); 
           }
         }} className="space-y-4">
@@ -2596,78 +2649,103 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
          )}
       </Modal>
 
-      <Modal isOpen={isChildModalOpen} onClose={() => setIsChildModalOpen(false)} title={`Components: ${selectedItem?.name}`} maxWidthClassName={componentSearch.trim() && filteredComponents.length === 0 ? 'max-w-5xl' : 'max-w-2xl'}>
-        <div className="flex flex-col gap-6">
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-            <input 
-              type="text"
-              placeholder="Search library components..."
-              value={componentSearch}
-              onChange={e => {
-                const nextSearch = e.target.value;
-                setComponentSearch(nextSearch);
-                setNewComponentNames(prev => (!prev.trim() || prev === componentSearch) ? nextSearch : prev);
-              }}
-              className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-            />
-          </div>
-
-          <div className={componentSearch.trim() && filteredComponents.length === 0 ? 'grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)]' : ''}>
-          <div className="space-y-3">
-          <div className="border border-gray-200 rounded-xl overflow-hidden flex flex-col max-h-60">
-              <div className="bg-gray-50 px-4 py-2 border-b border-gray-200 text-[10px] font-black uppercase text-gray-400 tracking-widest">Available Library</div>
-              <div className="overflow-y-auto p-2 space-y-1">
-                {filteredComponents.map(component => (
-                  <div key={component.id} className="flex items-center justify-between p-3 border border-transparent hover:border-gray-200 hover:bg-gray-50 rounded-lg group transition-all">
+      <Modal isOpen={isChildModalOpen} onClose={() => setIsChildModalOpen(false)} title={`Components: ${selectedItem?.name}`} maxWidthClassName="max-w-6xl">
+        <div className="grid h-[calc(90vh-150px)] min-h-0 grid-cols-1 gap-6 overflow-hidden lg:grid-cols-[380px_minmax(0,1fr)]">
+          <div className="flex min-h-0 flex-col gap-4 rounded-2xl border border-blue-100 bg-blue-50/50 p-4">
+            <h4 className="font-bold text-blue-800 mb-3 text-sm flex items-center gap-2">
+               <Layers size={16}/> Selected Components ({selectedComponents.length})
+            </h4>
+            
+            {selectedComponents.length > 0 ? (
+              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pr-1">
+                {selectedComponents.map((item, idx) => (
+                  <div key={idx} className="flex items-center gap-3 p-3 bg-white border border-blue-100 rounded-xl shadow-sm">
                     <div className="flex-1">
-                      <div className="font-bold text-gray-800 text-sm">{component.name}</div>
-                      <div className="flex gap-1 mt-1">
-                        {(component.departments || []).map((d: string) => (
-                          <span key={d} className="inline-block bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide">
-                            {d}
-                          </span>
-                        ))}
-                      </div>
+                       <span className="font-bold text-gray-800 text-sm block">{item.name}</span>
+                       <Badge color={item.type === 'item' ? 'indigo' : 'blue'}>{item.type === 'item' ? 'Item' : 'Component'}</Badge>
+                       <div className="flex gap-1 mt-1">
+                          {(item.departments || []).map((d: string) => (
+                             <span key={d} className="text-[9px] text-gray-400 font-bold uppercase">{d}</span>
+                          ))}
+                       </div>
+                    </div>
+                    <div className="flex items-center gap-2 bg-gray-50 rounded-lg p-1 border">
+                       <span className="text-[9px] font-black text-gray-400 pl-2">QTY</span>
+                       <input
+                        type="number"
+                        min="1"
+                        value={item.qty}
+                        onChange={e => updateComponentQty(idx, e.target.value)}
+                        onBlur={e => { if (!e.target.value) updateComponentQty(idx, '1'); }}
+                        className="w-12 px-1 py-1 bg-white text-center font-bold border rounded outline-none text-sm"
+                      />
                     </div>
                     <button
-                      type="button"
-                      onClick={() => addComponentToSelection(component)}
-                      className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-sm hover:shadow-md transition-all active:scale-95"
+                      onClick={() => removeComponentFromSelection(idx)}
+                      className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                     >
-                      <Plus size={16} />
+                      <X size={16} />
                     </button>
                   </div>
                 ))}
-                {filteredComponents.length === 0 && (
-                   <div className="p-6 text-center text-sm font-semibold text-gray-400">No matching components found.</div>
-                 )}
               </div>
+            ) : (
+               <div className="text-center py-8 text-blue-300 text-sm font-medium">No components selected for this item.</div>
+            )}
+            <button
+              onClick={saveComponentsToItem}
+              className="w-full py-4 bg-green-600 text-white rounded-xl font-black shadow-lg hover:bg-green-700 transition-all flex justify-center items-center gap-2"
+            >
+              <Save size={18} /> Save BOM
+            </button>
           </div>
 
-          <div className="border border-indigo-100 rounded-xl overflow-hidden flex flex-col max-h-60">
-             <div className="bg-indigo-50 px-4 py-2 border-b border-indigo-100 text-[10px] font-black uppercase text-indigo-500 tracking-widest">Available Items</div>
-             <div className="overflow-y-auto p-2 space-y-1">
-                {filteredBomItems.map(item => (
-                  <div key={item.id} className="flex items-center justify-between p-3 border border-transparent hover:border-indigo-100 hover:bg-indigo-50/50 rounded-lg group transition-all">
-                    <div className="flex-1 min-w-0">
-                      <div className="font-bold text-gray-800 text-sm truncate">{item.name}</div>
-                      <div className="text-[10px] font-semibold text-gray-400 truncate">{item.customer_name} {item.drawing_no ? `| ${item.drawing_no}` : ''}</div>
-                      <div className="flex gap-1 mt-1 flex-wrap">
-                        {(item.departments || []).map((d: string) => <Badge key={d} color="gray">{d}</Badge>)}
+          <div className="flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden">
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+              <input 
+                type="text"
+                placeholder="Search library components..."
+                value={componentSearch}
+                onChange={e => {
+                  const nextSearch = e.target.value;
+                  setComponentSearch(nextSearch);
+                  setNewComponentNames(prev => (!prev.trim() || prev === componentSearch) ? nextSearch : prev);
+                }}
+                className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+              />
+            </div>
+
+            <div className={`flex min-h-0 flex-1 flex-col overflow-hidden ${componentSearch.trim() && filteredComponents.length === 0 ? 'xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)] xl:gap-6' : ''}`}>
+            <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200">
+                <div className="bg-gray-50 px-4 py-2 border-b border-gray-200 text-[10px] font-black uppercase text-gray-400 tracking-widest">Available Components & Items</div>
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2 space-y-1">
+                  {availableBomRows.map(({ kind, row }) => (
+                    <div key={`${kind}-${row.id}`} className="flex items-center justify-between p-3 border border-transparent hover:border-gray-200 hover:bg-gray-50 rounded-lg group transition-all">
+                      <div className="flex-1">
+                        <div className="font-bold text-gray-800 text-sm">{row.name}</div>
+                        {kind === 'item' && <div className="text-[10px] font-semibold text-gray-400 truncate">{row.customer_name} {row.drawing_no ? `| ${row.drawing_no}` : ''}</div>}
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          <Badge color={kind === 'item' ? 'indigo' : 'blue'}>{kind === 'item' ? 'Item' : 'Component'}</Badge>
+                          {(row.departments || []).map((d: string) => <Badge key={d} color="gray">{d}</Badge>)}
+                        </div>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => kind === 'item' ? addItemToSelection(row as Item) : addComponentToSelection(row)}
+                        className={`p-2 text-white rounded-lg shadow-sm hover:shadow-md transition-all active:scale-95 ${kind === 'item' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                      >
+                        <Plus size={16} />
+                      </button>
                     </div>
-                    <button type="button" onClick={() => addItemToSelection(item)} className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-sm hover:shadow-md transition-all active:scale-95">
-                      <Plus size={16} />
-                    </button>
-                  </div>
-                ))}
-                {filteredBomItems.length === 0 && (
-                   <div className="p-6 text-center text-sm font-semibold text-indigo-300">No available item matches this search.</div>
-                )}
-             </div>
-          </div>
-          </div>
+                  ))}
+                  {availableBomRows.length === 0 && (
+                     <div className="p-6 text-center text-sm font-semibold text-gray-400">No matching components or items found.</div>
+                   )}
+                </div>
+            </div>
+            </div>
 
           {componentSearch.trim() && filteredComponents.length === 0 && (
             <div className="space-y-5 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -2710,56 +2788,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
             </div>
           )}
           </div>
-
-          <div className="bg-blue-50/50 rounded-2xl p-4 border border-blue-100">
-            <h4 className="font-bold text-blue-800 mb-3 text-sm flex items-center gap-2">
-               <Layers size={16}/> Selected Components ({selectedComponents.length})
-            </h4>
-            
-            {selectedComponents.length > 0 ? (
-              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                {selectedComponents.map((item, idx) => (
-                  <div key={idx} className="flex items-center gap-3 p-3 bg-white border border-blue-100 rounded-xl shadow-sm">
-                    <div className="flex-1">
-                       <span className="font-bold text-gray-800 text-sm block">{item.name}</span>
-                       <Badge color={item.type === 'item' ? 'indigo' : 'blue'}>{item.type === 'item' ? 'Item' : 'Component'}</Badge>
-                       <div className="flex gap-1 mt-1">
-                          {(item.departments || []).map((d: string) => (
-                             <span key={d} className="text-[9px] text-gray-400 font-bold uppercase">{d}</span>
-                          ))}
-                       </div>
-                    </div>
-                    <div className="flex items-center gap-2 bg-gray-50 rounded-lg p-1 border">
-                       <span className="text-[9px] font-black text-gray-400 pl-2">QTY</span>
-                       <input
-                        type="number"
-                        min="1"
-                        value={item.qty}
-                        onChange={e => updateComponentQty(idx, e.target.value)}
-                        onBlur={e => { if (!e.target.value) updateComponentQty(idx, '1'); }}
-                        className="w-12 px-1 py-1 bg-white text-center font-bold border rounded outline-none text-sm"
-                      />
-                    </div>
-                    <button
-                      onClick={() => removeComponentFromSelection(idx)}
-                      className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-               <div className="text-center py-8 text-blue-300 text-sm font-medium">No components selected for this item.</div>
-            )}
           </div>
-
-          <button
-            onClick={saveComponentsToItem}
-            className="w-full py-4 bg-green-600 text-white rounded-xl font-black shadow-lg hover:bg-green-700 transition-all flex justify-center items-center gap-2"
-          >
-            <Save size={18} /> Save BOM
-          </button>
         </div>
       </Modal>
 
@@ -2901,18 +2930,19 @@ const ChildItemListView: React.FC<{ onError: () => void }> = ({ onError }) => {
     () => departments.filter(d => isInvolvingDepartment(d.name)),
     [departments]
   );
+  const bomReferenceIndex = useMemo(() => buildBomReferenceIndex(items), [items]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const { data: res, error } = await supabase.from('child_items').select('*').order('name');
-      const { data: deptRes } = await supabase.from('departments').select('*').order('name');
-      const { data: itemRes } = await supabase.from('items').select('*').order('name');
-      
-      if (error?.code === '42P01') { onError(); return; }
-      if (res) setData(res);
-      if (deptRes) setDepartments(deptRes);
-      if (itemRes) setItems(itemRes);
+      const [res, deptRes, itemRes] = await Promise.all([
+        loadCachedCollection<any>('child_items'),
+        loadCachedCollection<Department>('departments'),
+        loadCachedCollection<Item>('items'),
+      ]);
+      setData(res);
+      setDepartments(deptRes);
+      setItems(itemRes);
     } catch (e) { onError(); }
     setLoading(false);
   };
@@ -2991,6 +3021,8 @@ const ChildItemListView: React.FC<{ onError: () => void }> = ({ onError }) => {
        setIsModalOpen(false);
        setEditingComponent(null);
        setComponentNameRows([{ name: '', departments: [] }]);
+       invalidateCollectionCache('child_items');
+       invalidateCollectionCache('items');
        fetchData();
     }
   };
@@ -3047,7 +3079,7 @@ const ChildItemListView: React.FC<{ onError: () => void }> = ({ onError }) => {
   }, [data, searchQuery, departmentFilter]);
 
   const deleteComponent = async (component: any) => {
-    const parentReferences = getBomParentReferences(items, 'component', component.id);
+    const parentReferences = bomReferenceIndex.componentParents.get(String(component.id)) || [];
     if (parentReferences.length > 0) {
       alertBomDeleteBlocked(component.name, parentReferences);
       return;
@@ -3055,6 +3087,7 @@ const ChildItemListView: React.FC<{ onError: () => void }> = ({ onError }) => {
 
     if (confirm("Delete this component from library?")) {
       await supabase.from('child_items').delete().eq('id', component.id);
+      invalidateCollectionCache('child_items');
       fetchData();
     }
   };
@@ -3260,22 +3293,27 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [page, setPage] = useState(1);
+  const deferredSearchQuery = useDeferredValue(searchQuery);
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const { data: woRes, error: woErr } = await supabase.from('work_orders').select('*').order('id', { ascending: false });
-        const { data: itemRes } = await supabase.from('items').select('*').order('name');
+        const [woResult, itemRes] = await Promise.all([
+          supabase.from('work_orders').select('*').order('id', { ascending: false }),
+          loadCachedCollection<Item>('items'),
+        ]);
+        const { data: woRes, error: woErr } = woResult;
 
         if (woErr?.code === '42P01') { onError(); return; }
 
         if (woRes && itemRes) {
+          const itemsByName = new Map(itemRes.map(item => [item.name, item]));
           const enriched = woRes.map(wo => {
             const departments = parseAssignedDepartments(wo.assigned_departments);
             return {
               ...wo,
-              itemInfo: itemRes.find(i => i.name === wo.job_details),
+              itemInfo: itemsByName.get(wo.job_details),
               assigned_departments: departments,
             };
           });
@@ -3292,14 +3330,14 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
 
   const filteredOrders = useMemo(() => {
     const statusFiltered = statusFilter === 'All' ? data : data.filter(wo => wo.status === statusFilter);
-    if (!searchQuery) return statusFiltered;
-    const lowerCaseQuery = searchQuery.toLowerCase();
+    if (!deferredSearchQuery) return statusFiltered;
+    const lowerCaseQuery = deferredSearchQuery.toLowerCase();
     return statusFiltered.filter(wo =>
       wo.id.toString().includes(lowerCaseQuery) ||
       wo.customer.toLowerCase().includes(lowerCaseQuery) ||
       wo.job_details.toLowerCase().includes(lowerCaseQuery)
     );
-  }, [data, searchQuery, statusFilter]);
+  }, [data, deferredSearchQuery, statusFilter]);
 
   const statusOptions = useMemo(() => {
     const uniqueStatuses = Array.from(new Set(data.map(wo => wo.status)));
@@ -3420,6 +3458,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
   const [statusFilter, setStatusFilter] = useState('All');
   const [departmentFilter, setDepartmentFilter] = useState('All');
   const [page, setPage] = useState(1);
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [viewMode, setViewMode] = useState<'table' | 'card'>(() => (
     typeof window !== 'undefined' && window.innerWidth < 768 ? 'card' : 'table'
   ));
@@ -3457,20 +3496,23 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
   const fetchData = async () => {
     setLoading(true);
     try {
-      const { data: woRes, error: woErr } = await supabase.from('work_orders').select('*').order('id', { ascending: false });
-      
-      const { data: itemRes } = await supabase.from('items').select('*').order('name');
-      const { data: custRes } = await supabase.from('customers').select('*').order('name');
-      const { data: deptRes } = await supabase.from('departments').select('*').order('name'); 
+      const [woResult, itemRes, custRes, deptRes] = await Promise.all([
+        supabase.from('work_orders').select('*').order('id', { ascending: false }),
+        loadCachedCollection<Item>('items'),
+        loadCachedCollection<Customer>('customers'),
+        loadCachedCollection<Department>('departments'),
+      ]);
+      const { data: woRes, error: woErr } = woResult;
       
       if (woErr?.code === '42P01') { onError(); return; }
       
       if (woRes && itemRes) {
+        const itemsByName = new Map(itemRes.map(item => [item.name, item]));
         const enriched = woRes.map(wo => {
           const departments = parseAssignedDepartments(wo.assigned_departments);
           return {
             ...wo,
-            itemInfo: itemRes.find(i => i.name === wo.job_details),
+            itemInfo: itemsByName.get(wo.job_details),
             assigned_departments: departments,
           };
         });
@@ -3504,16 +3546,16 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
 
     const itemChildren = (params.currentItem.children || []).filter((child: any) => getBomChildType(child) === 'item');
 
-    for (const child of itemChildren) {
+    await Promise.all(itemChildren.map(async (child: any) => {
       const childItem = items.find(item => Number(item.id) === Number(child.id));
-      if (!childItem || visited.has(Number(childItem.id))) continue;
+      if (!childItem || visited.has(Number(childItem.id))) return;
 
       const childQtyPerParent = Math.max(1, Number(child.qtyPerMaster) || 1);
       const suborderQty = Math.max(1, Number(params.currentQty) || 1) * childQtyPerParent;
       const directDepartments = collectDirectWorkDepartments(childItem);
       const assignedDepartments = directDepartments.length > 0 ? directDepartments : collectItemBomDepartments(items, childItem);
 
-      if (assignedDepartments.length === 0) continue;
+      if (assignedDepartments.length === 0) return;
 
       const { data: insertedSuborder, error: suborderError } = await supabase
         .from('work_orders')
@@ -3537,19 +3579,18 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
 
       if (suborderError) {
         alert(`Parent order was created, but suborder for ${childItem.name} failed: ${suborderError.message}`);
-        continue;
+        return;
       }
 
       if (insertedSuborder) {
-        for (const dept of assignedDepartments) {
-          await sendBackgroundPushEvent({
+        invalidateCollectionCache('work_orders');
+        void Promise.all(assignedDepartments.map(dept => sendBackgroundPushEvent({
             title: 'New Suborder Assigned',
             body: `Parent WO #${params.parentWorkOrderId} | Suborder #${insertedSuborder.id} | ${dept.replace(/_/g, ' ')}\n${childItem.name}`.trim(),
             departments: [dept],
             workOrderId: insertedSuborder.id,
             actor: loggedInUser.username,
-          });
-        }
+          }))).catch(error => console.error('Suborder notification failed:', error));
 
         await createSubordersForItem({
           ...params,
@@ -3559,7 +3600,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
           visited: new Set(visited),
         });
       }
-    }
+    }));
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -3609,17 +3650,16 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
       if (error) {
         alert(error.message);
       } else {
+        invalidateCollectionCache('work_orders');
         if (insertedOrder && sanitizedAssignedDepartments.length > 0) {
             sendNotification('New Work Order', `Work Order: ${formData.job_details}`, sanitizedAssignedDepartments);
-            for (const dept of sanitizedAssignedDepartments) {
-              await sendBackgroundPushEvent({
+            void Promise.all(sanitizedAssignedDepartments.map(dept => sendBackgroundPushEvent({
                 title: 'New Work Assigned',
                 body: `Order #${insertedOrder.id} | ${dept.replace(/_/g, ' ')}\n${formData.job_details}`.trim(),
                 departments: [dept],
                 workOrderId: insertedOrder.id,
                 actor: loggedInUser.username,
-              });
-            }
+              }))).catch(error => console.error('Work order notification failed:', error));
 
             if (selectedOrderItem) {
               await createSubordersForItem({
@@ -3661,15 +3701,15 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
       ? statusFiltered.filter(wo => (wo.assigned_departments || []).some(dept => normalizeDepartment(dept) === normalizeDepartment(departmentFilter)))
       : statusFiltered;
 
-    if (!searchQuery) return departmentFiltered;
-    const lowerCaseQuery = searchQuery.toLowerCase();
+    if (!deferredSearchQuery) return departmentFiltered;
+    const lowerCaseQuery = deferredSearchQuery.toLowerCase();
     return departmentFiltered.filter(wo =>
       wo.id.toString().includes(lowerCaseQuery) ||
       wo.customer.toLowerCase().includes(lowerCaseQuery) ||
       wo.job_details.toLowerCase().includes(lowerCaseQuery) ||
       (wo.drawing || '').toLowerCase().includes(lowerCaseQuery)
     );
-  }, [data, searchQuery, statusFilter, departmentFilter, canFilterByDepartment]);
+  }, [data, deferredSearchQuery, statusFilter, departmentFilter, canFilterByDepartment]);
 
   useEffect(() => {
     setPage(1);
@@ -4202,52 +4242,63 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                       });
 
                       const newOverallStatus = allApproved ? 'QC Approved' : wo.status;
+                      const optimisticWo = { ...wo, department_statuses: updatedStatuses, status: newOverallStatus };
+                      setWo(optimisticWo);
                       
-                      await supabase.from('work_orders').update({ department_statuses: updatedStatuses, status: newOverallStatus }).eq('id', wo.id);
+                      const { error } = await supabase.from('work_orders').update({ department_statuses: updatedStatuses, status: newOverallStatus }).eq('id', wo.id);
+                      if (error) throw error;
+                      invalidateCollectionCache('work_orders');
+
+                      const notificationTasks: Promise<any>[] = [];
 
                       if (status === 'Work Started' && previousStatus !== 'Work Started') {
-                        await sendBackgroundPushEvent({
+                        notificationTasks.push(sendBackgroundPushEvent({
                           title: 'Work Started',
                           body: `Order #${wo.id} | ${department.replace(/_/g, ' ')}\nProduction has started`,
                           departments: ['Office'],
                           workOrderId: wo.id,
                           actor: loggedInUser.username,
-                        });
+                        }));
                       }
 
                       if (status === 'Ready for QC' && previousStatus !== 'Ready for QC') {
-                        await sendBackgroundPushEvent({
+                        notificationTasks.push(sendBackgroundPushEvent({
                           title: 'QC Check Required',
                           body: `Order #${wo.id} | ${department.replace(/_/g, ' ')}\nReady for quality approval`,
                           departments: ['Quality_Control'],
                           workOrderId: wo.id,
                           actor: loggedInUser.username,
-                        });
+                        }));
                       }
 
                       if ((qcStatus === 'QC Approved' || qcStatus === 'QC Denied') && previousQCStatus !== qcStatus) {
-                        await sendBackgroundPushEvent({
+                        notificationTasks.push(sendBackgroundPushEvent({
                           title: qcStatus,
                           body: `Order #${wo.id} | ${department.replace(/_/g, ' ')}\n${qcStatus}`,
                           departments: [department],
                           workOrderId: wo.id,
                           actor: loggedInUser.username,
-                        });
+                        }));
                       }
 
                       if (!wasAllApproved && allApproved && newOverallStatus === 'QC Approved') {
-                        await sendBackgroundPushEvent({
+                        notificationTasks.push(sendBackgroundPushEvent({
                           title: 'Dispatch Ready',
                           body: `Order #${wo.id}\nQC approved. Ready for dispatch`,
                           departments: ['Dispatch'],
                           workOrderId: wo.id,
                           actor: loggedInUser.username,
-                        });
+                        }));
                       }
 
-                       fetchWO();
+                      if (notificationTasks.length > 0) {
+                        void Promise.all(notificationTasks).catch(error => {
+                          console.error('Status notification failed:', error);
+                        });
+                      }
                      } catch (err) {
                        console.error('Status update failed:', err);
+                       setWo(wo);
                        alert('Failed to update status');
                      } finally {
                        setIsUpdatingStatus(false);
@@ -5895,1015 +5946,6 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
   );
 };
 
-// --- Office Mailbox ---
-
-type MailboxMessage = {
-  id: number;
-  subject: string;
-  body: string;
-  sender_user_id: number;
-  sender_name: string;
-  recipient_user_ids?: number[];
-  recipient_customer_ids?: number[];
-  recipient_departments?: string[];
-  read_by_user_ids?: number[];
-  attachments?: MailboxAttachment[];
-  delivery_status?: 'erp_only' | 'email_sent' | 'email_failed' | 'partial_failed' | string;
-  delivery_error?: string;
-  sent_email_count?: number;
-  failed_email_count?: number;
-  sent_at?: string;
-  direction?: 'inbound' | 'outbound' | string;
-  external_message_id?: string;
-  from_email?: string;
-  from_name?: string;
-  to_email?: string;
-  priority?: 'normal' | 'urgent' | string;
-  created?: string;
-  created_at?: string;
-};
-
-type MailboxAttachment = {
-  name: string;
-  size: number;
-  type: string;
-  data_url: string;
-};
-
-const toNumberArray = (value: any): number[] => {
-  if (Array.isArray(value)) return value.map(Number).filter(Number.isFinite);
-  if (!value) return [];
-  try {
-    const parsed = JSON.parse(String(value));
-    return Array.isArray(parsed) ? parsed.map(Number).filter(Number.isFinite) : [];
-  } catch (_error) {
-    return [];
-  }
-};
-
-const toStringArray = (value: any): string[] => {
-  if (Array.isArray(value)) return value.map(String);
-  if (!value) return [];
-  try {
-    const parsed = JSON.parse(String(value));
-    return Array.isArray(parsed) ? parsed.map(String) : [];
-  } catch (_error) {
-    return [];
-  }
-};
-
-const toAttachmentArray = (value: any): MailboxAttachment[] => {
-  if (Array.isArray(value)) return value as MailboxAttachment[];
-  if (!value) return [];
-  try {
-    const parsed = JSON.parse(String(value));
-    return Array.isArray(parsed) ? parsed as MailboxAttachment[] : [];
-  } catch (_error) {
-    return [];
-  }
-};
-
-const formatFileSize = (size: number) => {
-  if (!Number.isFinite(size)) return '';
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-};
-
-const normalizeDuplicateKey = (value: string) => value.trim().replace(/\s+/g, ' ').toLowerCase();
-
-const normalizeMobileNumber = (value: string) => value.replace(/\D/g, '');
-
-const normalizeMailboxSubject = (subject = '') => subject
-  .toLowerCase()
-  .replace(/^\s*((re|fw|fwd):\s*)+/i, '')
-  .trim();
-
-const getMailApiUrl = () => {
-  const explicitUrl = import.meta.env.VITE_MAIL_API_URL as string | undefined;
-  if (explicitUrl) return explicitUrl;
-  const pushApiUrl = import.meta.env.VITE_PUSH_API_URL as string | undefined;
-  return pushApiUrl?.replace('/api/send-push', '/api/send-mail') || '';
-};
-
-const getMailSyncApiUrl = () => {
-  const mailApiUrl = getMailApiUrl();
-  return mailApiUrl?.replace('/api/send-mail', '/api/sync-inbox') || '';
-};
-
-const MailboxView: React.FC<{ user: User; onError: () => void }> = ({ user, onError }) => {
-  const [messages, setMessages] = useState<MailboxMessage[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [syncingInbox, setSyncingInbox] = useState(false);
-  const [lastMailboxRefresh, setLastMailboxRefresh] = useState<Date | null>(null);
-  const [lastInboxSyncResult, setLastInboxSyncResult] = useState('Auto sync active');
-  const [isComposeOpen, setIsComposeOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'inbox' | 'unread' | 'urgent' | 'sent' | 'all'>('inbox');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedMessage, setSelectedMessage] = useState<MailboxMessage | null>(null);
-  const [conversationClosed, setConversationClosed] = useState(false);
-  const [mobileMessage, setMobileMessage] = useState<MailboxMessage | null>(null);
-  const [sendMode, setSendMode] = useState<'all' | 'users' | 'departments' | 'clients'>('clients');
-  const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
-  const [selectedCustomerIds, setSelectedCustomerIds] = useState<number[]>([]);
-  const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
-  const [formData, setFormData] = useState({ subject: '', body: '', priority: 'normal' as 'normal' | 'urgent' });
-  const [replyBody, setReplyBody] = useState('');
-  const [attachments, setAttachments] = useState<MailboxAttachment[]>([]);
-  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
-  const mobileAttachmentInputRef = useRef<HTMLInputElement | null>(null);
-
-  const fetchData = useCallback(async (background = false) => {
-    if (!background) setLoading(true);
-    try {
-      const [messageRes, userRes, deptRes, customerRes] = await Promise.all([
-        supabase.from('mailbox_messages').select('*').order('id', { ascending: false }),
-        supabase.from('users').select('*').order('username'),
-        supabase.from('departments').select('*').order('name'),
-        supabase.from('customers').select('*').order('name'),
-      ]);
-
-      if (messageRes.error?.code === '42P01') {
-        onError();
-        return;
-      }
-
-      setMessages(((messageRes.data || []) as MailboxMessage[]).map(message => ({
-        ...message,
-        recipient_user_ids: toNumberArray(message.recipient_user_ids),
-        recipient_customer_ids: toNumberArray(message.recipient_customer_ids),
-        recipient_departments: toStringArray(message.recipient_departments),
-        read_by_user_ids: toNumberArray(message.read_by_user_ids),
-        attachments: toAttachmentArray(message.attachments),
-      })));
-      setUsers((userRes.data || []) as User[]);
-      setDepartments((deptRes.data || []) as Department[]);
-      setCustomers((customerRes.data || []) as Customer[]);
-      setLastMailboxRefresh(new Date());
-    } catch (_error) {
-      onError();
-    } finally {
-      if (!background) setLoading(false);
-    }
-  }, [onError]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  useEffect(() => {
-    const interval = window.setInterval(() => fetchData(true), 5000);
-    return () => window.clearInterval(interval);
-  }, [fetchData]);
-
-  const userDepartment = normalizeDepartment(user.department);
-
-  const isInboxMessage = useCallback((message: MailboxMessage) => {
-    const recipientUserIds = toNumberArray(message.recipient_user_ids);
-    const recipientDepartments = toStringArray(message.recipient_departments).map(normalizeDepartment);
-    return recipientUserIds.includes(user.id) || recipientDepartments.includes(userDepartment) || recipientDepartments.includes('All');
-  }, [user.id, userDepartment]);
-
-  const isRead = useCallback((message: MailboxMessage) => toNumberArray(message.read_by_user_ids).includes(user.id), [user.id]);
-
-  const visibleMessages = useMemo(() => {
-    const tabFiltered = messages.filter(message => {
-      if (activeTab === 'sent') return Number(message.sender_user_id) === Number(user.id);
-      if (activeTab === 'unread') return isInboxMessage(message) && !isRead(message);
-      if (activeTab === 'urgent') return (isInboxMessage(message) || Number(message.sender_user_id) === Number(user.id)) && message.priority === 'urgent';
-      if (activeTab === 'inbox') return isInboxMessage(message);
-      return isInboxMessage(message) || Number(message.sender_user_id) === Number(user.id);
-    });
-
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return tabFiltered;
-    return tabFiltered.filter(message =>
-      String(message.subject || '').toLowerCase().includes(q) ||
-      String(message.body || '').toLowerCase().includes(q) ||
-      String(message.sender_name || '').toLowerCase().includes(q) ||
-      toNumberArray(message.recipient_customer_ids).some(id => {
-        const customer = customers.find(row => Number(row.id) === Number(id));
-        return String(customer?.name || '').toLowerCase().includes(q) || String(customer?.email || '').toLowerCase().includes(q);
-      })
-    );
-  }, [activeTab, messages, searchQuery, user.id, isInboxMessage, isRead, customers]);
-
-  const unreadCount = useMemo(() => messages.filter(message => isInboxMessage(message) && !isRead(message)).length, [messages, isInboxMessage, isRead]);
-  const urgentCount = useMemo(() => messages.filter(message => isInboxMessage(message) && message.priority === 'urgent').length, [messages, isInboxMessage]);
-  const showMobileCompose = typeof window !== 'undefined' && window.innerWidth < 1024 && isComposeOpen;
-  const threadMessages = useMemo(() => {
-    if (!selectedMessage) return [] as MailboxMessage[];
-    const selectedSubject = normalizeMailboxSubject(selectedMessage.subject);
-    const selectedCustomers = toNumberArray(selectedMessage.recipient_customer_ids);
-    const selectedParticipantEmails = [selectedMessage.from_email, selectedMessage.direction === 'outbound' ? selectedMessage.to_email : '']
-      .filter(Boolean)
-      .flatMap(email => String(email).split(','))
-      .map(email => email.trim().toLowerCase())
-      .filter(email => email.includes('@'));
-
-    return messages
-      .filter(message => {
-        if (message.id === selectedMessage.id) return true;
-        const sameSubject = Boolean(selectedSubject && normalizeMailboxSubject(message.subject) === selectedSubject);
-        const messageCustomers = toNumberArray(message.recipient_customer_ids);
-        const sameCustomer = selectedCustomers.length > 0 && messageCustomers.some(id => selectedCustomers.includes(id));
-        const messageParticipantEmails = [message.from_email, message.direction === 'outbound' ? message.to_email : '']
-          .filter(Boolean)
-          .flatMap(email => String(email).split(','))
-          .map(email => email.trim().toLowerCase())
-          .filter(email => email.includes('@'));
-        const sameParticipant = selectedParticipantEmails.length > 0 && messageParticipantEmails.some(email => selectedParticipantEmails.includes(email));
-
-        return sameSubject && (sameCustomer || sameParticipant);
-      })
-      .sort((a, b) => new Date(a.sent_at || a.created_at || a.created || '').getTime() - new Date(b.sent_at || b.created_at || b.created || '').getTime());
-  }, [messages, selectedMessage]);
-
-  useEffect(() => {
-    if (conversationClosed) return;
-    if (selectedMessage) {
-      const refreshedMessage = visibleMessages.find(message => message.id === selectedMessage.id);
-      if (refreshedMessage) {
-        if (refreshedMessage !== selectedMessage) setSelectedMessage(refreshedMessage);
-        return;
-      }
-    }
-    setSelectedMessage(visibleMessages[0] || null);
-  }, [visibleMessages, selectedMessage, conversationClosed]);
-
-  const formatMailboxDate = (message: MailboxMessage) => {
-    const raw = message.created_at || message.created;
-    if (!raw) return '';
-    const date = new Date(raw);
-    if (Number.isNaN(date.getTime())) return '';
-    return date.toLocaleString([], { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
-  };
-
-  const getRecipientLabel = (message: MailboxMessage) => {
-    const recipientDepartments = toStringArray(message.recipient_departments);
-    const recipientUserIds = toNumberArray(message.recipient_user_ids);
-    const recipientCustomerIds = toNumberArray(message.recipient_customer_ids);
-    if (recipientCustomerIds.length > 0) {
-      return recipientCustomerIds
-        .map(id => customers.find(row => Number(row.id) === Number(id))?.name)
-        .filter(Boolean)
-        .join(', ') || `${recipientCustomerIds.length} clients`;
-    }
-    if (recipientDepartments.length > 0) return recipientDepartments.map(dept => dept.replace(/_/g, ' ')).join(', ');
-    if (recipientUserIds.length === 0) return 'No recipients';
-    if (recipientUserIds.length === users.filter(row => row.id !== user.id).length) return 'All users';
-    return recipientUserIds
-      .map(id => users.find(row => Number(row.id) === Number(id))?.username)
-      .filter(Boolean)
-      .join(', ') || `${recipientUserIds.length} users`;
-  };
-
-  const getDeliveryLabel = (message: MailboxMessage) => {
-    if (message.direction === 'inbound') return 'Received email';
-    if (!message.delivery_status) return 'ERP mailbox';
-    if (message.delivery_status === 'inbound_received') return 'Received email';
-    if (message.delivery_status === 'email_sent') return `Email sent${message.sent_email_count ? ` (${message.sent_email_count})` : ''}`;
-    if (message.delivery_status === 'partial_failed') return `Partially sent (${message.sent_email_count || 0} sent, ${message.failed_email_count || 0} failed)`;
-    if (message.delivery_status === 'email_failed') return 'Email failed';
-    if (message.delivery_status === 'erp_only') return 'ERP only';
-    return message.delivery_status;
-  };
-
-  const syncInbox = async () => {
-    const syncUrl = getMailSyncApiUrl();
-    if (!syncUrl) {
-      alert('Mail sync API URL is not configured. Set VITE_MAIL_API_URL.');
-      return;
-    }
-
-    setSyncingInbox(true);
-    try {
-      const response = await fetch(syncUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ limit: 25 }),
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || 'Inbox sync failed');
-      await fetchData();
-      setLastInboxSyncResult(`Last sync imported ${result.imported || 0} email${Number(result.imported || 0) === 1 ? '' : 's'}`);
-      alert(`Inbox sync complete. Imported ${result.imported || 0} email${Number(result.imported || 0) === 1 ? '' : 's'}.`);
-    } catch (error: any) {
-      setLastInboxSyncResult(`Sync failed: ${error?.message || 'Unknown error'}`);
-      alert(error?.message || 'Inbox sync failed');
-    } finally {
-      setSyncingInbox(false);
-    }
-  };
-
-  const openMessage = async (message: MailboxMessage) => {
-    setConversationClosed(false);
-    setSelectedMessage(message);
-    if (typeof window !== 'undefined' && window.innerWidth < 1024) setMobileMessage(message);
-    if (!isInboxMessage(message) || isRead(message)) return;
-
-    const nextReadBy = Array.from(new Set([...toNumberArray(message.read_by_user_ids), user.id]));
-    setMessages(prev => prev.map(row => row.id === message.id ? { ...row, read_by_user_ids: nextReadBy } : row));
-    await supabase.from('mailbox_messages').update({ read_by_user_ids: nextReadBy }).eq('id', message.id);
-  };
-
-  const closeConversation = () => {
-    setConversationClosed(true);
-    setSelectedMessage(null);
-    setReplyBody('');
-  };
-
-  const handleAttachmentSelection = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []);
-    if (files.length === 0) return;
-
-    const maxFileSize = 2 * 1024 * 1024;
-    const acceptedFiles = files.filter(file => file.size <= maxFileSize);
-    if (acceptedFiles.length !== files.length) {
-      alert('Some files were skipped. Attachment limit is 2 MB per file.');
-    }
-
-    const nextAttachments = await Promise.all(acceptedFiles.map(file => new Promise<MailboxAttachment>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve({
-        name: file.name,
-        size: file.size,
-        type: file.type || 'application/octet-stream',
-        data_url: String(reader.result || ''),
-      });
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(file);
-    })));
-
-    setAttachments(prev => [...prev, ...nextAttachments].slice(0, 5));
-    event.target.value = '';
-  };
-
-  const handleSend = async (event: React.FormEvent) => {
-    event.preventDefault();
-
-    let recipientUserIds: number[] = [];
-    let recipientDepartments: string[] = [];
-    let recipientCustomerIds: number[] = [];
-
-    if (sendMode === 'all') {
-      recipientUserIds = users.map(row => row.id).filter(id => id !== user.id);
-    } else if (sendMode === 'users') {
-      recipientUserIds = selectedUserIds;
-    } else if (sendMode === 'departments') {
-      recipientDepartments = selectedDepartments.map(normalizeDepartment);
-    } else {
-      recipientCustomerIds = selectedCustomerIds;
-    }
-
-    if (recipientUserIds.length === 0 && recipientDepartments.length === 0 && recipientCustomerIds.length === 0) {
-      alert('Please select at least one recipient.');
-      return;
-    }
-
-    const { data: insertedMessages, error } = await supabase.from('mailbox_messages').insert([{
-      subject: formData.subject.trim(),
-      body: formData.body.trim(),
-      sender_user_id: user.id,
-      sender_name: user.username,
-      recipient_user_ids: recipientUserIds,
-      recipient_customer_ids: recipientCustomerIds,
-      recipient_departments: recipientDepartments,
-      read_by_user_ids: [user.id],
-      attachments,
-      priority: formData.priority,
-    }]);
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    const insertedMessage = Array.isArray(insertedMessages) ? insertedMessages[0] as MailboxMessage | undefined : insertedMessages as MailboxMessage | undefined;
-    let deliveryNotice = '';
-
-    if (recipientCustomerIds.length > 0) {
-      const mailApiUrl = getMailApiUrl();
-      const recipients = customers
-        .filter(customer => recipientCustomerIds.includes(Number(customer.id)))
-        .map(customer => ({ name: customer.name, email: customer.email || customer.contact }))
-        .filter(customer => String(customer.email || '').includes('@'));
-
-      let deliveryUpdate: Partial<MailboxMessage> = {
-        delivery_status: 'email_failed',
-        delivery_error: '',
-        sent_email_count: 0,
-        failed_email_count: Math.max(recipientCustomerIds.length - recipients.length, 0),
-      };
-
-      if (!mailApiUrl) {
-        deliveryUpdate.delivery_error = 'Mail API URL is not configured.';
-        deliveryNotice = 'Message saved, but real email was not sent because VITE_MAIL_API_URL is not configured.';
-      } else if (recipients.length === 0) {
-        deliveryUpdate.delivery_error = 'Selected clients do not have valid email addresses.';
-        deliveryNotice = 'Message saved, but no selected client has a valid email address.';
-      } else {
-        try {
-          const mailResponse = await fetch(mailApiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              subject: formData.subject.trim(),
-              body: formData.body.trim(),
-              senderName: user.username,
-              recipients,
-              attachments,
-            }),
-          });
-          const mailResult = await mailResponse.json().catch(() => ({}));
-
-          if (!mailResponse.ok) throw new Error(mailResult.error || 'Email send failed');
-
-          const sentCount = Number(mailResult.sent || 0);
-          const failedCount = Number(mailResult.failed || 0) + Number(mailResult.skipped || 0);
-          deliveryUpdate = {
-            delivery_status: sentCount > 0 && failedCount === 0 ? 'email_sent' : sentCount > 0 ? 'partial_failed' : 'email_failed',
-            delivery_error: Array.isArray(mailResult.errors) && mailResult.errors.length > 0 ? mailResult.errors.map((row: any) => `${row.email}: ${row.error}`).join('; ') : '',
-            sent_email_count: sentCount,
-            failed_email_count: failedCount,
-            sent_at: sentCount > 0 ? new Date().toISOString() : undefined,
-          };
-          deliveryNotice = sentCount > 0
-            ? `Real email sent to ${sentCount} client${sentCount === 1 ? '' : 's'}.`
-            : 'Message saved, but email delivery failed.';
-        } catch (mailError: any) {
-          deliveryUpdate.delivery_error = mailError?.message || 'Email send failed';
-          deliveryUpdate.failed_email_count = recipients.length;
-          deliveryNotice = `Message saved, but real email failed: ${deliveryUpdate.delivery_error}`;
-        }
-      }
-
-      if (insertedMessage?.id) {
-        await supabase.from('mailbox_messages').update(deliveryUpdate).eq('id', insertedMessage.id);
-      }
-    }
-
-    setFormData({ subject: '', body: '', priority: 'normal' });
-    setSelectedUserIds([]);
-    setSelectedCustomerIds([]);
-    setSelectedDepartments([]);
-    setAttachments([]);
-    setSendMode('clients');
-    setIsComposeOpen(false);
-    await fetchData();
-    if (deliveryNotice) alert(deliveryNotice);
-  };
-
-  const handleReply = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!selectedMessage || !replyBody.trim()) return;
-
-    const originalCustomerIds = toNumberArray(selectedMessage.recipient_customer_ids);
-    const inboundReplyEmail = selectedMessage.direction === 'inbound' && selectedMessage.from_email?.includes('@') ? selectedMessage.from_email : '';
-    const isReplyToClient = Boolean(inboundReplyEmail) || (Number(selectedMessage.sender_user_id) === Number(user.id) && originalCustomerIds.length > 0);
-    const recipientUserIds = !isReplyToClient && Number(selectedMessage.sender_user_id) !== Number(user.id) ? [Number(selectedMessage.sender_user_id)] : [];
-    const recipientCustomerIds = isReplyToClient ? originalCustomerIds : [];
-    const directEmailRecipients = inboundReplyEmail ? [{ name: selectedMessage.from_name || selectedMessage.sender_name || inboundReplyEmail, email: inboundReplyEmail }] : [];
-
-    if (recipientUserIds.length === 0 && recipientCustomerIds.length === 0 && directEmailRecipients.length === 0) {
-      alert('No reply recipient found for this conversation.');
-      return;
-    }
-
-    const subject = selectedMessage.subject?.toLowerCase().startsWith('re:') ? selectedMessage.subject : `Re: ${selectedMessage.subject}`;
-    const body = replyBody.trim();
-    const { data: insertedMessages, error } = await supabase.from('mailbox_messages').insert([{
-      subject,
-      body,
-      sender_user_id: user.id,
-      sender_name: user.username,
-      recipient_user_ids: recipientUserIds,
-      recipient_customer_ids: recipientCustomerIds,
-      recipient_departments: [],
-      read_by_user_ids: [user.id],
-      attachments: [],
-      priority: selectedMessage.priority || 'normal',
-      delivery_status: recipientCustomerIds.length > 0 || directEmailRecipients.length > 0 ? 'email_failed' : 'erp_only',
-      direction: 'outbound',
-      to_email: directEmailRecipients.map(recipient => recipient.email).join(', '),
-    }]);
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    const insertedMessage = Array.isArray(insertedMessages) ? insertedMessages[0] as MailboxMessage | undefined : insertedMessages as MailboxMessage | undefined;
-    let deliveryNotice = '';
-
-    if (recipientCustomerIds.length > 0 || directEmailRecipients.length > 0) {
-      const mailApiUrl = getMailApiUrl();
-      const recipients = directEmailRecipients.length > 0 ? directEmailRecipients : customers
-        .filter(customer => recipientCustomerIds.includes(Number(customer.id)))
-        .map(customer => ({ name: customer.name, email: customer.email || customer.contact }))
-        .filter(customer => String(customer.email || '').includes('@'));
-      let deliveryUpdate: Partial<MailboxMessage> = {
-        delivery_status: 'email_failed',
-        delivery_error: '',
-        sent_email_count: 0,
-        failed_email_count: Math.max((directEmailRecipients.length || recipientCustomerIds.length) - recipients.length, 0),
-      };
-
-      if (!mailApiUrl) {
-        deliveryUpdate.delivery_error = 'Mail API URL is not configured.';
-        deliveryNotice = 'Reply saved, but real email was not sent because VITE_MAIL_API_URL is not configured.';
-      } else if (recipients.length === 0) {
-        deliveryUpdate.delivery_error = 'Selected client does not have a valid email address.';
-        deliveryNotice = 'Reply saved, but the client does not have a valid email address.';
-      } else {
-        try {
-          const mailResponse = await fetch(mailApiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ subject, body, senderName: user.username, recipients, attachments: [] }),
-          });
-          const mailResult = await mailResponse.json().catch(() => ({}));
-          if (!mailResponse.ok) throw new Error(mailResult.error || 'Email send failed');
-          const sentCount = Number(mailResult.sent || 0);
-          const failedCount = Number(mailResult.failed || 0) + Number(mailResult.skipped || 0);
-          deliveryUpdate = {
-            delivery_status: sentCount > 0 && failedCount === 0 ? 'email_sent' : sentCount > 0 ? 'partial_failed' : 'email_failed',
-            delivery_error: Array.isArray(mailResult.errors) && mailResult.errors.length > 0 ? mailResult.errors.map((row: any) => `${row.email}: ${row.error}`).join('; ') : '',
-            sent_email_count: sentCount,
-            failed_email_count: failedCount,
-            sent_at: sentCount > 0 ? new Date().toISOString() : undefined,
-          };
-          deliveryNotice = sentCount > 0 ? `Reply email sent to ${sentCount} client${sentCount === 1 ? '' : 's'}.` : 'Reply saved, but email delivery failed.';
-        } catch (mailError: any) {
-          deliveryUpdate.delivery_error = mailError?.message || 'Email send failed';
-          deliveryUpdate.failed_email_count = recipients.length;
-          deliveryNotice = `Reply saved, but real email failed: ${deliveryUpdate.delivery_error}`;
-        }
-      }
-
-      if (insertedMessage?.id) {
-        await supabase.from('mailbox_messages').update(deliveryUpdate).eq('id', insertedMessage.id);
-      }
-    }
-
-    setReplyBody('');
-    setConversationClosed(false);
-    await fetchData();
-    if (deliveryNotice) alert(deliveryNotice);
-  };
-
-  const renderRecipientPicker = () => (
-    <div className="space-y-3">
-      <div className="flex flex-wrap gap-2">
-        {(['clients', 'all', 'users', 'departments'] as const).map(mode => (
-          <button
-            key={mode}
-            type="button"
-            onClick={() => setSendMode(mode)}
-            className={`rounded-md border px-3 py-1.5 text-xs font-black uppercase transition-colors ${sendMode === mode ? 'border-[#00a4bd] bg-[#e5f5f8] text-[#0091ae]' : 'border-[#dbe4ec] bg-white text-[#516f90] hover:bg-[#f5f8fa]'}`}
-          >
-            {mode}
-          </button>
-        ))}
-      </div>
-
-      {sendMode === 'clients' && (
-        <div className="grid max-h-44 grid-cols-1 gap-2 overflow-y-auto rounded-md border border-[#dbe4ec] bg-[#f5f8fa] p-2 sm:grid-cols-2">
-          {customers.map(customer => (
-            <button
-              key={customer.id}
-              type="button"
-              onClick={() => setSelectedCustomerIds(prev => prev.includes(customer.id) ? prev.filter(id => id !== customer.id) : [...prev, customer.id])}
-              className={`rounded-md px-3 py-2 text-left text-xs font-bold transition-colors ${selectedCustomerIds.includes(customer.id) ? 'bg-[#00a4bd] text-white' : 'bg-white text-[#33475b] hover:bg-[#eaf0f6]'}`}
-            >
-              {customer.name}
-              <div className="truncate text-[10px] opacity-70">{customer.email || customer.contact || 'No email/contact'}</div>
-            </button>
-          ))}
-          {customers.length === 0 && <div className="col-span-full py-6 text-center text-xs font-semibold text-[#516f90]">No clients found in customer master.</div>}
-        </div>
-      )}
-
-      {sendMode === 'users' && (
-        <div className="grid max-h-44 grid-cols-1 gap-2 overflow-y-auto rounded-md border border-[#dbe4ec] bg-[#f5f8fa] p-2 sm:grid-cols-2">
-          {users.filter(row => row.id !== user.id).map(row => (
-            <button
-              key={row.id}
-              type="button"
-              onClick={() => setSelectedUserIds(prev => prev.includes(row.id) ? prev.filter(id => id !== row.id) : [...prev, row.id])}
-              className={`rounded-md px-3 py-2 text-left text-xs font-bold transition-colors ${selectedUserIds.includes(row.id) ? 'bg-[#00a4bd] text-white' : 'bg-white text-[#33475b] hover:bg-[#eaf0f6]'}`}
-            >
-              {row.username}
-              <div className="text-[10px] opacity-70">{row.department}</div>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {sendMode === 'departments' && (
-        <div className="flex max-h-44 flex-wrap gap-2 overflow-y-auto rounded-md border border-[#dbe4ec] bg-[#f5f8fa] p-2">
-          {departments.map(department => (
-            <button
-              key={department.id}
-              type="button"
-              onClick={() => setSelectedDepartments(prev => prev.includes(department.name) ? prev.filter(name => name !== department.name) : [...prev, department.name])}
-              className={`rounded-md px-3 py-2 text-xs font-black transition-colors ${selectedDepartments.includes(department.name) ? 'bg-[#00a4bd] text-white' : 'bg-white text-[#33475b] hover:bg-[#eaf0f6]'}`}
-            >
-              {department.name}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {sendMode === 'all' && (
-        <div className="rounded-md border border-[#dbe4ec] bg-[#f5f8fa] px-3 py-2 text-xs font-semibold text-[#516f90]">
-          This message will be sent to all ERP users except you.
-        </div>
-      )}
-    </div>
-  );
-
-  if (loading) return <LoadingState message="Loading mailbox..." />;
-
-  return (
-    <div className="-m-3 md:-m-4 lg:-m-4 bg-white text-[#213343] lg:h-[calc(100vh-54px)] lg:min-h-0 lg:overflow-hidden">
-      <div className="grid grid-cols-1 lg:grid-cols-[280px_400px_minmax(480px,1fr)_330px] lg:h-[calc(100vh-54px)] lg:min-h-0">
-        <aside className="border-r border-[#dbe4ec] bg-white lg:flex lg:h-[calc(100vh-54px)] lg:min-h-0 lg:flex-col">
-          <div className="flex items-center justify-between border-b border-[#dbe4ec] px-6 py-5">
-            <div className="flex items-center gap-2">
-              <Inbox className="text-[#00a4bd]" size={22} />
-              <h2 className="text-xl font-black text-[#213343]">Inbox</h2>
-            </div>
-            <Search size={22} className="text-[#00a4bd]" />
-          </div>
-          <div className="px-5 py-4">
-            <button onClick={() => setIsComposeOpen(true)} className="mb-4 flex w-full items-center justify-center gap-2 rounded-md bg-[#ff5c35] px-4 py-2.5 text-sm font-black text-white shadow-sm transition-colors hover:bg-[#e04826]">
-              <Send size={16} /> Compose
-            </button>
-            <button type="button" onClick={syncInbox} disabled={syncingInbox} className="mb-4 flex w-full items-center justify-center gap-2 rounded-md border border-[#cbd6e2] bg-[#f5f8fa] px-4 py-2.5 text-sm font-black text-[#516f90] transition-colors hover:bg-[#eaf0f6] disabled:cursor-not-allowed disabled:opacity-60 lg:hidden">
-              <RefreshCw size={16} className={syncingInbox ? 'animate-spin' : ''} /> {syncingInbox ? 'Syncing' : 'Sync inbox'}
-            </button>
-            <div className="mb-4 rounded-md border border-[#dbe4ec] bg-[#f5f8fa] px-3 py-2 text-xs font-semibold text-[#516f90]">
-              <div className="flex items-center gap-2 font-black text-[#0091ae]"><span className="h-2.5 w-2.5 rounded-full bg-emerald-400" /> Near realtime</div>
-              <div className="mt-1">{lastInboxSyncResult}</div>
-              <div className="mt-1">Mailbox refresh: {lastMailboxRefresh ? lastMailboxRefresh.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'loading'}</div>
-            </div>
-            <div className="space-y-1">
-              {([
-                { key: 'inbox', label: 'All open', icon: Inbox, count: visibleMessages.length },
-                { key: 'unread', label: 'Unread', icon: Bell, count: unreadCount },
-                { key: 'urgent', label: 'Urgent', icon: AlertCircle, count: urgentCount },
-                { key: 'sent', label: 'Sent', icon: Send, count: 0 },
-                { key: 'all', label: 'All mail', icon: Archive, count: messages.length },
-              ] as const).map(tab => (
-                <button key={tab.key} onClick={() => { setConversationClosed(false); setActiveTab(tab.key); }} className={`flex w-full items-center justify-between rounded-sm px-3 py-2.5 text-left text-sm transition-colors ${activeTab === tab.key ? 'bg-[#eaf0f6] font-black text-[#213343]' : 'font-semibold text-[#213343] hover:bg-[#f5f8fa]'}`}>
-                  <span className="flex items-center gap-2"><tab.icon size={16} className="text-[#516f90]" /> {tab.label}</span>
-                  {tab.count > 0 && <span className="font-black text-[#213343]">{tab.count}</span>}
-                </button>
-              ))}
-            </div>
-            <div className="mt-6 border-t border-[#dbe4ec] pt-5">
-              <div className="mb-2 text-xs font-black uppercase tracking-widest text-[#516f90]">Channels</div>
-              {['Clients', 'Email', 'Departments', 'Office'].map((label, index) => (
-                <div key={label} className="flex items-center justify-between px-3 py-2 text-sm font-semibold text-[#213343]">
-                  <span>{label}</span>
-                  <span>{index === 0 ? customers.length : index === 1 ? messages.length : index === 2 ? departments.length : users.filter(row => normalizeDepartment(row.department) === 'Office').length}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="mt-auto hidden border-t border-[#dbe4ec] px-6 py-4 lg:block">
-            <button type="button" onClick={syncInbox} disabled={syncingInbox} className="flex w-full items-center justify-between rounded-md border border-[#cbd6e2] bg-[#f5f8fa] px-3 py-2 text-left text-sm font-semibold text-[#516f90] hover:bg-[#eaf0f6] disabled:cursor-not-allowed disabled:opacity-60">
-              <span>{syncingInbox ? 'Syncing inbox...' : 'Sync client inbox'}</span>
-              <RefreshCw size={15} className={syncingInbox ? 'animate-spin' : ''} />
-            </button>
-            <div className="mt-5 flex items-center gap-2 text-sm font-semibold text-[#516f90]"><Settings size={16} /> Inbox Settings</div>
-          </div>
-        </aside>
-
-        <section className="border-r border-[#dbe4ec] bg-white lg:flex lg:h-[calc(100vh-54px)] lg:min-h-0 lg:flex-col">
-          <div className="flex items-center justify-between border-b border-[#dbe4ec] px-4 py-4">
-            <label className="flex items-center gap-3">
-              <input type="checkbox" className="h-4 w-4 rounded border-[#cbd6e2]" readOnly />
-              <span className="text-xs font-semibold text-[#516f90]">{visibleMessages.length} conversations</span>
-            </label>
-            <button className="flex items-center gap-1 text-sm font-black text-[#0091ae]">Newest <ChevronRight size={14} className="rotate-90" /></button>
-          </div>
-          <div className="relative">
-            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-[#516f90]" size={17} />
-            <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search conversations" className="w-full border-b border-[#dbe4ec] bg-[#f5f8fa] py-3 pl-12 pr-4 text-sm font-semibold outline-none placeholder:text-[#7c98b6]" />
-          </div>
-          <div className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
-            {visibleMessages.map(message => {
-              const unread = isInboxMessage(message) && !isRead(message);
-              const selected = selectedMessage?.id === message.id;
-              return (
-                <button key={message.id} onClick={() => openMessage(message)} className={`relative flex w-full gap-4 border-b border-[#dbe4ec] px-4 py-5 text-left transition-colors hover:bg-[#f5f8fa] ${selected ? 'bg-[#e5f5f8]' : 'bg-white'}`}>
-                  {selected && <span className="absolute bottom-0 left-0 top-0 w-1 bg-[#00a4bd]" />}
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-[#6a78d1] text-white"><Mail size={20} /></div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-3">
-                      <h3 className={`truncate text-base ${unread ? 'font-black' : 'font-bold'} text-[#213343]`}>{message.subject}</h3>
-                      <span className="whitespace-nowrap text-xs font-semibold text-[#516f90]">{formatMailboxDate(message) || 'Now'}</span>
-                    </div>
-                    <p className="mt-1 line-clamp-1 text-sm font-semibold text-[#33475b]">{message.body}</p>
-                    <div className="mt-2 flex items-center gap-2 text-xs font-semibold text-[#516f90]">
-                      {unread && <span className="h-2 w-2 rounded-full bg-[#00a4bd]" />}
-                      <span>{message.sender_name || '-'}</span>
-                      {message.direction === 'inbound' && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black uppercase text-blue-700">Inbound</span>}
-                      {message.priority === 'urgent' && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black uppercase text-red-700">Urgent</span>}
-                      {message.delivery_status && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase text-emerald-700">{getDeliveryLabel(message)}</span>}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-            {visibleMessages.length === 0 && <div className="px-4 py-16 text-center text-sm font-semibold text-[#516f90]">No conversations found.</div>}
-          </div>
-        </section>
-
-        <main className="hidden bg-[#f5f8fa] lg:flex lg:h-[calc(100vh-54px)] lg:min-h-0 lg:flex-col lg:overflow-hidden">
-          {isComposeOpen ? (
-            <form onSubmit={handleSend} className="flex min-h-[calc(100vh-54px)] flex-col bg-white">
-              <div className="border-b border-[#dbe4ec] px-6 py-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#ff5c35] text-white"><Send size={21} /></div>
-                    <div>
-                      <h2 className="text-xl font-black text-[#213343]">New email</h2>
-                      <p className="text-sm font-semibold text-[#516f90]">Compose a client or internal ERP message.</p>
-                    </div>
-                  </div>
-                  <button type="button" onClick={() => setIsComposeOpen(false)} className="rounded-md border border-[#cbd6e2] bg-[#eaf0f6] px-4 py-2 text-sm font-semibold text-[#516f90]">Close composer</button>
-                </div>
-              </div>
-
-              <div className="border-b border-[#dbe4ec] bg-[#f5f8fa] px-6 py-4">
-                <div className="mb-2 text-xs font-black uppercase tracking-widest text-[#516f90]">Send to</div>
-                {renderRecipientPicker()}
-              </div>
-
-              <div className="border-b border-[#dbe4ec] bg-white px-6 py-4">
-                <input
-                  required
-                  value={formData.subject}
-                  onChange={e => setFormData(prev => ({ ...prev, subject: e.target.value }))}
-                  placeholder="Subject"
-                  className="w-full border-0 bg-transparent text-2xl font-black text-[#213343] outline-none placeholder:text-[#7c98b6]"
-                />
-              </div>
-
-              <div className="flex-1 bg-[#f5f8fa] px-6 py-6">
-                <div className="min-h-[320px] rounded-md border border-[#cbd6e2] bg-white p-5 shadow-sm">
-                  <textarea
-                    required
-                    value={formData.body}
-                    onChange={e => setFormData(prev => ({ ...prev, body: e.target.value }))}
-                    placeholder="Write your message. Use clear details for clients, departments, or ERP users."
-                    className="h-[300px] w-full resize-none border-0 text-sm font-medium leading-7 text-[#213343] outline-none placeholder:text-[#7c98b6]"
-                  />
-                </div>
-                {attachments.length > 0 && (
-                  <div className="mt-3 rounded-md border border-[#dbe4ec] bg-white p-3">
-                    <div className="mb-2 text-xs font-black uppercase tracking-widest text-[#516f90]">Attachments</div>
-                    <div className="flex flex-wrap gap-2">
-                      {attachments.map((attachment, index) => (
-                        <div key={`${attachment.name}-${index}`} className="flex items-center gap-2 rounded-md border border-[#dbe4ec] bg-[#f5f8fa] px-3 py-2 text-xs font-bold text-[#33475b]">
-                          <Archive size={14} />
-                          <span className="max-w-[180px] truncate">{attachment.name}</span>
-                          <span className="text-[#7c98b6]">{formatFileSize(attachment.size)}</span>
-                          <button type="button" onClick={() => setAttachments(prev => prev.filter((_, itemIndex) => itemIndex !== index))} className="text-[#7c98b6] hover:text-red-600" aria-label="Remove attachment"><X size={14} /></button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="border-t border-[#dbe4ec] bg-white px-6 py-4">
-                <input ref={attachmentInputRef} type="file" multiple className="hidden" onChange={handleAttachmentSelection} />
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <select value={formData.priority} onChange={e => setFormData(prev => ({ ...prev, priority: e.target.value as 'normal' | 'urgent' }))} className="rounded-md border border-[#cbd6e2] bg-white px-3 py-2 text-sm font-semibold text-[#33475b]">
-                      <option value="normal">Normal priority</option>
-                      <option value="urgent">Urgent</option>
-                    </select>
-                    <button type="button" onClick={() => attachmentInputRef.current?.click()} className="rounded-md border border-[#cbd6e2] bg-white px-3 py-2 text-sm font-bold text-[#516f90] transition-colors hover:bg-[#f5f8fa]">
-                      Attach file
-                    </button>
-                    <span className="text-xs font-semibold text-[#7c98b6]">Messages are saved in ERP mailbox.</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button type="button" onClick={() => setIsComposeOpen(false)} className="rounded-md border border-[#cbd6e2] bg-white px-4 py-2 text-sm font-bold text-[#516f90]">Cancel</button>
-                    <button type="submit" className="rounded-md bg-[#ff5c35] px-5 py-2 text-sm font-black text-white transition-colors hover:bg-[#e04826]">Send</button>
-                  </div>
-                </div>
-              </div>
-            </form>
-          ) : selectedMessage ? (
-            <>
-              <div className="border-b border-[#dbe4ec] bg-white px-6 py-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#ff5c35] text-white"><Mail size={22} /></div>
-                    <div>
-                      <h2 className="text-xl font-black text-[#213343]">{selectedMessage.subject}</h2>
-                      <p className="mt-1 text-sm font-semibold text-[#33475b]">{selectedMessage.sender_name || 'Unknown sender'} • Created {formatMailboxDate(selectedMessage) || 'recently'}</p>
-                    </div>
-                  </div>
-                  <button type="button" onClick={closeConversation} className="rounded-md border border-[#cbd6e2] bg-[#eaf0f6] px-4 py-2 text-sm font-semibold text-[#516f90] hover:bg-[#dbe4ec]">Close conversation</button>
-                </div>
-              </div>
-              <div className="border-b border-[#dbe4ec] bg-white px-6 py-4">
-                <div className="text-sm font-black text-[#213343]">Owner</div>
-                <div className="mt-2 flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#eaf0f6] text-xs font-black text-[#516f90]">{(selectedMessage.sender_name || 'ERP').slice(0, 1).toUpperCase()}</div>
-                  <div className="text-sm font-black text-[#213343]">{selectedMessage.sender_name || 'ERP mailbox'}</div>
-                </div>
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
-                <div className="relative mb-6 flex items-center justify-center">
-                  <div className="absolute left-0 right-0 h-px bg-[#dbe4ec]" />
-                  <span className="relative rounded-full border border-[#dbe4ec] bg-white px-4 py-1 text-sm font-black text-[#33475b]">{formatMailboxDate(selectedMessage) || 'Today'}</span>
-                </div>
-                <div className="space-y-4">
-                  {threadMessages.map(threadMessage => (
-                    <div key={threadMessage.id} className="rounded-md border border-[#cbd6e2] bg-white p-5 shadow-sm">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex items-start gap-3">
-                          <div className={`flex h-10 w-10 items-center justify-center rounded-full text-white ${threadMessage.direction === 'inbound' ? 'bg-[#00a4bd]' : 'bg-[#ff5c35]'}`}><Mail size={20} /></div>
-                          <div>
-                            <div className="text-base font-black text-[#213343]">{threadMessage.sender_name || 'Office User'}</div>
-                            <div className="mt-1 text-xs font-semibold text-[#516f90]">{formatMailboxDate(threadMessage)} • {threadMessage.direction === 'inbound' ? threadMessage.from_email || 'Client email' : 'ERP Mailbox'}</div>
-                          </div>
-                        </div>
-                        <span className={`rounded-full px-2 py-1 text-[10px] font-black uppercase ${threadMessage.direction === 'inbound' ? 'bg-blue-50 text-blue-700' : 'bg-[#e5f5f8] text-[#0091ae]'}`}>{threadMessage.direction === 'inbound' ? 'Reply received' : 'Message sent'}</span>
-                      </div>
-                      <p className="mt-4 whitespace-pre-line text-sm font-medium leading-7 text-[#213343]">{threadMessage.body}</p>
-                      {toAttachmentArray(threadMessage.attachments).length > 0 && (
-                        <div className="mt-5 rounded-md border border-[#dbe4ec] bg-[#f5f8fa] p-3">
-                          <div className="mb-2 text-xs font-black uppercase tracking-widest text-[#516f90]">Attachments</div>
-                          <div className="space-y-2">
-                            {toAttachmentArray(threadMessage.attachments).map((attachment, index) => (
-                              <a key={`${attachment.name}-${index}`} href={attachment.data_url} download={attachment.name} className="flex items-center justify-between rounded-md bg-white px-3 py-2 text-xs font-bold text-[#33475b] hover:text-[#0091ae]">
-                                <span className="flex min-w-0 items-center gap-2"><Archive size={14} className="flex-shrink-0" /> <span className="truncate">{attachment.name}</span></span>
-                                <span className="text-[#7c98b6]">{formatFileSize(attachment.size)}</span>
-                              </a>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      <div className="mt-5 flex flex-wrap gap-2">
-                        {threadMessage.priority === 'urgent' && <Badge color="red">Urgent</Badge>}
-                        <Badge color="gray">To: {getRecipientLabel(threadMessage)}</Badge>
-                        <Badge color={threadMessage.delivery_status === 'email_failed' ? 'red' : 'green'}>{getDeliveryLabel(threadMessage)}</Badge>
-                      </div>
-                      {threadMessage.delivery_error && (
-                        <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{threadMessage.delivery_error}</div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <form onSubmit={handleReply} className="border-t border-[#dbe4ec] bg-white px-6 py-4">
-                <div className="mb-2 flex items-center gap-6 text-sm font-semibold text-[#33475b]"><span className="border-b-4 border-[#33475b] pb-2">Reply</span></div>
-                <div className="flex items-end gap-3 rounded-md border border-[#dbe4ec] bg-white px-3 py-3">
-                  <textarea value={replyBody} onChange={e => setReplyBody(e.target.value)} placeholder="Write a reply to this conversation" className="h-16 flex-1 resize-none border-0 text-sm font-medium text-[#213343] outline-none placeholder:text-[#7c98b6]" />
-                  <button type="submit" disabled={!replyBody.trim()} className="rounded-md bg-[#ff5c35] px-4 py-2 text-sm font-black text-white transition-colors hover:bg-[#e04826] disabled:cursor-not-allowed disabled:opacity-50">Send reply</button>
-                </div>
-              </form>
-            </>
-          ) : (
-            <div className="flex flex-1 flex-col items-center justify-center p-8 text-center text-[#516f90]"><Mail size={42} className="mb-3 text-[#7c98b6]" /><div className="text-sm font-black">Select a conversation</div></div>
-          )}
-        </main>
-
-        <aside className="hidden border-l border-[#dbe4ec] bg-white lg:block lg:h-[calc(100vh-54px)] lg:min-h-0 lg:overflow-y-auto">
-          {isComposeOpen ? (
-            <div>
-              <div className="border-b border-[#dbe4ec] px-6 py-8">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#ff5c35] text-white"><Send size={26} /></div>
-                  <div className="min-w-0">
-                    <div className="truncate text-base font-black text-[#0091ae]">New message</div>
-                    <div className="mt-1 text-sm font-medium text-[#33475b]">Client-first composer</div>
-                  </div>
-                </div>
-              </div>
-              <div className="border-b border-[#dbe4ec] px-6 py-5">
-                <div className="mb-4 flex items-center gap-2 text-base font-black text-[#213343]"><ChevronRight size={16} className="rotate-90 text-[#00a4bd]" /> Compose Summary</div>
-                <div className="space-y-5 text-sm">
-                  <div><div className="text-xs font-semibold text-[#516f90]">Recipient mode</div><div className="mt-1 font-medium capitalize text-[#213343]">{sendMode}</div></div>
-                  <div><div className="text-xs font-semibold text-[#516f90]">Selected clients</div><div className="mt-1 font-medium text-[#213343]">{selectedCustomerIds.length}</div></div>
-                  <div><div className="text-xs font-semibold text-[#516f90]">Selected users</div><div className="mt-1 font-medium text-[#213343]">{selectedUserIds.length}</div></div>
-                  <div><div className="text-xs font-semibold text-[#516f90]">Selected departments</div><div className="mt-1 font-medium text-[#213343]">{selectedDepartments.length}</div></div>
-                  <div><div className="text-xs font-semibold text-[#516f90]">Attachments</div><div className="mt-1 font-medium text-[#213343]">{attachments.length}</div></div>
-                  <div><div className="text-xs font-semibold text-[#516f90]">Priority</div><div className="mt-1 font-medium capitalize text-[#213343]">{formData.priority}</div></div>
-                </div>
-              </div>
-            </div>
-          ) : selectedMessage ? (
-            <div>
-              <div className="border-b border-[#dbe4ec] px-6 py-8">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#ff5c35] text-white"><Mail size={26} /></div>
-                  <div className="min-w-0">
-                    <div className="truncate text-base font-black text-[#0091ae]">{selectedMessage.sender_name || 'Office User'}</div>
-                    <div className="mt-1 text-sm font-medium text-[#33475b]">ERP mailbox contact</div>
-                  </div>
-                </div>
-              </div>
-              <div className="border-b border-[#dbe4ec] px-6 py-5">
-                <div className="mb-4 flex items-center gap-2 text-base font-black text-[#213343]"><ChevronRight size={16} className="rotate-90 text-[#00a4bd]" /> About this Contact</div>
-                <div className="space-y-5 text-sm">
-                  <div><div className="text-xs font-semibold text-[#516f90]">Sender</div><div className="mt-1 font-medium text-[#213343]">{selectedMessage.sender_name || '-'}</div></div>
-                  {selectedMessage.from_email && <div><div className="text-xs font-semibold text-[#516f90]">From email</div><div className="mt-1 break-all font-medium text-[#213343]">{selectedMessage.from_email}</div></div>}
-                  <div><div className="text-xs font-semibold text-[#516f90]">Recipients</div><div className="mt-1 font-medium text-[#213343]">{getRecipientLabel(selectedMessage)}</div></div>
-                  <div><div className="text-xs font-semibold text-[#516f90]">Priority</div><div className="mt-1 font-medium text-[#213343]">{selectedMessage.priority || 'normal'}</div></div>
-                  <div><div className="text-xs font-semibold text-[#516f90]">Delivery</div><div className="mt-1 font-medium text-[#213343]">{getDeliveryLabel(selectedMessage)}</div></div>
-                  <div><div className="text-xs font-semibold text-[#516f90]">Last contacted</div><div className="mt-1 font-medium text-[#213343]">{formatMailboxDate(selectedMessage) || '-'}</div></div>
-                  <div><div className="text-xs font-semibold text-[#516f90]">Record source</div><div className="mt-1 font-medium text-[#213343]">Excell ERP Mailbox</div></div>
-                </div>
-              </div>
-            </div>
-          ) : null}
-        </aside>
-      </div>
-
-      <Modal isOpen={!!mobileMessage} onClose={() => setMobileMessage(null)} title={mobileMessage?.subject || 'Message'}>
-        {mobileMessage && (
-          <div className="space-y-4">
-            <div className="rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-600">
-              From <span className="font-black text-slate-900">{mobileMessage.sender_name}</span>
-            </div>
-            <p className="whitespace-pre-line text-sm font-medium leading-7 text-slate-700">{mobileMessage.body}</p>
-            {toAttachmentArray(mobileMessage.attachments).length > 0 && (
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="mb-2 text-xs font-black uppercase tracking-widest text-slate-500">Attachments</div>
-                <div className="space-y-2">
-                  {toAttachmentArray(mobileMessage.attachments).map((attachment, index) => (
-                    <a key={`${attachment.name}-${index}`} href={attachment.data_url} download={attachment.name} className="flex items-center justify-between rounded-xl bg-white px-3 py-2 text-xs font-bold text-slate-700">
-                      <span className="flex min-w-0 items-center gap-2"><Archive size={14} className="flex-shrink-0" /> <span className="truncate">{attachment.name}</span></span>
-                      <span className="text-slate-400">{formatFileSize(attachment.size)}</span>
-                    </a>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </Modal>
-
-      <Modal isOpen={showMobileCompose} onClose={() => setIsComposeOpen(false)} title="New message">
-        <form onSubmit={handleSend} className="space-y-4">
-          {renderRecipientPicker()}
-          <input
-            required
-            value={formData.subject}
-            onChange={e => setFormData(prev => ({ ...prev, subject: e.target.value }))}
-            placeholder="Subject"
-            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 outline-none"
-          />
-          <textarea
-            required
-            value={formData.body}
-            onChange={e => setFormData(prev => ({ ...prev, body: e.target.value }))}
-            placeholder="Write your message"
-            className="h-40 w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium leading-6 text-slate-800 outline-none"
-          />
-          {attachments.length > 0 && (
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-              <div className="mb-2 text-xs font-black uppercase tracking-widest text-slate-500">Attachments</div>
-              <div className="space-y-2">
-                {attachments.map((attachment, index) => (
-                  <div key={`${attachment.name}-${index}`} className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-bold text-slate-700">
-                    <Archive size={14} />
-                    <span className="min-w-0 flex-1 truncate">{attachment.name}</span>
-                    <span className="text-slate-400">{formatFileSize(attachment.size)}</span>
-                    <button type="button" onClick={() => setAttachments(prev => prev.filter((_, itemIndex) => itemIndex !== index))} className="text-slate-400 hover:text-red-600" aria-label="Remove attachment"><X size={14} /></button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          <input ref={mobileAttachmentInputRef} type="file" multiple className="hidden" onChange={handleAttachmentSelection} />
-          <div className="flex items-center justify-between gap-2">
-            <select value={formData.priority} onChange={e => setFormData(prev => ({ ...prev, priority: e.target.value as 'normal' | 'urgent' }))} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700">
-              <option value="normal">Normal</option>
-              <option value="urgent">Urgent</option>
-            </select>
-            <button type="button" onClick={() => mobileAttachmentInputRef.current?.click()} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600">Attach file</button>
-            <button type="submit" className="rounded-xl bg-[#ff5c35] px-4 py-2 text-xs font-black text-white">Send</button>
-          </div>
-        </form>
-      </Modal>
-    </div>
-  );
-};
-
 const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<any[]>([]);
@@ -7646,6 +6688,19 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!loggedInUser) return;
+
+    const normDept = normalizeDepartment(loggedInUser.department);
+    primeCachedCollection('work_orders', 'id', normDept === 'Office' ? 500 : 250);
+    primeCachedCollection('items');
+    primeCachedCollection('departments');
+
+    if (canAccessView(loggedInUser, 'customers')) primeCachedCollection('customers');
+    if (canAccessView(loggedInUser, 'child-items')) primeCachedCollection('child_items');
+    if (canAccessView(loggedInUser, 'users')) primeCachedCollection('users', 'id', 200);
+  }, [loggedInUser]);
+
+  useEffect(() => {
     const onBeforeInstallPrompt = (event: Event) => {
       event.preventDefault();
       setInstallPromptEvent(event as BeforeInstallPromptEvent);
@@ -8143,15 +7198,15 @@ export default function App() {
             view: item.id,
           }));
 
-        const [ordersRes, customersRes, itemsRes, childItemsRes, usersRes] = await Promise.all([
-          supabase.from('work_orders').select('*').order('id', { ascending: false }),
-          canAccess(loggedInUser, 'customers') ? supabase.from('customers').select('*').order('name') : Promise.resolve({ data: [], error: null }),
-          canAccess(loggedInUser, 'items') ? supabase.from('items').select('*').order('name') : Promise.resolve({ data: [], error: null }),
-          canAccess(loggedInUser, 'child-items') ? supabase.from('child_items').select('*').order('name') : Promise.resolve({ data: [], error: null }),
-          canAccess(loggedInUser, 'users') ? supabase.from('users').select('*').order('id', { ascending: false }) : Promise.resolve({ data: [], error: null }),
+        const [orders, customers, cachedItems, childItems, users] = await Promise.all([
+          loadCachedCollection<WorkOrder>('work_orders', 'id', 150),
+          canAccess(loggedInUser, 'customers') ? loadCachedCollection<Customer>('customers') : Promise.resolve([]),
+          canAccess(loggedInUser, 'items') ? loadCachedCollection<Item>('items') : Promise.resolve([]),
+          canAccess(loggedInUser, 'child-items') ? loadCachedCollection<ChildItem>('child_items') : Promise.resolve([]),
+          canAccess(loggedInUser, 'users') ? loadCachedCollection<User>('users', 'id', 150) : Promise.resolve([]),
         ]);
 
-        const visibleOrders = filterWorkOrdersByDepartment((ordersRes.data || []) as WorkOrder[], loggedInUser);
+        const visibleOrders = filterWorkOrdersByDepartment(orders, loggedInUser);
         const orderResults: GlobalSearchResult[] = visibleOrders
           .filter(wo => includesQuery(wo.id, wo.customer, wo.job_details, wo.drawing, wo.status))
           .slice(0, 6)
@@ -8165,7 +7220,7 @@ export default function App() {
             payload: { id: wo.id },
           }));
 
-        const customerResults: GlobalSearchResult[] = ((customersRes.data || []) as Customer[])
+        const customerResults: GlobalSearchResult[] = customers
           .filter(customer => includesQuery(customer.name, customer.city, customer.contact, customer.email, customer.gst))
           .slice(0, 4)
           .map(customer => ({
@@ -8177,7 +7232,7 @@ export default function App() {
             view: 'customers' as AppView,
           }));
 
-        const itemResults: GlobalSearchResult[] = ((itemsRes.data || []) as Item[])
+        const itemResults: GlobalSearchResult[] = cachedItems
           .filter(item => includesQuery(item.name, item.customer_name, item.drawing_no, item.remarks))
           .slice(0, 4)
           .map(item => ({
@@ -8189,7 +7244,7 @@ export default function App() {
             view: 'items' as AppView,
           }));
 
-        const componentResults: GlobalSearchResult[] = ((childItemsRes.data || []) as ChildItem[])
+        const componentResults: GlobalSearchResult[] = childItems
           .filter(component => includesQuery(component.name, component.size, ...(component.departments || [])))
           .slice(0, 4)
           .map(component => ({
@@ -8201,7 +7256,7 @@ export default function App() {
             view: 'child-items' as AppView,
           }));
 
-        const userResults: GlobalSearchResult[] = ((usersRes.data || []) as User[])
+        const userResults: GlobalSearchResult[] = users
           .filter(user => includesQuery(user.username, user.mobile, user.email, user.department, user.level))
           .slice(0, 4)
           .map(user => ({
@@ -8226,7 +7281,7 @@ export default function App() {
       } finally {
         if (!cancelled) setGlobalSearchLoading(false);
       }
-    }, 250);
+    }, 400);
 
     return () => {
       cancelled = true;
@@ -8336,7 +7391,6 @@ export default function App() {
       case 'custom-bom-print': return <CustomBOMPrintView plan={(window as any)._customPlan} onBack={() => navigateTo('custom-bom-plan')} />;
       case 'reports': return <ReportsView onError={onError} />;
       case 'notification-audit': return <NotificationAuditView onError={onError} />;
-      case 'mailbox': return <MailboxView user={loggedInUser} onError={onError} />;
       default: return <Dashboard user={loggedInUser} setView={navigateTo} onError={onError} />;
     }
   };
@@ -8730,16 +7784,6 @@ export default function App() {
                 </div>
               )}
             </div>
-            {canAccess(loggedInUser, 'mailbox') && (
-              <button
-                onClick={() => navigateTo('mailbox')}
-                className={`rounded-full p-2.5 transition-colors ${view === 'mailbox' ? 'bg-white text-[#0176d3]' : 'bg-white/15 text-white hover:bg-white/25'}`}
-                aria-label="Open mailbox"
-                title="Mailbox"
-              >
-                <Mail size={18} />
-              </button>
-            )}
             </div>
             <div className="absolute right-5 flex items-center gap-2">
               <button onClick={refreshNotificationHealth} className="rounded-full bg-white/15 p-2 hover:bg-white/25 transition-colors" aria-label="Refresh notification status">
@@ -8762,7 +7806,7 @@ export default function App() {
                <RefreshCw size={20} />
              </button>
           </header>
-          <div className={`p-3 pb-24 sm:p-3 md:p-4 lg:pb-4 mx-auto w-full flex-1 ${view === 'work-orders' || view === 'mailbox' ? 'max-w-none' : 'max-w-[1700px]'}`}>
+          <div className={`p-3 pb-24 sm:p-3 md:p-4 lg:pb-4 mx-auto w-full flex-1 ${view === 'work-orders' ? 'max-w-none' : 'max-w-[1700px]'}`}>
            {showExitHint && (
              <div className="mb-2 rounded-lg bg-slate-900 text-white px-3 py-2 text-xs font-bold no-print inline-block">
                Press back again to exit
