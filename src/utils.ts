@@ -140,7 +140,7 @@ export const canAccessView = (user: User | null, view: string): boolean => {
   // Production Departments
   const productionDepts = ['Wood_Work', 'Plywood', 'Corrugation', 'Trading_Consumables', 'Foam_Plastic_bags'];
   if (productionDepts.includes(normDept)) {
-    return ['worker-dashboard', 'wo-details'].includes(view);
+    return ['worker-dashboard', 'wo-details', 'plan-generator'].includes(view);
   }
   
   return false;

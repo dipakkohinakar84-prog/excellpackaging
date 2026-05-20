@@ -1,4 +1,5 @@
 import PocketBase, { type RecordModel } from 'pocketbase';
+import type { User } from './types';
 
 type QueryResult<T = any> = {
   data: T | null;
@@ -70,6 +71,7 @@ const idFieldCollections = new Set([
   'dispatch_logs',
   'custom_bom_plans',
   'notification_events',
+  'activity_events',
 ]);
 
 const legacyIdStart: Record<string, number> = {
@@ -82,6 +84,7 @@ const legacyIdStart: Record<string, number> = {
   dispatch_logs: 1,
   custom_bom_plans: 1,
   notification_events: 1,
+  activity_events: 1,
 };
 
 const isValidLegacyId = (value: any) => (
@@ -90,6 +93,11 @@ const isValidLegacyId = (value: any) => (
 
 const normalizeRecord = <T = any>(record: RecordModel | Record<string, any>): T => {
   const normalized: Record<string, any> = { ...record };
+
+  if (normalized.display_name) {
+    normalized.auth_username = normalized.username;
+    normalized.username = normalized.display_name;
+  }
 
   if (isValidLegacyId(normalized.legacy_id)) {
     normalized.id = normalized.legacy_id;
@@ -110,6 +118,46 @@ const normalizeRecord = <T = any>(record: RecordModel | Record<string, any>): T 
 
   normalized.pb_id = record.id;
   return normalized as T;
+};
+
+const normalizeMobileIdentity = (mobile: string) => mobile.replace(/\D/g, '').slice(-10);
+
+export const mapAuthRecordToUser = (record: RecordModel | Record<string, any> | null | undefined): User | null => {
+  if (!record) return null;
+  const normalized = normalizeRecord<User>(record);
+  return {
+    id: Number(normalized.id || (normalized as any).legacy_id || 0),
+    username: String((record as any).display_name || normalized.username || ''),
+    email: String(normalized.email || ''),
+    mobile: String(normalized.mobile || (record as any).username || ''),
+    vehicle_number: normalized.vehicle_number || '',
+    department: String(normalized.department || ''),
+    level: String(normalized.level || ''),
+  };
+};
+
+export const loginWithMobilePassword = async (mobile: string, password: string) => {
+  const identity = normalizeMobileIdentity(mobile);
+  if (!identity) throw new Error('Enter a valid registered mobile number.');
+
+  const userRecord = await pb.collection('erp_users').getFirstListItem(
+    `mobile = ${escapeFilterValue(identity)}`,
+    { requestKey: null },
+  ).catch(() => null);
+
+  if (!userRecord) throw new Error('Invalid mobile number or passkey.');
+
+  const authIdentity = String(userRecord.login_email || userRecord.email || userRecord.username || identity);
+  const authData = await pb.collection('erp_users').authWithPassword(authIdentity, password);
+  const user = mapAuthRecordToUser(authData.record);
+  if (!user) throw new Error('Authenticated user profile is missing.');
+  return user;
+};
+
+export const getCurrentAuthUser = () => mapAuthRecordToUser(pb.authStore.record);
+
+export const logoutAuth = () => {
+  pb.authStore.clear();
 };
 
 const normalizePayload = (collection: string, payload: Record<string, any>) => {

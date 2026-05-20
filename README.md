@@ -18,7 +18,7 @@ Prerequisites: Node.js and PocketBase.
    pocketbase serve
    ```
 
-3. Create the collections listed in `pocketbase-collections.md`.
+3. Create the collections listed in `pocketbase-collections.md`. Create `erp_users` as a PocketBase Auth collection; login uses normalized mobile number as the auth username plus PocketBase password/passkey authentication.
 
 4. Create `.env.local`:
 

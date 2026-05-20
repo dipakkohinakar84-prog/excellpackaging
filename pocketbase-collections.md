@@ -2,15 +2,20 @@
 
 Create these collections before running the migrated app. During the first migration pass, use permissive list/view/create/update/delete rules for authenticated/admin users, then harden rules after all flows are verified.
 
-## users
+## users / erp_users
+
+Create this as a PocketBase **Auth collection** named `erp_users`. The frontend still refers to it as `users` through the compatibility adapter.
+
+Use PocketBase's built-in auth `username` as the normalized 10-digit mobile number. Passwords/passkeys must be stored only through PocketBase Auth password fields, not as plaintext custom fields.
 
 Fields:
 
 - `legacy_id`: number
-- `username`: text, required
-- `email`: email or text
+- `display_name`: text, required
+- built-in auth `username`: normalized mobile number, required
+- built-in auth `email`: email
+- `login_email`: email or text, required if built-in auth email is not public/readable
 - `mobile`: text, required
-- `passkey`: text, required during temporary migration
 - `department`: text, required
 - `level`: text, required
 - `vehicle_number`: text
@@ -136,6 +141,31 @@ Fields:
 - `sent`: number
 - `failed`: number
 - `targets`: number
+
+## activity_events
+
+Fields:
+
+- `legacy_id`: number
+- `event_type`: text, required
+- `action`: text, required
+- `title`: text, required
+- `body`: text
+- `actor_user_id`: number
+- `actor_name`: text
+- `actor_department`: text
+- `target_collection`: text
+- `target_id`: text
+- `target_label`: text
+- `work_order_id`: number
+- `customer_name`: text
+- `item_name`: text
+- `department`: text
+- `old_value`: text
+- `new_value`: text
+- `metadata`: json
+- `severity`: text (`info`, `success`, `warning`, `error`)
+- `event_time`: date
 
 ## Realtime
 

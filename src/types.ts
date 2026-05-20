@@ -25,7 +25,7 @@ export interface User {
   email: string;
   mobile: string;
   vehicle_number?: string;
-  passkey: string;
+  passkey?: string;
   department: string;
   level: string;
 }
