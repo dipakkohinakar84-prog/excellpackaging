@@ -131,6 +131,7 @@ export const canAccessView = (user: User | null, view: string): boolean => {
        'custom-bom-plan',
        'custom-bom-print',
         'reports',
+        'production-reports',
         'notification-audit',
         'departments'
       ];

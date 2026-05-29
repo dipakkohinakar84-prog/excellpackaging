@@ -51,7 +51,7 @@ import {
   Image as ImageIcon,
   Hammer
 } from 'lucide-react';
-import { AppView, User, Customer, Item, WorkOrder, Department, WOStatus, ChildItem } from './types';
+import { AppView, User, Customer, Item, WorkOrder, Department, WOStatus, ChildItem, Metric } from './types';
 import { supabase } from './supabase';
 import { canAccessView, filterWorkOrdersByDepartment, sendNotification, requestNotificationPermission, normalizeDepartment } from './utils';
 import DepartmentStatusTracker from './DepartmentStatusTracker';
@@ -577,7 +577,7 @@ const DepartmentList: React.FC<{ onError: () => void }> = ({ onError }) => {
   const [data, setData] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [formData, setFormData] = useState({ name: '', incharge: '', supervisor: '', info: '' });
+  const [formData, setFormData] = useState<{ name: string; incharge: string; supervisor: string; info: string; metrics: Metric[] }>({ name: '', incharge: '', supervisor: '', info: '', metrics: [] });
 
   const fetchData = async () => {
     setLoading(true);
@@ -597,7 +597,7 @@ const DepartmentList: React.FC<{ onError: () => void }> = ({ onError }) => {
     if (error) alert(error.message);
     else { 
       setIsModalOpen(false); 
-      setFormData({ name: '', incharge: '', supervisor: '', info: '' }); 
+      setFormData({ name: '', incharge: '', supervisor: '', info: '', metrics: [] }); 
       fetchData(); 
     }
   };
@@ -621,6 +621,17 @@ const DepartmentList: React.FC<{ onError: () => void }> = ({ onError }) => {
             <input placeholder="Supervisor" value={formData.supervisor} onChange={e => setFormData({...formData, supervisor: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl" />
           </div>
           <textarea placeholder="Description" value={formData.info} onChange={e => setFormData({...formData, info: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl" />
+          <div className="border-t pt-4">
+            <h4 className="font-bold text-sm text-gray-500 mb-2">📊 Metrics</h4>
+            {formData.metrics.map((m, i) => (
+              <div key={i} className="flex gap-2 mb-2">
+                <input placeholder="Type (e.g. Plywood)" value={m.type} onChange={e => { const updated = [...formData.metrics]; updated[i] = { ...updated[i], type: e.target.value }; setFormData({...formData, metrics: updated}); }} className="flex-1 px-3 py-2 bg-gray-50 border rounded-lg text-sm" />
+                <input placeholder="Unit (e.g. CFT)" value={m.unit} onChange={e => { const updated = [...formData.metrics]; updated[i] = { ...updated[i], unit: e.target.value }; setFormData({...formData, metrics: updated}); }} className="w-24 px-3 py-2 bg-gray-50 border rounded-lg text-sm" />
+                <button type="button" onClick={() => { setFormData({...formData, metrics: formData.metrics.filter((_, j) => j !== i)}); }} className="text-red-400 hover:text-red-600 font-bold">✕</button>
+              </div>
+            ))}
+            <button type="button" onClick={() => { setFormData({...formData, metrics: [...formData.metrics, { type: '', unit: '' }]}); }} className="text-purple-600 text-sm font-bold hover:text-purple-800">+ Add Metric</button>
+          </div>
           <button type="submit" className="w-full py-4 bg-purple-600 text-white rounded-xl font-black shadow-lg">Register Department</button>
         </form>
       </Modal>
@@ -630,7 +641,32 @@ const DepartmentList: React.FC<{ onError: () => void }> = ({ onError }) => {
           <Card key={d.id} className="hover:border-purple-200 transition-all border-l-4 border-l-purple-500">
             <div className="flex justify-between items-start mb-2">
               <h3 className="text-lg font-black text-gray-800">{d.name}</h3>
-              <button onClick={async () => { if(confirm("Delete?")) { await supabase.from('departments').delete().eq('id', d.id); fetchData(); } }} className="text-red-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
+              <button onClick={async () => {
+                const deptName = d.name;
+                const lower = deptName.trim().toLowerCase();
+                if (lower === 'dispatch' || lower === 'quality control' || lower === 'quality_control') {
+                  alert(`"${deptName}" is a system-required department and cannot be deleted.`);
+                  return;
+                }
+                const [{ data: users }, { data: allItems }, { data: allChildItems }] = await Promise.all([
+                  supabase.from('erp_users').select('*').eq('department', deptName),
+                  supabase.from('items').select('*'),
+                  supabase.from('child_items').select('*'),
+                ]);
+                const linkedUsers = (users || []).filter((u: any) => u.department === deptName);
+                const linkedItems = (allItems || []).filter((i: Item) => i.departments?.includes(deptName));
+                const linkedComponents = (allChildItems || []).filter((c: ChildItem) => c.departments?.includes(deptName));
+                if (linkedUsers.length > 0 || linkedItems.length > 0 || linkedComponents.length > 0) {
+                  let msg = 'Cannot delete this department:\n';
+                  if (linkedUsers.length > 0) msg += `\n- ${linkedUsers.length} user(s) are assigned to this department`;
+                  if (linkedItems.length > 0) msg += `\n- ${linkedItems.length} item(s) use this department`;
+                  if (linkedComponents.length > 0) msg += `\n- ${linkedComponents.length} component(s) use this department`;
+                  msg += '\n\nRemove these associations first.';
+                  alert(msg);
+                  return;
+                }
+                if(confirm("Delete?")) { await supabase.from('departments').delete().eq('id', d.id); fetchData(); }
+              }} className="text-red-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
             </div>
             <div className="space-y-2 mt-4">
               <div className="flex justify-between items-center text-sm">
@@ -642,6 +678,17 @@ const DepartmentList: React.FC<{ onError: () => void }> = ({ onError }) => {
                 <span className="font-bold text-gray-700">{d.supervisor || 'N/A'}</span>
               </div>
             </div>
+            {d.metrics && d.metrics.length > 0 && (
+              <div className="border-t pt-3 mt-3">
+                <span className="text-gray-400 font-bold text-[10px] uppercase tracking-wider">📊 Metrics</span>
+                {d.metrics.map((m, i) => (
+                  <div key={i} className="flex justify-between text-sm text-gray-700 mt-1">
+                    <span className="font-medium">{m.type}</span>
+                    <span className="text-gray-500">{m.unit}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </Card>
         ))}
       </div>

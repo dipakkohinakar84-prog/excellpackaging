@@ -29,6 +29,7 @@ Fields:
 - `incharge`: text
 - `supervisor`: text
 - `info`: text
+- `metrics`: json
 
 ## customers
 
@@ -166,6 +167,32 @@ Fields:
 - `metadata`: json
 - `severity`: text (`info`, `success`, `warning`, `error`)
 - `event_time`: date
+
+## production_reports
+
+Fields:
+
+- `legacy_id`: number
+- `department`: text, required
+- `item_id`: number, required
+- `item_name`: text, required
+- `shift_workers`: number
+- `shift_hours`: number (default 8)
+- `ot_workers`: number
+- `ot_hours`: number (default 2)
+- `qty_produced`: number
+- `total_shift_hours`: number
+- `total_ot_hours`: number
+- `grand_total_hours`: number
+- `date`: text (ISO date string)
+- `results`: json (array of `{ metric, unit, qtyPerUnit, totalQty }`)
+- `created_by`: text
+
+## Items (updated)
+
+Added field:
+
+- `metric_requirements`: json (array of `{ metric, unit, qtyPerUnit }`)
 
 ## Realtime
 

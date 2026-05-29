@@ -57,7 +57,7 @@ import {
   Bell,
   Upload
 } from 'lucide-react';
-import { AppView, User, Customer, Item, WorkOrder, Department, WOStatus, ChildItem, DepartmentStatus } from './types';
+import { AppView, User, Customer, Item, WorkOrder, Department, WOStatus, ChildItem, DepartmentStatus, Metric } from './types';
 import { supabase, supabaseAnonKey, loginWithMobilePassword, getCurrentAuthUser, logoutAuth } from './supabase';
 import { canAccessView, filterWorkOrdersByDepartment, getQCApprovalProgress, sendNotification, normalizeDepartment } from './utils';
 import DepartmentStatusTracker from './DepartmentStatusTracker';
@@ -2645,7 +2645,7 @@ const DepartmentList: React.FC<{ onError: () => void }> = ({ onError }) => {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
-  const [formData, setFormData] = useState({ name: '', incharge: '', supervisor: '', info: '' });
+  const [formData, setFormData] = useState<{ name: string; incharge: string; supervisor: string; info: string; metrics: Metric[] }>({ name: '', incharge: '', supervisor: '', info: '', metrics: [] });
 
   const fetchData = async () => {
     setLoading(true);
@@ -2680,7 +2680,7 @@ const DepartmentList: React.FC<{ onError: () => void }> = ({ onError }) => {
       });
       setIsModalOpen(false); 
       setEditingDepartment(null);
-      setFormData({ name: '', incharge: '', supervisor: '', info: '' }); 
+      setFormData({ name: '', incharge: '', supervisor: '', info: '', metrics: [] }); 
       invalidateCollectionCache('departments');
       fetchData(); 
     }
@@ -2692,7 +2692,7 @@ const DepartmentList: React.FC<{ onError: () => void }> = ({ onError }) => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-black text-gray-800">Departments</h2>
-        <button onClick={() => { setEditingDepartment(null); setFormData({ name: '', incharge: '', supervisor: '', info: '' }); setIsModalOpen(true); }} className="bg-purple-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg hover:bg-purple-700 transition-colors">
+        <button onClick={() => { setEditingDepartment(null); setFormData({ name: '', incharge: '', supervisor: '', info: '', metrics: [] }); setIsModalOpen(true); }} className="bg-purple-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg hover:bg-purple-700 transition-colors">
           <Plus size={18} /> <span className="hidden sm:inline">Add Dept</span><span className="sm:hidden">Add</span>
         </button>
       </div>
@@ -2705,6 +2705,17 @@ const DepartmentList: React.FC<{ onError: () => void }> = ({ onError }) => {
             <input placeholder="Supervisor" value={formData.supervisor} onChange={e => setFormData({...formData, supervisor: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl" />
           </div>
           <textarea placeholder="Description" value={formData.info} onChange={e => setFormData({...formData, info: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl" />
+          <div className="border-t pt-4">
+            <h4 className="font-bold text-sm text-gray-500 mb-2">📊 Metrics</h4>
+            {formData.metrics.map((m, i) => (
+              <div key={i} className="flex gap-2 mb-2">
+                <input placeholder="Type (e.g. Plywood)" value={m.type} onChange={e => { const updated = [...formData.metrics]; updated[i] = { ...updated[i], type: e.target.value }; setFormData({...formData, metrics: updated}); }} className="flex-1 px-3 py-2 bg-gray-50 border rounded-lg text-sm" />
+                <input placeholder="Unit (e.g. CFT)" value={m.unit} onChange={e => { const updated = [...formData.metrics]; updated[i] = { ...updated[i], unit: e.target.value }; setFormData({...formData, metrics: updated}); }} className="w-24 px-3 py-2 bg-gray-50 border rounded-lg text-sm" />
+                <button type="button" onClick={() => { setFormData({...formData, metrics: formData.metrics.filter((_, j) => j !== i)}); }} className="text-red-400 hover:text-red-600 font-bold">✕</button>
+              </div>
+            ))}
+            <button type="button" onClick={() => { setFormData({...formData, metrics: [...formData.metrics, { type: '', unit: '' }]}); }} className="text-purple-600 text-sm font-bold hover:text-purple-800">+ Add Metric</button>
+          </div>
           <button type="submit" className="w-full py-4 bg-purple-600 text-white rounded-xl font-black shadow-lg">{editingDepartment ? 'Save Department' : 'Register Department'}</button>
         </form>
       </Modal>
@@ -2715,8 +2726,33 @@ const DepartmentList: React.FC<{ onError: () => void }> = ({ onError }) => {
             <div className="flex justify-between items-start mb-2">
               <h3 className="text-lg font-black text-gray-800">{d.name}</h3>
               <div className="flex gap-1">
-                <button onClick={() => { setEditingDepartment(d); setFormData({ name: d.name, incharge: d.incharge || '', supervisor: d.supervisor || '', info: d.info || '' }); setIsModalOpen(true); }} className="text-blue-500 hover:text-blue-700 transition-colors"><Edit size={16} /></button>
-                <button onClick={async () => { if(confirm("Delete?")) { await supabase.from('departments').delete().eq('id', d.id); void logActivity({ eventType: 'department', action: 'deleted', title: 'Department Deleted', body: `Deleted department: ${d.name}`, actor: getStoredLoggedInUser(), targetCollection: 'departments', targetId: d.id, targetLabel: d.name, department: d.name, severity: 'warning' }); invalidateCollectionCache('departments'); fetchData(); } }} className="text-red-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
+                <button onClick={() => { setEditingDepartment(d); setFormData({ name: d.name, incharge: d.incharge || '', supervisor: d.supervisor || '', info: d.info || '', metrics: d.metrics || [] }); setIsModalOpen(true); }} className="text-blue-500 hover:text-blue-700 transition-colors"><Edit size={16} /></button>
+                <button onClick={async () => {
+                  const deptName = d.name;
+                  const lower = deptName.trim().toLowerCase();
+                  if (lower === 'dispatch' || lower === 'quality control' || lower === 'quality_control') {
+                    alert(`"${deptName}" is a system-required department and cannot be deleted.`);
+                    return;
+                  }
+                  const [{ data: users }, { data: allItems }, { data: allChildItems }] = await Promise.all([
+                    supabase.from('erp_users').select('*').eq('department', deptName),
+                    supabase.from('items').select('*'),
+                    supabase.from('child_items').select('*'),
+                  ]);
+                  const linkedUsers = (users || []).filter((u: any) => u.department === deptName);
+                  const linkedItems = (allItems || []).filter((i: Item) => i.departments?.includes(deptName));
+                  const linkedComponents = (allChildItems || []).filter((c: ChildItem) => c.departments?.includes(deptName));
+                  if (linkedUsers.length > 0 || linkedItems.length > 0 || linkedComponents.length > 0) {
+                    let msg = 'Cannot delete this department:\n';
+                    if (linkedUsers.length > 0) msg += `\n- ${linkedUsers.length} user(s) are assigned to this department`;
+                    if (linkedItems.length > 0) msg += `\n- ${linkedItems.length} item(s) use this department`;
+                    if (linkedComponents.length > 0) msg += `\n- ${linkedComponents.length} component(s) use this department`;
+                    msg += '\n\nRemove these associations first.';
+                    alert(msg);
+                    return;
+                  }
+                  if(confirm("Delete?")) { await supabase.from('departments').delete().eq('id', d.id); void logActivity({ eventType: 'department', action: 'deleted', title: 'Department Deleted', body: `Deleted department: ${d.name}`, actor: getStoredLoggedInUser(), targetCollection: 'departments', targetId: d.id, targetLabel: d.name, department: d.name, severity: 'warning' }); invalidateCollectionCache('departments'); fetchData(); }
+                }} className="text-red-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
               </div>
             </div>
             <div className="space-y-2 mt-4">
@@ -2729,6 +2765,17 @@ const DepartmentList: React.FC<{ onError: () => void }> = ({ onError }) => {
                 <span className="font-bold text-gray-700">{d.supervisor || 'N/A'}</span>
               </div>
             </div>
+            {d.metrics && d.metrics.length > 0 && (
+              <div className="border-t pt-3 mt-3">
+                <span className="text-gray-400 font-bold text-[10px] uppercase tracking-wider">📊 Metrics</span>
+                {d.metrics.map((m, i) => (
+                  <div key={i} className="flex justify-between text-sm text-gray-700 mt-1">
+                    <span className="font-medium">{m.type}</span>
+                    <span className="text-gray-500">{m.unit}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </Card>
         ))}
       </div>
@@ -2909,15 +2956,16 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
   const [newComponentDepartments, setNewComponentDepartments] = useState<string[]>([]);
   const [selectedComponents, setSelectedComponents] = useState<BomSelectionRow[]>([]);
 
-  // Form Data
-  const [formData, setFormData] = useState<{
-    name: string, 
-    customer_name: string, 
-    drawing_no: string, 
-    departments: string[]
-  }>({ 
-    name: '', customer_name: '', drawing_no: '', departments: [] 
-  });
+   // Form Data
+   const [formData, setFormData] = useState<{
+     name: string, 
+     customer_name: string, 
+     drawing_no: string, 
+     departments: string[]
+     metric_requirements?: ItemMetricRequirement[]
+   }>({ 
+     name: '', customer_name: '', drawing_no: '', departments: [], metric_requirements: [] 
+   });
   const [itemRows, setItemRows] = useState<Array<{ name: string; drawing_no: string; drawing_file: File | null }>>([{ name: '', drawing_no: '', drawing_file: null }]);
 
   const involvingDepartments = useMemo(
@@ -2972,17 +3020,28 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
     setIsChildModalOpen(true);
   };
 
-  const handleDeptToggle = (name: string) => {
-    setFormData(prev => ({
-      ...prev,
-      departments: prev.departments.includes(name) ? prev.departments.filter(d => d !== name) : [...prev.departments, name]
-    }));
-  };
+   const handleDeptToggle = (name: string) => {
+     setFormData(prev => {
+       const isAdding = !prev.departments.includes(name);
+       const nextDepts = isAdding
+         ? [...prev.departments, name]
+         : prev.departments.filter(d => d !== name);
+       let nextMetrics = prev.metric_requirements || [];
+       if (isAdding) {
+         const dept = departments.find(d => d.name === name);
+         const newMetrics = (dept?.metrics || [])
+           .filter(m => !nextMetrics.some(ex => ex.metric === m.type))
+           .map(m => ({ metric: m.type, unit: m.unit, qtyPerUnit: 0 }));
+         nextMetrics = [...nextMetrics, ...newMetrics];
+       }
+       return { ...prev, departments: nextDepts, metric_requirements: nextMetrics };
+     });
+   };
 
-  const resetItemForm = () => {
-    setFormData({ name: '', customer_name: '', drawing_no: '', departments: [] });
-    setItemRows([{ name: '', drawing_no: '', drawing_file: null }]);
-  };
+   const resetItemForm = () => {
+     setFormData({ name: '', customer_name: '', drawing_no: '', departments: [], metric_requirements: [] });
+     setItemRows([{ name: '', drawing_no: '', drawing_file: null }]);
+   };
 
   const updateItemRow = (index: number, field: 'name' | 'drawing_no', value: string) => {
     setItemRows(prev => prev.map((row, rowIndex) => rowIndex === index ? { ...row, [field]: value } : row));
@@ -3000,12 +3059,19 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
     setItemRows(prev => prev.length === 1 ? [{ name: '', drawing_no: '', drawing_file: null }] : prev.filter((_, rowIndex) => rowIndex !== index));
   };
 
-  const openEditItem = (item: Item) => {
-    setEditingItem(item);
-    setFormData({ name: item.name || '', customer_name: item.customer_name || '', drawing_no: item.drawing_no || '', departments: item.departments || [] });
-    setItemRows([{ name: item.name || '', drawing_no: item.drawing_no || '', drawing_file: null }]);
-    setIsModalOpen(true);
-  };
+   const openEditItem = (item: Item) => {
+     setEditingItem(item);
+     const existingMetrics = item.metric_requirements || [];
+     const deptMetrics = (item.departments || []).flatMap(deptName => {
+       const dept = departments.find(d => d.name === deptName);
+       return (dept?.metrics || [])
+         .filter(m => !existingMetrics.some(ex => ex.metric === m.type))
+         .map(m => ({ metric: m.type, unit: m.unit, qtyPerUnit: 0 }));
+     });
+     setFormData({ name: item.name || '', customer_name: item.customer_name || '', drawing_no: item.drawing_no || '', departments: item.departments || [], metric_requirements: [...existingMetrics, ...deptMetrics] });
+     setItemRows([{ name: item.name || '', drawing_no: item.drawing_no || '', drawing_file: null }]);
+     setIsModalOpen(true);
+   };
 
   const updateItemReferencesInBoms = async (item: Item, nextData: { name: string; drawing_no: string; departments: string[] }) => {
     const parents = getBomParentReferences(data, 'item', item.id);
@@ -3280,6 +3346,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
             drawing_image_url: '',
             drawing_file: row.drawing_file || undefined,
             departments: formData.departments,
+            metric_requirements: formData.metric_requirements || [],
           }));
           const result = editingItem
             ? await supabase.from('items').update(rowsToInsert[0]).eq('id', editingItem.id)
@@ -3341,14 +3408,73 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
                 ))}
               </div>
            </div>
-           <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Process Routing (Depts)</label>
-              <div className="flex flex-wrap gap-2">
-                {involvingDepartments.map(d => (
-                  <button key={d.id} type="button" onClick={() => handleDeptToggle(d.name)} className={`px-2 py-1 text-[10px] font-black border rounded-lg transition-all ${formData.departments.includes(d.name) ? 'bg-orange-600 text-white shadow-md' : 'bg-gray-50 text-gray-400'}`}>{d.name}</button>
-                ))}
-              </div>
-           </div>
+            <div className="space-y-2">
+               <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Process Routing (Depts)</label>
+               <div className="flex flex-wrap gap-2">
+                 {involvingDepartments.map(d => (
+                   <button key={d.id} type="button" onClick={() => handleDeptToggle(d.name)} className={`px-2 py-1 text-[10px] font-black border rounded-lg transition-all ${formData.departments.includes(d.name) ? 'bg-orange-600 text-white shadow-md' : 'bg-gray-50 text-gray-400'}`}>{d.name}</button>
+                 ))}
+               </div>
+            </div>
+            
+            <div className="border-t pt-4">
+               <h4 className="font-bold text-sm text-gray-500 mb-2">📊 Metric Requirements</h4>
+               <p className="text-xs text-gray-500 mb-2">Specify how much of each metric is required per unit of this item</p>
+               {formData.metric_requirements?.map((req, index) => (
+                 <div key={index} className="flex gap-2 mb-2">
+                   <input 
+                     placeholder="Metric (e.g. Plywood)" 
+                     value={req.metric} 
+                     onChange={(e) => {
+                       const updated = [...formData.metric_requirements!];
+                       updated[index] = {...updated[index], metric: e.target.value};
+                       setFormData({...formData, metric_requirements: updated});
+                     }}
+                     className="flex-1 px-3 py-2 bg-gray-50 border rounded-lg text-sm"
+                   />
+                   <input 
+                     placeholder="Unit (e.g. Sq.m)" 
+                     value={req.unit} 
+                     onChange={(e) => {
+                       const updated = [...formData.metric_requirements!];
+                       updated[index] = {...updated[index], unit: e.target.value};
+                       setFormData({...formData, metric_requirements: updated});
+                     }}
+                     className="w-24 px-3 py-2 bg-gray-50 border rounded-lg text-sm"
+                   />
+                   <input 
+                     type="number"
+                     placeholder="Qty/Unit"
+                     value={req.qtyPerUnit}
+                     onChange={(e) => {
+                       const updated = [...formData.metric_requirements!];
+                       updated[index] = {...updated[index], qtyPerUnit: parseFloat(e.target.value) || 0};
+                       setFormData({...formData, metric_requirements: updated});
+                     }}
+                     className="w-24 px-3 py-2 bg-gray-50 border rounded-lg text-sm text-end"
+                   />
+                   <button 
+                     type="button" 
+                     onClick={() => {
+                       setFormData({...formData, metric_requirements: formData.metric_requirements!.filter((_, i) => i !== index)});
+                     }}
+                     className="text-red-400 hover:text-red-600 font-bold"
+                   >
+                     ✕
+                   </button>
+                 </div>
+               ))}
+               <button 
+                 type="button" 
+                 onClick={() => {
+                   setFormData({...formData, metric_requirements: [...(formData.metric_requirements || []), { metric: '', unit: '', qtyPerUnit: 0 }]});
+                 }}
+                 className="text-purple-600 text-sm font-bold hover:text-purple-800"
+               >
+                 + Add Metric Requirement
+               </button>
+            </div>
+            
             <button type="submit" className="w-full py-4 bg-orange-600 text-white rounded-xl font-black shadow-lg">{editingItem ? 'Save Item' : 'Register Item Master'}</button>
         </form>
       </Modal>
@@ -7579,6 +7705,610 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
   );
 };
 
+// --- Production Reports ---
+
+const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
+  const [mode, setMode] = useState<'list' | 'entry' | 'detail' | 'compare'>('list');
+  const [reports, setReports] = useState<ProductionReport[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [items, setItems] = useState<Item[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [selectedReport, setSelectedReport] = useState<ProductionReport | null>(null);
+  const [compareIds, setCompareIds] = useState<number[]>([]);
+
+  // Entry form state
+  const [selectedDept, setSelectedDept] = useState('');
+  const [shiftWorkers, setShiftWorkers] = useState(0);
+  const [shiftHours, setShiftHours] = useState(8);
+  const [otWorkers, setOtWorkers] = useState(0);
+  const [otHours, setOtHours] = useState(2);
+  const [entryItems, setEntryItems] = useState<{ itemId: number; qty: number }[]>([{ itemId: 0, qty: 0 }]);
+  const [metricResults, setMetricResults] = useState<MetricResult[]>([]);
+
+  const totalShiftHours = shiftWorkers * shiftHours;
+  const totalOtHours = otWorkers * otHours;
+  const grandTotalHours = totalShiftHours + totalOtHours;
+
+  const dept = departments.find(d => d.name === selectedDept);
+  const deptMetricTypes = new Set((dept?.metrics || []).map(m => m.type));
+
+  useEffect(() => {
+    const validItems = entryItems.filter(e => e.itemId > 0 && e.qty > 0);
+    if (!selectedDept || validItems.length === 0) {
+      setMetricResults([]);
+      return;
+    }
+    const combined = new Map<string, MetricResult>();
+    for (const e of validItems) {
+      const item = items.find(i => i.id === e.itemId);
+      if (!item?.metric_requirements) continue;
+      for (const req of item.metric_requirements) {
+        if (!deptMetricTypes.has(req.metric)) continue;
+        const key = `${req.metric}\t${req.unit}`;
+        const existing = combined.get(key);
+        if (existing) {
+          existing.totalQty += req.qtyPerUnit * e.qty;
+        } else {
+          combined.set(key, {
+            metric: req.metric,
+            unit: req.unit,
+            qtyPerUnit: req.qtyPerUnit,
+            totalQty: req.qtyPerUnit * e.qty,
+          });
+        }
+      }
+    }
+    setMetricResults(Array.from(combined.values()));
+  }, [entryItems, selectedDept, items, deptMetricTypes]);
+
+  const fetchReports = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data: r } = await supabase.from('production_reports').select('*').order('id', { ascending: false } as any);
+      if (r) setReports(r as ProductionReport[]);
+    } catch { onError(); }
+    setLoading(false);
+  }, [onError]);
+
+  const fetchRefs = useCallback(async () => {
+    const [dRes, iRes] = await Promise.all([
+      supabase.from('departments').select('*').order('name'),
+      supabase.from('items').select('*').order('name'),
+    ]);
+    if (dRes.data) setDepartments(dRes.data as Department[]);
+    if (iRes.data) setItems(iRes.data as Item[]);
+  }, []);
+
+  useEffect(() => { fetchReports(); fetchRefs(); }, []);
+
+  const handleSave = async () => {
+    const validItems = entryItems.filter(e => e.itemId > 0 && e.qty > 0);
+    if (!selectedDept || validItems.length === 0) {
+      alert('Please select a department and at least one item with qty > 0');
+      return;
+    }
+    setSaving(true);
+    const itemsPayload = validItems.map(e => {
+      const item = items.find(i => i.id === e.itemId);
+      const itemDeptMetricTypes = new Set((departments.find(d => d.name === selectedDept)?.metrics || []).map(m => m.type));
+      const itemResults = (item?.metric_requirements || [])
+        .filter(req => itemDeptMetricTypes.has(req.metric))
+        .map(req => ({
+          metric: req.metric,
+          unit: req.unit,
+          qtyPerUnit: req.qtyPerUnit,
+          totalQty: req.qtyPerUnit * e.qty,
+        }));
+      return {
+        item_id: e.itemId,
+        item_name: item?.name || '',
+        qty_produced: e.qty,
+        results: itemResults,
+      };
+    });
+    const payload = {
+      department: selectedDept,
+      item_id: itemsPayload[0].item_id,
+      item_name: itemsPayload[0].item_name,
+      shift_workers: shiftWorkers,
+      shift_hours: shiftHours,
+      ot_workers: otWorkers,
+      ot_hours: otHours,
+      qty_produced: metricResults.reduce((s, r) => s + r.totalQty, 0),
+      total_shift_hours: totalShiftHours,
+      total_ot_hours: totalOtHours,
+      grand_total_hours: grandTotalHours,
+      date: new Date().toISOString().slice(0, 10),
+      results: metricResults,
+      created_by: getStoredLoggedInUser() || '',
+      items: itemsPayload,
+    };
+    const { error } = await supabase.from('production_reports').insert([payload]);
+    if (error) alert(error.message);
+    else {
+      setMode('list');
+      resetForm();
+      fetchReports();
+    }
+    setSaving(false);
+  };
+
+  const resetForm = () => {
+    setSelectedDept('');
+    setShiftWorkers(0);
+    setShiftHours(8);
+    setOtWorkers(0);
+    setOtHours(2);
+    setEntryItems([{ itemId: 0, qty: 0 }]);
+    setMetricResults([]);
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('Delete this report?')) return;
+    const { error } = await supabase.from('production_reports').delete().eq('id', id);
+    if (error) alert(error.message);
+    else fetchReports();
+  };
+
+  if (mode === 'detail' && selectedReport) {
+    const r = selectedReport;
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <h2 className="text-xl font-black text-gray-800">Production Report</h2>
+          <button onClick={() => setMode('list')} className="text-sm font-bold text-gray-500 hover:text-gray-700">← Back to List</button>
+        </div>
+
+        {r.results && r.results.length > 0 && (
+          <div className="bg-indigo-50 border border-indigo-200 rounded-2xl px-6 py-4 text-center">
+            <span className="text-lg font-black text-indigo-800">
+              In {r.grand_total_hours} Hrs Total {r.results.map((res, i) => (
+                <span key={i}>
+                  {i > 0 && (i === r.results.length - 1 ? <span> and </span> : <span>, </span>)}
+                  {res.totalQty} {res.unit}
+                </span>
+              ))} Work was done
+            </span>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Card>
+            <h3 className="font-black text-gray-700 mb-4 text-sm uppercase tracking-wider">Report Info</h3>
+            <div className="space-y-3">
+              <div><span className="text-[10px] font-black uppercase text-gray-400">Date</span><div className="font-bold text-gray-800">{r.date}</div></div>
+              <div><span className="text-[10px] font-black uppercase text-gray-400">Department</span><div className="font-bold text-gray-800">{r.department}</div></div>
+              {r.items && r.items.length > 0 ? (
+                <div>
+                  <span className="text-[10px] font-black uppercase text-gray-400">Items</span>
+                  <div className="space-y-2 mt-1">
+                    {r.items.map((it, idx) => (
+                      <div key={idx} className="bg-gray-50 rounded-lg px-3 py-2 flex justify-between items-center">
+                        <span className="font-semibold text-gray-700">{it.item_name}</span>
+                        <span className="font-bold text-indigo-700">{it.qty_produced}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div><span className="text-[10px] font-black uppercase text-gray-400">Item</span><div className="font-bold text-gray-800">{r.item_name}</div></div>
+                  <div><span className="text-[10px] font-black uppercase text-gray-400">Qty Produced</span><div className="font-bold text-indigo-700 text-lg">{r.qty_produced}</div></div>
+                </>
+              )}
+              <div><span className="text-[10px] font-black uppercase text-gray-400">Created By</span><div className="font-semibold text-gray-600">{r.created_by}</div></div>
+            </div>
+          </Card>
+
+          <Card>
+            <h3 className="font-black text-gray-700 mb-4 text-sm uppercase tracking-wider">Labor Breakdown</h3>
+            <div className="space-y-4">
+              <div className="rounded-xl bg-blue-50/50 p-4 border border-blue-100">
+                <div className="text-[10px] font-black uppercase text-blue-500 mb-2">Shift</div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div><span className="text-gray-500">Workers:</span> <span className="font-bold">{r.shift_workers}</span></div>
+                  <div><span className="text-gray-500">Hours:</span> <span className="font-bold">{r.shift_hours}</span></div>
+                  <div className="col-span-2"><span className="text-gray-500">Total:</span> <span className="font-bold text-blue-700">{r.total_shift_hours}h</span></div>
+                </div>
+              </div>
+              <div className="rounded-xl bg-orange-50/50 p-4 border border-orange-100">
+                <div className="text-[10px] font-black uppercase text-orange-500 mb-2">Overtime</div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div><span className="text-gray-500">Workers:</span> <span className="font-bold">{r.ot_workers}</span></div>
+                  <div><span className="text-gray-500">Hours:</span> <span className="font-bold">{r.ot_hours}</span></div>
+                  <div className="col-span-2"><span className="text-gray-500">Total:</span> <span className="font-bold text-orange-700">{r.total_ot_hours}h</span></div>
+                </div>
+              </div>
+              <div className="rounded-xl bg-green-50 p-4 border border-green-200 text-center">
+                <span className="text-xs font-black uppercase text-green-600">Grand Total Hours</span>
+                <div className="text-2xl font-black text-green-700">{r.grand_total_hours} hrs</div>
+              </div>
+            </div>
+          </Card>
+
+          <Card>
+            <h3 className="font-black text-gray-700 mb-4 text-sm uppercase tracking-wider">Metric Results</h3>
+            {r.results && r.results.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-[10px] font-black uppercase text-gray-400 border-b">
+                      <th className="text-left py-2">Metric</th>
+                      <th className="text-right py-2">Req/Unit</th>
+                      <th className="text-right py-2">Total</th>
+                      <th className="text-right py-2">Unit</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {r.results.map((res, i) => (
+                      <tr key={i}>
+                        <td className="py-2 font-bold text-gray-700">{res.metric}</td>
+                        <td className="py-2 text-right text-gray-500">{res.qtyPerUnit}</td>
+                        <td className="py-2 text-right font-black text-indigo-700">{res.totalQty}</td>
+                        <td className="py-2 text-right font-bold text-gray-500">{res.unit}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-400 italic text-sm">No metric data for this report.</div>
+            )}
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === 'compare' && compareIds.length >= 2) {
+    const compareList = reports.filter(r => compareIds.includes(r.id));
+    const allMetrics = [...new Set(compareList.flatMap(r => r.results?.map(res => res.metric) || []))];
+
+    const vals = (fn: (r: ProductionReport) => string) => compareList.map(fn);
+    const isDiff = (a: string[]) => new Set(a).size > 1;
+
+    const SectionRow: React.FC<{ label: string; bg?: string; textColor?: string }> = ({ label, bg = 'bg-gray-100', textColor = 'text-gray-500' }) => (
+      <tr className={bg}>
+        <td className={`px-4 py-2 text-[10px] font-black uppercase tracking-wider ${textColor}`} colSpan={compareList.length + 1}>{label}</td>
+      </tr>
+    );
+
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <h2 className="text-xl font-black text-gray-800">Compare Reports</h2>
+          <button onClick={() => { setMode('list'); setCompareIds([]); }} className="text-sm font-bold text-gray-500 hover:text-gray-700">← Back to List</button>
+        </div>
+        <div className="overflow-x-auto rounded-2xl border shadow-sm bg-white">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b">
+              <tr>
+                <th className="px-4 py-3 text-left w-44">Field</th>
+                {compareList.map(r => <th key={r.id} className="px-4 py-3 text-center min-w-[160px]">{r.date}<br /><span className="text-gray-500 font-bold">{r.department}</span></th>)}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              <SectionRow label="📋 Report Info" bg="bg-sky-50" textColor="text-sky-700" />
+              {[
+                { key: 'department', label: 'Department', render: (r: ProductionReport) => r.department },
+                { key: 'item_name', label: 'Item', render: (r: ProductionReport) => r.items && r.items.length > 1 ? `${r.items[0].item_name} (+${r.items.length - 1})` : r.item_name },
+                { key: 'created_by', label: 'Created By', render: (r: ProductionReport) => r.created_by },
+              ].map(({ key, label, render }) => {
+                const rowVals = vals(render);
+                const diff = isDiff(rowVals);
+                return (
+                  <tr key={key} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-bold text-gray-700">{label}</td>
+                    {compareList.map(r => (
+                      <td key={r.id} className={`px-4 py-3 text-center font-semibold ${diff ? 'text-indigo-700 bg-indigo-50/50' : 'text-gray-800'}`}>{render(r)}</td>
+                    ))}
+                  </tr>
+                );
+              })}
+
+              <SectionRow label="👷 Labor Breakdown" bg="bg-amber-50" textColor="text-amber-700" />
+              {[
+                { key: 'shift_workers', label: 'Shift Workers', render: (r: ProductionReport) => String(r.shift_workers) },
+                { key: 'total_shift_hours', label: 'Shift Hrs', render: (r: ProductionReport) => `${r.total_shift_hours}h` },
+                { key: 'ot_workers', label: 'OT Workers', render: (r: ProductionReport) => String(r.ot_workers) },
+                { key: 'total_ot_hours', label: 'OT Hrs', render: (r: ProductionReport) => `${r.total_ot_hours}h` },
+              ].map(({ key, label, render }) => {
+                const rowVals = vals(render);
+                const diff = isDiff(rowVals);
+                return (
+                  <tr key={key} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-bold text-gray-700">{label}</td>
+                    {compareList.map(r => (
+                      <td key={r.id} className={`px-4 py-3 text-center font-semibold ${diff ? 'text-indigo-700 bg-indigo-50/50' : 'text-gray-800'}`}>{render(r)}</td>
+                    ))}
+                  </tr>
+                );
+              })}
+              <tr className="bg-green-50 hover:bg-green-100/50">
+                <td className="px-4 py-3 font-black text-green-800">Grand Total Hours</td>
+                {compareList.map(r => (
+                  <td key={r.id} className="px-4 py-3 text-center font-black text-green-700 text-base">{r.grand_total_hours}h</td>
+                ))}
+              </tr>
+
+              <SectionRow label="📦 Production" bg="bg-purple-50" textColor="text-purple-700" />
+              <tr className="hover:bg-gray-50">
+                <td className="px-4 py-3 font-bold text-gray-700">Qty Produced</td>
+                {compareList.map(r => <td key={r.id} className="px-4 py-3 text-center font-semibold text-gray-800">{r.qty_produced.toLocaleString()}</td>)}
+              </tr>
+
+              {allMetrics.length > 0 && (
+                <>
+                  <SectionRow label="📊 Metrics" bg="bg-indigo-50" textColor="text-indigo-700" />
+                  {allMetrics.map(metric => (
+                    <tr key={metric} className="hover:bg-indigo-50/30">
+                      <td className="px-4 py-3 font-bold text-gray-700">{metric}</td>
+                      {compareList.map(r => {
+                        const found = r.results?.find(res => res.metric === metric);
+                        return (
+                          <td key={r.id} className="px-4 py-3 text-center font-semibold text-gray-800">
+                            {found ? `${found.totalQty.toLocaleString()} ${found.unit}` : '—'}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === 'entry') {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <h2 className="text-xl font-black text-gray-800">New Production Report</h2>
+          <button onClick={() => { setMode('list'); resetForm(); }} className="text-sm font-bold text-gray-500 hover:text-gray-700">← Back</button>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card>
+            <h3 className="font-black text-gray-700 mb-4 text-sm">Department & Labor</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Department</label>
+                <select value={selectedDept} onChange={e => setSelectedDept(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border rounded-xl mt-1">
+                  <option value="">Select Department</option>
+                  {departments.filter(d => !['Office', 'Quality Control', 'Dispatch', 'QC', 'QC Control', 'Quality_Control'].includes(d.name)).map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="rounded-xl bg-blue-50/50 p-4 border border-blue-100">
+                  <div className="text-[10px] font-black uppercase text-blue-500 mb-2">Shift</div>
+                  <div className="space-y-2">
+                    <div>
+                      <label className="text-[11px] font-bold text-gray-500">Workers</label>
+                      <input type="number" min="0" value={shiftWorkers} onChange={e => setShiftWorkers(Number(e.target.value))} className="w-full px-3 py-2 bg-white border rounded-lg text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold text-gray-500">Hours</label>
+                      <input type="number" min="0" step="0.5" value={shiftHours} onChange={e => setShiftHours(Number(e.target.value))} className="w-full px-3 py-2 bg-white border rounded-lg text-sm" />
+                    </div>
+                    <div className="text-sm font-bold text-blue-700 pt-1">Total: {totalShiftHours} hrs</div>
+                  </div>
+                </div>
+                <div className="rounded-xl bg-orange-50/50 p-4 border border-orange-100">
+                  <div className="text-[10px] font-black uppercase text-orange-500 mb-2">Overtime</div>
+                  <div className="space-y-2">
+                    <div>
+                      <label className="text-[11px] font-bold text-gray-500">Workers</label>
+                      <input type="number" min="0" value={otWorkers} onChange={e => setOtWorkers(Number(e.target.value))} className="w-full px-3 py-2 bg-white border rounded-lg text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold text-gray-500">Hours</label>
+                      <input type="number" min="0" step="0.5" value={otHours} onChange={e => setOtHours(Number(e.target.value))} className="w-full px-3 py-2 bg-white border rounded-lg text-sm" />
+                    </div>
+                    <div className="text-sm font-bold text-orange-700 pt-1">Total: {totalOtHours} hrs</div>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-xl bg-green-50 p-4 border border-green-200 text-center">
+                <span className="text-xs font-black uppercase text-green-600">Grand Total Hours</span>
+                <div className="text-2xl font-black text-green-700">{grandTotalHours} hrs</div>
+              </div>
+            </div>
+          </Card>
+
+          <Card>
+            <h3 className="font-black text-gray-700 mb-4 text-sm">Item & Production</h3>
+            <div className="space-y-4">
+              <div className="space-y-3">
+                  {entryItems.map((item, idx) => (
+                    <div key={idx} className="flex items-end gap-2">
+                      <div className="flex-1">
+                        <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Item</label>
+                        <select value={item.itemId} onChange={e => { const val = Number(e.target.value); setEntryItems(prev => { const next = [...prev]; next[idx] = { ...next[idx], itemId: val }; return next; }); }} className="w-full px-3 py-2.5 bg-gray-50 border rounded-xl mt-1 text-sm">
+                          <option value={0}>Select Item</option>
+                          {items.filter(i => !selectedDept || (i.departments || []).includes(selectedDept)).map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                        </select>
+                        {!selectedDept && <div className="text-[10px] text-gray-400 mt-1">Select a department first to see relevant items</div>}
+                    </div>
+                    <div className="w-24">
+                      <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Qty</label>
+                      <input type="number" min="0" value={item.qty} onChange={e => { const val = Number(e.target.value); setEntryItems(prev => { const next = [...prev]; next[idx] = { ...next[idx], qty: val }; return next; }); }} className="w-full px-3 py-2.5 bg-gray-50 border rounded-xl mt-1 text-sm" />
+                    </div>
+                    {entryItems.length > 1 && (
+                      <button onClick={() => setEntryItems(prev => prev.filter((_, i) => i !== idx))} className="pb-1 text-red-400 hover:text-red-600"><Trash2 size={18} /></button>
+                    )}
+                  </div>
+                ))}
+                <button onClick={() => setEntryItems(prev => [...prev, { itemId: 0, qty: 0 }])} className="text-indigo-600 text-sm font-bold hover:text-indigo-800 flex items-center gap-1">
+                  <Plus size={16} /> Add Item
+                </button>
+              </div>
+
+              {metricResults.length > 0 && (
+                <div className="border-t pt-4">
+                  <h4 className="font-bold text-sm text-gray-500 mb-3">📊 Metric Calculation</h4>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-[10px] font-black uppercase text-gray-400 border-b">
+                          <th className="text-left py-2">Metric</th>
+                          <th className="text-right py-2">Req/Unit</th>
+                          <th className="text-right py-2">Total</th>
+                          <th className="text-right py-2">Unit</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {metricResults.map((r, i) => (
+                          <tr key={i} className="text-sm">
+                            <td className="py-2 font-bold text-gray-700">{r.metric}</td>
+                            <td className="py-2 text-right text-gray-500">{r.qtyPerUnit}</td>
+                            <td className="py-2 text-right font-black text-indigo-700">{r.totalQty}</td>
+                            <td className="py-2 text-right font-bold text-gray-500">{r.unit}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="mt-3 bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3 text-center">
+                    <span className="text-sm font-black text-indigo-800">
+                      In {grandTotalHours} Hrs Total {metricResults.map((res, i) => (
+                        <span key={i}>
+                          {i > 0 && (i === metricResults.length - 1 ? <span> and </span> : <span>, </span>)}
+                          {res.totalQty} {res.unit}
+                        </span>
+                      ))} Work was done
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black shadow-lg hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {saving ? 'Saving...' : 'Save Report'}
+              </button>
+            </div>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center gap-4">
+        <h2 className="text-xl font-black text-gray-800">Production Reports</h2>
+        <div className="flex items-center gap-2">
+          {compareIds.length >= 2 && (
+            <button onClick={() => setMode('compare')} className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg hover:bg-emerald-700 transition-colors text-sm flex items-center gap-1">
+              Compare ({compareIds.length})
+            </button>
+          )}
+          <button onClick={() => setMode('entry')} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg hover:bg-indigo-700 transition-colors flex items-center gap-2">
+            <Plus size={18} /> New Report
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <LoadingState />
+      ) : reports.length === 0 ? (
+        <div className="text-center py-20 text-gray-400 italic">No production reports yet.</div>
+      ) : (
+        <>
+        <div className="overflow-x-auto rounded-2xl border shadow-sm bg-white">
+          <table className="w-full min-w-[900px] text-sm">
+            <thead className="bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b">
+              <tr>
+                <th className="px-2 py-3 text-center w-8">
+                  <input type="checkbox" checked={compareIds.length === reports.length} onChange={e => setCompareIds(e.target.checked ? reports.map(r => r.id) : [])} className="cursor-pointer" />
+                </th>
+                <th className="px-4 py-3 text-left">Date</th>
+                <th className="px-4 py-3 text-left">Department</th>
+                <th className="px-4 py-3 text-left">Item</th>
+                <th className="px-4 py-3 text-right">Shift</th>
+                <th className="px-4 py-3 text-right">OT</th>
+                <th className="px-4 py-3 text-right">Total Hrs</th>
+                <th className="px-4 py-3 text-right">Qty</th>
+                <th className="px-4 py-3 text-right">Created By</th>
+                <th className="px-4 py-3 text-right"></th>
+              </tr>
+            </thead>
+              <tbody className="divide-y divide-gray-100">
+                {reports.map(r => (
+                  <tr key={r.id} className="hover:bg-indigo-50/30 transition-colors cursor-pointer">
+                    <td className="px-2 py-3 text-center" onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" checked={compareIds.includes(r.id)} onChange={e => setCompareIds(prev => e.target.checked ? [...prev, r.id] : prev.filter(id => id !== r.id))} className="cursor-pointer" />
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-gray-700" onClick={() => { setSelectedReport(r); setMode('detail'); }}>{r.date}</td>
+                    <td className="px-4 py-3 font-bold text-gray-800" onClick={() => { setSelectedReport(r); setMode('detail'); }}>{r.department}</td>
+                    <td className="px-4 py-3 text-gray-700" onClick={() => { setSelectedReport(r); setMode('detail'); }}>
+                      {r.items && r.items.length > 1
+                        ? `${r.items[0].item_name} (+${r.items.length - 1} more)`
+                        : r.item_name}
+                    </td>
+                    <td className="px-4 py-3 text-right text-gray-600" onClick={() => { setSelectedReport(r); setMode('detail'); }}>{r.total_shift_hours}h</td>
+                    <td className="px-4 py-3 text-right text-gray-600" onClick={() => { setSelectedReport(r); setMode('detail'); }}>{r.total_ot_hours}h</td>
+                    <td className="px-4 py-3 text-right font-bold text-indigo-700" onClick={() => { setSelectedReport(r); setMode('detail'); }}>{r.grand_total_hours}h</td>
+                    <td className="px-4 py-3 text-right font-semibold text-gray-700" onClick={() => { setSelectedReport(r); setMode('detail'); }}>{r.qty_produced}</td>
+                    <td className="px-4 py-3 text-right text-gray-500" onClick={() => { setSelectedReport(r); setMode('detail'); }}>{r.created_by}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button onClick={e => { e.stopPropagation(); handleDelete(r.id); }} className="p-1 text-red-300 hover:text-red-500"><Trash2 size={14} /></button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+          </table>
+        </div>
+        {compareIds.length > 0 && (
+          <div className="text-xs text-gray-400 text-right">Compare ({compareIds.length} selected) <button onClick={() => setCompareIds([])} className="text-red-400 hover:text-red-600 ml-2">Clear</button></div>
+        )}
+        </>
+      )}
+
+      {reports.length > 0 && reports.filter(r => r.results?.length > 0).length > 0 && (
+        <Card>
+          <h3 className="font-black text-gray-700 mb-4 text-sm">📊 Recent Metric Calculations</h3>
+          <div className="space-y-3">
+            {reports.slice(0, 5).filter(r => r.results?.length > 0).map(r => (
+              <details key={r.id} className="rounded-xl border border-gray-200">
+                <summary className="px-4 py-3 cursor-pointer font-bold text-sm text-gray-700 hover:bg-gray-50 rounded-xl">
+                  {r.date} — {r.item_name} ({r.qty_produced} units)
+                </summary>
+                <div className="px-4 pb-3">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-[10px] font-black uppercase text-gray-400 border-b">
+                        <th className="text-left py-1">Metric</th>
+                        <th className="text-right py-1">Total</th>
+                        <th className="text-right py-1">Unit</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {r.results.map((res, idx) => (
+                        <tr key={idx}>
+                          <td className="py-1 font-semibold text-gray-700">{res.metric}</td>
+                          <td className="py-1 text-right font-bold text-indigo-700">{res.totalQty}</td>
+                          <td className="py-1 text-right font-bold text-gray-500">{res.unit}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            ))}
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+};
+
 // --- App Root ---
 export default function App() {
   const [view, setView] = useState<AppView>('dashboard');
@@ -8051,15 +8781,16 @@ export default function App() {
           { id: 'child-items' as AppView, label: 'Components', icon: Layers },
         ],
       },
-      {
-        key: 'planning',
-        label: 'Planning',
-        items: [
-          { id: 'production-plan' as AppView, label: 'Prod Plan', icon: FileText, highlight: true },
-          { id: 'custom-bom-plan' as AppView, label: 'Custom BOM', icon: ListPlus, highlight: true },
-          { id: 'reports' as AppView, label: 'Reports', icon: GanttChartSquare, highlight: true },
-        ],
-      },
+       {
+         key: 'planning',
+         label: 'Planning',
+         items: [
+           { id: 'production-plan' as AppView, label: 'Prod Plan', icon: FileText, highlight: true },
+           { id: 'custom-bom-plan' as AppView, label: 'Custom BOM', icon: ListPlus, highlight: true },
+           { id: 'production-reports' as AppView, label: 'PR Entry', icon: ClipboardList, highlight: true },
+           { id: 'reports' as AppView, label: 'Reports', icon: GanttChartSquare, highlight: true },
+         ],
+       },
     ]
       .map(group => ({
         ...group,
@@ -8329,12 +9060,13 @@ export default function App() {
             navigateTo('worker-dashboard');
          }
       }} loggedInUser={loggedInUser} />;
-      case 'production-plan': return <ProductionPlanList onError={onError} onGenerate={ids => navigateTo('plan-generator', { payload: { ids, backView: 'production-plan' } })} loggedInUser={loggedInUser} />;
-      case 'plan-generator': return <PlanGenerator ids={(window as any)._ids} onBack={() => navigateTo((window as any)._planBackView || 'production-plan')} />;
-      case 'custom-bom-plan': return <CustomBOMPlanView onError={onError} />;
-      case 'custom-bom-print': return <CustomBOMPrintView plan={(window as any)._customPlan} onBack={() => navigateTo('custom-bom-plan')} />;
-      case 'reports': return <ReportsView onError={onError} />;
-      case 'notification-audit': return <NotificationAuditView onError={onError} />;
+       case 'production-plan': return <ProductionPlanList onError={onError} onGenerate={ids => navigateTo('plan-generator', { payload: { ids, backView: 'production-plan' } })} loggedInUser={loggedInUser} />;
+       case 'plan-generator': return <PlanGenerator ids={(window as any)._ids} onBack={() => navigateTo((window as any)._planBackView || 'production-plan')} />;
+       case 'custom-bom-plan': return <CustomBOMPlanView onError={onError} />;
+       case 'custom-bom-print': return <CustomBOMPrintView plan={(window as any)._customPlan} onBack={() => navigateTo('custom-bom-plan')} />;
+       case 'production-reports': return <ProductionReports onError={onError} />;
+       case 'reports': return <ReportsView onError={onError} />;
+       case 'notification-audit': return <NotificationAuditView onError={onError} />;
       default: return <Dashboard user={loggedInUser} setView={navigateTo} onError={onError} />;
     }
   };

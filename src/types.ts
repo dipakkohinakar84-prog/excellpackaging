@@ -15,6 +15,7 @@ export type AppView =
   | 'custom-bom-plan'
   | 'custom-bom-print'
   | 'reports'
+  | 'production-reports'
   | 'notification-audit'
   | 'profile' 
   | 'backup';
@@ -30,12 +31,18 @@ export interface User {
   level: string;
 }
 
+export interface Metric {
+  type: string;
+  unit: string;
+}
+
 export interface Department {
   id: number;
   name: string;
   incharge: string;
   supervisor: string;
   info: string;
+  metrics: Metric[];
 }
 
 export interface Customer {
@@ -64,6 +71,12 @@ export interface ChildItem {
   drawing_no?: string;
 }
 
+export interface ItemMetricRequirement {
+  metric: string;
+  unit: string;
+  qtyPerUnit: number;
+}
+
 export interface Item {
   id: number;
   name: string;
@@ -74,6 +87,40 @@ export interface Item {
   remarks: string;
   departments: string[];
   children?: ChildItem[];
+  metric_requirements?: ItemMetricRequirement[];
+}
+
+export interface MetricResult {
+  metric: string;
+  unit: string;
+  qtyPerUnit: number;
+  totalQty: number;
+}
+
+export interface ReportItem {
+  item_id: number;
+  item_name: string;
+  qty_produced: number;
+  results: MetricResult[];
+}
+
+export interface ProductionReport {
+  id: number;
+  department: string;
+  item_id: number;
+  item_name: string;
+  shift_workers: number;
+  shift_hours: number;
+  ot_workers: number;
+  ot_hours: number;
+  qty_produced: number;
+  total_shift_hours: number;
+  total_ot_hours: number;
+  grand_total_hours: number;
+  date: string;
+  results: MetricResult[];
+  created_by: string;
+  items?: ReportItem[];
 }
 
 export type DepartmentWOStatus = 'Not Started' | 'Work Started' | 'Ready for QC';

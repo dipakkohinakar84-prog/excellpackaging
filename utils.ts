@@ -85,6 +85,7 @@ export const canAccessView = (user: User | null, view: string): boolean => {
       'child-items',
       'production-plan',
       'plan-generator',
+      'production-reports',
       'departments' 
     ];
     return allowedViews.includes(view);
