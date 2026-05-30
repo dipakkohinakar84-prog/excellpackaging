@@ -2965,7 +2965,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
    }>({ 
      name: '', customer_name: '', drawing_no: '', departments: [] 
    });
-  const [itemRows, setItemRows] = useState<Array<{ name: string; drawing_no: string; drawing_file: File | null; metric_requirements: ItemMetricRequirement[] }>>([{ name: '', drawing_no: '', drawing_file: null, metric_requirements: [] }]);
+  const [itemRows, setItemRows] = useState<Array<{ name: string; drawing_no: string; drawing_file: File | null; departments: string[]; metric_requirements: ItemMetricRequirement[] }>>([{ name: '', drawing_no: '', drawing_file: null, departments: [], metric_requirements: [] }]);
 
   const involvingDepartments = useMemo(
     () => departments.filter(d => isInvolvingDepartment(d.name)),
@@ -3019,35 +3019,37 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
     setIsChildModalOpen(true);
   };
 
-   const handleDeptToggle = (name: string) => {
+   const handleDeptToggle = (rowIndex: number, name: string) => {
      const dept = departments.find(d => d.name === name);
-     const wasSelected = formData.departments.includes(name);
-     setFormData(prev => ({
-       ...prev,
-       departments: wasSelected
-         ? prev.departments.filter(d => d !== name)
-         : [...prev.departments, name],
-     }));
-     if (dept?.metrics?.length) {
-       const deptMetrics = dept.metrics.map(m => ({ metric: m.type, unit: m.unit, qtyPerUnit: 0 }));
-       setItemRows(prev => prev.map(row => {
+     setItemRows(prev => {
+       const row = prev[rowIndex];
+       const wasSelected = (row.departments || []).includes(name);
+       const next = [...prev];
+       next[rowIndex] = {
+         ...row,
+         departments: wasSelected
+           ? (row.departments || []).filter(d => d !== name)
+           : [...(row.departments || []), name],
+       };
+       if (dept?.metrics?.length) {
          const existing = row.metric_requirements || [];
-         return {
-           ...row,
+         next[rowIndex] = {
+           ...next[rowIndex],
            metric_requirements: wasSelected
              ? existing.filter(ex => !dept.metrics?.some(m => m.type === ex.metric))
-             : [...existing, ...deptMetrics.filter(m => !existing.some(ex => ex.metric === m.metric))],
+             : [...existing, ...dept.metrics.filter(m => !existing.some(ex => ex.metric === m.type)).map(m => ({ metric: m.type, unit: m.unit, qtyPerUnit: 0 }))],
          };
-       }));
-     }
+       }
+       return next;
+     });
    };
 
    const resetItemForm = () => {
      setFormData({ name: '', customer_name: '', drawing_no: '', departments: [] });
-     setItemRows([{ name: '', drawing_no: '', drawing_file: null, metric_requirements: [] }]);
+     setItemRows([{ name: '', drawing_no: '', drawing_file: null, departments: [], metric_requirements: [] }]);
    };
 
-  const updateItemRow = (index: number, field: 'name' | 'drawing_no' | 'metric_requirements', value: string | ItemMetricRequirement[]) => {
+  const updateItemRow = (index: number, field: 'name' | 'drawing_no' | 'metric_requirements' | 'departments', value: string | ItemMetricRequirement[] | string[]) => {
     setItemRows(prev => prev.map((row, rowIndex) => rowIndex === index ? { ...row, [field]: value } : row));
   };
 
@@ -3056,11 +3058,11 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
   };
 
   const addItemRow = () => {
-    setItemRows(prev => [...prev, { name: '', drawing_no: '', drawing_file: null, metric_requirements: [...(prev[0]?.metric_requirements || [])] }]);
+    setItemRows(prev => [...prev, { name: '', drawing_no: '', drawing_file: null, departments: [], metric_requirements: [] }]);
   };
 
   const removeItemRow = (index: number) => {
-    setItemRows(prev => prev.length === 1 ? [{ name: '', drawing_no: '', drawing_file: null }] : prev.filter((_, rowIndex) => rowIndex !== index));
+    setItemRows(prev => prev.length === 1 ? [{ name: '', drawing_no: '', drawing_file: null, departments: [], metric_requirements: [] }] : prev.filter((_, rowIndex) => rowIndex !== index));
   };
 
    const openEditItem = (item: Item) => {
@@ -3072,8 +3074,8 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
          .filter(m => !existingMetrics.some(ex => ex.metric === m.type))
          .map(m => ({ metric: m.type, unit: m.unit, qtyPerUnit: 0 }));
      });
-     setFormData({ name: item.name || '', customer_name: item.customer_name || '', drawing_no: item.drawing_no || '', departments: item.departments || [] });
-     setItemRows([{ name: item.name || '', drawing_no: item.drawing_no || '', drawing_file: null, metric_requirements: [...existingMetrics, ...deptMetrics] }]);
+     setFormData({ name: item.name || '', customer_name: item.customer_name || '', drawing_no: item.drawing_no || '', departments: [] });
+     setItemRows([{ name: item.name || '', drawing_no: item.drawing_no || '', drawing_file: null, departments: item.departments || [], metric_requirements: [...existingMetrics, ...deptMetrics] }]);
      setIsModalOpen(true);
    };
 
@@ -3323,8 +3325,10 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
             return;
           }
 
-          if (formData.departments.length === 0) {
-            alert('Please select at least one department for this item.');
+          // Check each row has at least one department
+          const rowsWithoutDept = validRows.filter(row => !row.departments || row.departments.length === 0);
+          if (rowsWithoutDept.length > 0) {
+            alert(`Item "${rowsWithoutDept[0].name}" needs at least one department.`);
             return;
           }
 
@@ -3350,7 +3354,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
             drawing_no: row.drawing_no,
             drawing_image_url: '',
             drawing_file: row.drawing_file || undefined,
-            departments: formData.departments,
+            departments: row.departments,
             metric_requirements: row.metric_requirements,
           }));
           const result = editingItem
@@ -3359,7 +3363,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
           const { error } = result; 
           if(error) alert(error.message);
           else {
-            if (editingItem) await updateItemReferencesInBoms(editingItem, { name: rowsToInsert[0].name, drawing_no: rowsToInsert[0].drawing_no, departments: formData.departments });
+            if (editingItem) await updateItemReferencesInBoms(editingItem, { name: rowsToInsert[0].name, drawing_no: rowsToInsert[0].drawing_no, departments: rowsToInsert[0].departments });
             void logActivity({
               eventType: 'item',
               action: editingItem ? 'updated' : 'created',
@@ -3371,7 +3375,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
               targetLabel: rowsToInsert[0].name,
               customerName: formData.customer_name,
               itemName: rowsToInsert[0].name,
-              metadata: { count: rowsToInsert.length, drawing_nos: rowsToInsert.map(row => row.drawing_no), departments: formData.departments },
+              metadata: { count: rowsToInsert.length, drawing_nos: rowsToInsert.map(row => row.drawing_no), departments: rowsToInsert.map(row => row.departments) },
               severity: 'info',
             });
             setIsModalOpen(false); 
@@ -3382,22 +3386,14 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
           }
         }} className="flex flex-col h-full gap-6">
 
-          {/* Sticky top: Client + Departments */}
-          <div className="flex-shrink-0 grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-1 rounded-xl border border-gray-200 bg-white p-5">
+          {/* Sticky top: Client */}
+          <div className="flex-shrink-0">
+            <div className="rounded-xl border border-gray-200 bg-white p-5">
               <h4 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-3">Client</h4>
               <select required value={formData.customer_name} onChange={e => setFormData({...formData, customer_name: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl text-sm">
                 <option value="">Select Client</option>
                 {customers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
               </select>
-            </div>
-            <div className="lg:col-span-2 rounded-xl border border-gray-200 bg-white p-5">
-              <h4 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-3">Department</h4>
-              <div className="flex flex-wrap gap-2">
-                {involvingDepartments.map(d => (
-                  <button key={d.id} type="button" onClick={() => handleDeptToggle(d.name)} className={`px-4 py-2 text-xs font-black border rounded-xl transition-all ${formData.departments.includes(d.name) ? 'bg-orange-600 text-white shadow-md border-orange-600' : 'bg-gray-50 text-gray-400 border-gray-200 hover:border-orange-300'}`}>{d.name}</button>
-                ))}
-              </div>
             </div>
           </div>
 
@@ -3435,6 +3431,16 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
                       <Upload size={16} className="flex-shrink-0 text-orange-600" />
                       <input type="file" accept="application/pdf,image/*" onChange={e => updateItemDrawingFile(index, e.target.files?.[0] || null)} className="hidden" />
                     </label>
+                  </div>
+                </div>
+
+                {/* Per-row Department toggle */}
+                <div className="border-t border-orange-200 pt-4 mb-4">
+                  <h5 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-3">Departments</h5>
+                  <div className="flex flex-wrap gap-2">
+                    {involvingDepartments.map(d => (
+                      <button key={d.id} type="button" onClick={() => handleDeptToggle(index, d.name)} className={`px-4 py-2 text-xs font-black border rounded-xl transition-all ${(row.departments || []).includes(d.name) ? 'bg-orange-600 text-white shadow-md border-orange-600' : 'bg-gray-50 text-gray-400 border-gray-200 hover:border-orange-300'}`}>{d.name}</button>
+                    ))}
                   </div>
                 </div>
 
@@ -8390,6 +8396,24 @@ export default function App() {
   const [isNotificationMenuOpen, setIsNotificationMenuOpen] = useState(false);
   const [notificationEventsPreview, setNotificationEventsPreview] = useState<any[]>([]);
   const [notificationEventsLoading, setNotificationEventsLoading] = useState(false);
+  const [readIds, setReadIds] = useState<Set<number>>(new Set());
+  const [toasts, setToasts] = useState<Array<{ id: number; title: string; body: string }>>([]);
+  const knownEventIdsRef = useRef<Set<number>>(new Set());
+
+  // Load read notification IDs from localStorage when user changes
+  useEffect(() => {
+    if (!loggedInUser) return;
+    try {
+      const stored = localStorage.getItem('excell_read_notifications_' + loggedInUser.id);
+      setReadIds(new Set<number>(stored ? JSON.parse(stored) : []));
+    } catch { setReadIds(new Set()); }
+  }, [loggedInUser]);
+
+  // Save read IDs to localStorage
+  useEffect(() => {
+    if (!loggedInUser) return;
+    localStorage.setItem('excell_read_notifications_' + loggedInUser.id, JSON.stringify([...readIds]));
+  }, [readIds, loggedInUser]);
   const [showExitHint, setShowExitHint] = useState(false);
   const [notificationHealth, setNotificationHealth] = useState({
     permission: typeof Notification !== 'undefined' ? Notification.permission : ('unsupported' as NotificationPermission | 'unsupported'),
@@ -9097,6 +9121,22 @@ export default function App() {
         .sort((a: any, b: any) => getNotificationEventTime(b) - getNotificationEventTime(a))
         .slice(0, 8);
 
+      // Detect new events for toast popups (skip on first poll)
+      if (knownEventIdsRef.current.size > 0) {
+        for (const ev of sortedEvents) {
+          if (!knownEventIdsRef.current.has(ev.id)) {
+            const id = ev.id;
+            setToasts(prev => {
+              if (prev.some(t => t.id === id)) return prev;
+              const next = [...prev, { id, title: ev.title || 'Notification', body: ev.body || '' }];
+              setTimeout(() => setToasts(cur => cur.filter(t => t.id !== id)), 5000);
+              return next;
+            });
+          }
+        }
+      }
+      knownEventIdsRef.current = new Set(sortedEvents.map((e: any) => e.id));
+
       setNotificationEventsPreview(sortedEvents);
     } catch (_error) {
       setNotificationEventsPreview([]);
@@ -9355,17 +9395,25 @@ export default function App() {
             border-color: #d8dde6 !important;
             box-shadow: 0 1px 3px rgba(15,23,42,0.14) !important;
           }
+        }
 
-          @media (prefers-reduced-motion: reduce) {
-            .erp-fade-up,
-            .erp-fade-only,
-            .erp-scale-in,
-            .erp-stagger > *,
-            .erp-search-results > *,
-            .erp-active-pulse,
-            .erp-skeleton {
-              animation: none !important;
-            }
+        @keyframes slideIn {
+          from { transform: translateX(100%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+        .animate-slide-in {
+          animation: slideIn 0.3s ease-out;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .erp-fade-only,
+          .erp-scale-in,
+          .erp-stagger > *,
+          .erp-search-results > *,
+          .erp-active-pulse,
+          .erp-skeleton,
+          .animate-slide-in {
+            animation: none !important;
           }
         }
       `}</style>
@@ -9636,6 +9684,12 @@ export default function App() {
                       <X size={18} />
                     </button>
                   </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="text-[11px] font-semibold text-blue-100/80">{notificationEventsPreview.filter(e => !readIds.has(e.id)).length} unread</span>
+                    {notificationEventsPreview.some(e => !readIds.has(e.id)) && (
+                      <button onClick={() => setReadIds(new Set(notificationEventsPreview.map(e => e.id)))} className="rounded-lg bg-white/15 px-2 py-1 text-[10px] font-black text-white hover:bg-white/25 transition-colors">Mark all read</button>
+                    )}
+                  </div>
                   {notificationHealth.lastError && (
                     <div className="mt-2 rounded-xl bg-white/12 px-3 py-2 text-[11px] font-semibold text-blue-50">{notificationHealth.lastError}</div>
                   )}
@@ -9656,8 +9710,9 @@ export default function App() {
                     const failed = Number(event.failed || 0);
                     const sent = Number(event.sent || 0);
                     const tone = failed > 0 ? 'bg-red-500' : sent > 0 ? 'bg-emerald-500' : 'bg-amber-400';
+                    const isRead = readIds.has(event.id);
                     return (
-                      <div key={event.id} className="mb-2 rounded-2xl border border-slate-100 bg-slate-50/80 p-3 last:mb-0">
+                      <div key={event.id} className={`mb-2 rounded-2xl border p-3 last:mb-0 transition-opacity ${isRead ? 'border-slate-200 bg-white opacity-50' : 'border-slate-100 bg-slate-50/80'}`}>
                         <div className="flex items-start gap-3">
                           <span className={`mt-1 h-2.5 w-2.5 flex-shrink-0 rounded-full ${tone}`} />
                           <div className="min-w-0 flex-1">
@@ -9666,9 +9721,15 @@ export default function App() {
                               <div className="whitespace-nowrap text-[10px] font-bold text-slate-400">{formatNotificationEventTime(event)}</div>
                             </div>
                             <div className="mt-1 line-clamp-2 whitespace-pre-line text-xs font-semibold text-slate-600">{event.body || '-'}</div>
-                            <div className="mt-2 flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-wider text-slate-400">
-                              <span>WO #{event.work_order_id || '-'}</span>
-                              <span>{sent} sent / {failed} failed</span>
+                            <div className="mt-2 flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-wider">
+                              <button
+                                onClick={() => setReadIds(prev => { const next = new Set(prev); isRead ? next.delete(event.id) : next.add(event.id); return next; })}
+                                className="text-blue-500 hover:text-blue-700 hover:underline transition-colors"
+                              >
+                                {isRead ? 'Unread' : 'Read'}
+                              </button>
+                              <span className="text-slate-400">WO #{event.work_order_id || '-'}</span>
+                              <span className="text-slate-400">{sent} sent / {failed} failed</span>
                             </div>
                           </div>
                         </div>
@@ -9720,6 +9781,24 @@ export default function App() {
               ))}
             </div>
           </nav>
+
+          {/* Toast popups */}
+          <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 max-w-sm w-full pointer-events-none">
+            {toasts.map(t => (
+              <div
+                key={t.id}
+                className="pointer-events-auto animate-slide-in rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl shadow-slate-900/10 transition-all"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2 text-sm font-black text-slate-900">
+                    <span>🔔</span> {t.title}
+                  </div>
+                  <button onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))} className="text-slate-400 hover:text-slate-600 text-lg leading-none">✕</button>
+                </div>
+                <div className="mt-1 text-xs font-semibold text-slate-600 line-clamp-1 ml-7">{t.body || '-'}</div>
+              </div>
+            ))}
+          </div>
        </main>
     </div>
   );
