@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/generate-version.js && vite build",
     "preview": "vite preview",
     "push:relay": "node server/push-relay.mjs",
     "push:vapid": "web-push generate-vapid-keys"

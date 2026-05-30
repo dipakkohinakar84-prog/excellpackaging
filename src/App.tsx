@@ -2962,11 +2962,10 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
      customer_name: string, 
      drawing_no: string, 
      departments: string[]
-     metric_requirements?: ItemMetricRequirement[]
    }>({ 
-     name: '', customer_name: '', drawing_no: '', departments: [], metric_requirements: [] 
+     name: '', customer_name: '', drawing_no: '', departments: [] 
    });
-  const [itemRows, setItemRows] = useState<Array<{ name: string; drawing_no: string; drawing_file: File | null }>>([{ name: '', drawing_no: '', drawing_file: null }]);
+  const [itemRows, setItemRows] = useState<Array<{ name: string; drawing_no: string; drawing_file: File | null; metric_requirements: ItemMetricRequirement[] }>>([{ name: '', drawing_no: '', drawing_file: null, metric_requirements: [] }]);
 
   const involvingDepartments = useMemo(
     () => departments.filter(d => isInvolvingDepartment(d.name)),
@@ -3021,29 +3020,34 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
   };
 
    const handleDeptToggle = (name: string) => {
-     setFormData(prev => {
-       const isAdding = !prev.departments.includes(name);
-       const nextDepts = isAdding
-         ? [...prev.departments, name]
-         : prev.departments.filter(d => d !== name);
-       let nextMetrics = prev.metric_requirements || [];
-       if (isAdding) {
-         const dept = departments.find(d => d.name === name);
-         const newMetrics = (dept?.metrics || [])
-           .filter(m => !nextMetrics.some(ex => ex.metric === m.type))
-           .map(m => ({ metric: m.type, unit: m.unit, qtyPerUnit: 0 }));
-         nextMetrics = [...nextMetrics, ...newMetrics];
-       }
-       return { ...prev, departments: nextDepts, metric_requirements: nextMetrics };
-     });
+     const dept = departments.find(d => d.name === name);
+     const wasSelected = formData.departments.includes(name);
+     setFormData(prev => ({
+       ...prev,
+       departments: wasSelected
+         ? prev.departments.filter(d => d !== name)
+         : [...prev.departments, name],
+     }));
+     if (dept?.metrics?.length) {
+       const deptMetrics = dept.metrics.map(m => ({ metric: m.type, unit: m.unit, qtyPerUnit: 0 }));
+       setItemRows(prev => prev.map(row => {
+         const existing = row.metric_requirements || [];
+         return {
+           ...row,
+           metric_requirements: wasSelected
+             ? existing.filter(ex => !dept.metrics?.some(m => m.type === ex.metric))
+             : [...existing, ...deptMetrics.filter(m => !existing.some(ex => ex.metric === m.metric))],
+         };
+       }));
+     }
    };
 
    const resetItemForm = () => {
-     setFormData({ name: '', customer_name: '', drawing_no: '', departments: [], metric_requirements: [] });
-     setItemRows([{ name: '', drawing_no: '', drawing_file: null }]);
+     setFormData({ name: '', customer_name: '', drawing_no: '', departments: [] });
+     setItemRows([{ name: '', drawing_no: '', drawing_file: null, metric_requirements: [] }]);
    };
 
-  const updateItemRow = (index: number, field: 'name' | 'drawing_no', value: string) => {
+  const updateItemRow = (index: number, field: 'name' | 'drawing_no' | 'metric_requirements', value: string | ItemMetricRequirement[]) => {
     setItemRows(prev => prev.map((row, rowIndex) => rowIndex === index ? { ...row, [field]: value } : row));
   };
 
@@ -3052,7 +3056,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
   };
 
   const addItemRow = () => {
-    setItemRows(prev => [...prev, { name: '', drawing_no: '', drawing_file: null }]);
+    setItemRows(prev => [...prev, { name: '', drawing_no: '', drawing_file: null, metric_requirements: [...(prev[0]?.metric_requirements || [])] }]);
   };
 
   const removeItemRow = (index: number) => {
@@ -3068,8 +3072,8 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
          .filter(m => !existingMetrics.some(ex => ex.metric === m.type))
          .map(m => ({ metric: m.type, unit: m.unit, qtyPerUnit: 0 }));
      });
-     setFormData({ name: item.name || '', customer_name: item.customer_name || '', drawing_no: item.drawing_no || '', departments: item.departments || [], metric_requirements: [...existingMetrics, ...deptMetrics] });
-     setItemRows([{ name: item.name || '', drawing_no: item.drawing_no || '', drawing_file: null }]);
+     setFormData({ name: item.name || '', customer_name: item.customer_name || '', drawing_no: item.drawing_no || '', departments: item.departments || [] });
+     setItemRows([{ name: item.name || '', drawing_no: item.drawing_no || '', drawing_file: null, metric_requirements: [...existingMetrics, ...deptMetrics] }]);
      setIsModalOpen(true);
    };
 
@@ -3295,7 +3299,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
         <button onClick={() => { setEditingItem(null); resetItemForm(); setIsModalOpen(true); }} className="bg-orange-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg hover:bg-orange-700 transition-colors"><Plus size={18} /></button>
       </div>
 
-      <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingItem(null); }} title={editingItem ? "Edit Item" : "New Item"}>
+      <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingItem(null); }} title={editingItem ? "Edit Item" : "New Item"} maxWidthClassName="max-w-4xl">
         <form onSubmit={async (e) => { 
           e.preventDefault(); 
           const customerKey = normalizeDuplicateKey(formData.customer_name);
@@ -3304,6 +3308,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
               name: row.name.trim().replace(/\s+/g, ' '),
               drawing_no: row.drawing_no.trim(),
               drawing_file: row.drawing_file,
+              metric_requirements: row.metric_requirements || [],
             }))
             .filter(row => row.name || row.drawing_no || row.drawing_file);
 
@@ -3346,7 +3351,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
             drawing_image_url: '',
             drawing_file: row.drawing_file || undefined,
             departments: formData.departments,
-            metric_requirements: formData.metric_requirements || [],
+            metric_requirements: row.metric_requirements,
           }));
           const result = editingItem
             ? await supabase.from('items').update(rowsToInsert[0]).eq('id', editingItem.id)
@@ -3375,107 +3380,110 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
             invalidateCollectionCache('items');
             fetchData(); 
           }
-        }} className="space-y-4">
-           <select required value={formData.customer_name} onChange={e => setFormData({...formData, customer_name: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl">
-              <option value="">Select Client</option>
-              {customers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-           </select>
-           <div className="space-y-3 rounded-2xl border border-orange-100 bg-orange-50/40 p-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-xs font-black uppercase tracking-widest text-orange-600">Items</div>
-                  <div className="text-[11px] font-semibold text-gray-400">Add item masters one by one in rows.</div>
-                </div>
-                {!editingItem && <button type="button" onClick={addItemRow} className="inline-flex items-center gap-2 rounded-xl border border-orange-200 bg-white px-3 py-2 text-xs font-black text-orange-700 hover:bg-orange-100"><Plus size={14} /> Add another item</button>}
-              </div>
-              <div className="space-y-2">
-                {itemRows.map((row, index) => (
-                  <div key={index} className="rounded-xl border border-orange-100 bg-white p-3 shadow-sm">
-                    <div className="mb-2 flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-gray-400">
-                      <span>Item {index + 1}</span>
-                      {!editingItem && <button type="button" onClick={() => removeItemRow(index)} className="text-red-400 hover:text-red-600">Remove</button>}
-                    </div>
-                    <input required={index === 0} placeholder="Item Name / Assembly" value={row.name} onChange={e => updateItemRow(index, 'name', e.target.value)} className="mb-2 w-full px-4 py-3 bg-gray-50 border rounded-xl" />
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      <input required={index === 0} placeholder="Drawing No." value={row.drawing_no} onChange={e => updateItemRow(index, 'drawing_no', e.target.value)} className="w-full px-4 py-3 bg-gray-50 border rounded-xl" />
-                      <label className="flex min-h-[48px] cursor-pointer items-center justify-between gap-3 rounded-xl border bg-gray-50 px-4 py-3 text-sm font-bold text-gray-500 hover:bg-orange-50">
-                        <span className="min-w-0 truncate">{row.drawing_file ? row.drawing_file.name : 'Upload drawing PDF/file'}</span>
-                        <Upload size={16} className="flex-shrink-0 text-orange-600" />
-                        <input type="file" accept="application/pdf,image/*" onChange={e => updateItemDrawingFile(index, e.target.files?.[0] || null)} className="hidden" />
-                      </label>
-                    </div>
-                  </div>
+        }} className="flex flex-col h-full gap-6">
+
+          {/* Sticky top: Client + Departments */}
+          <div className="flex-shrink-0 grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-1 rounded-xl border border-gray-200 bg-white p-5">
+              <h4 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-3">Client</h4>
+              <select required value={formData.customer_name} onChange={e => setFormData({...formData, customer_name: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl text-sm">
+                <option value="">Select Client</option>
+                {customers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+              </select>
+            </div>
+            <div className="lg:col-span-2 rounded-xl border border-gray-200 bg-white p-5">
+              <h4 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-3">Department</h4>
+              <div className="flex flex-wrap gap-2">
+                {involvingDepartments.map(d => (
+                  <button key={d.id} type="button" onClick={() => handleDeptToggle(d.name)} className={`px-4 py-2 text-xs font-black border rounded-xl transition-all ${formData.departments.includes(d.name) ? 'bg-orange-600 text-white shadow-md border-orange-600' : 'bg-gray-50 text-gray-400 border-gray-200 hover:border-orange-300'}`}>{d.name}</button>
                 ))}
               </div>
-           </div>
-            <div className="space-y-2">
-               <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Process Routing (Depts)</label>
-               <div className="flex flex-wrap gap-2">
-                 {involvingDepartments.map(d => (
-                   <button key={d.id} type="button" onClick={() => handleDeptToggle(d.name)} className={`px-2 py-1 text-[10px] font-black border rounded-lg transition-all ${formData.departments.includes(d.name) ? 'bg-orange-600 text-white shadow-md' : 'bg-gray-50 text-gray-400'}`}>{d.name}</button>
-                 ))}
-               </div>
             </div>
-            
-            <div className="border-t pt-4">
-               <h4 className="font-bold text-sm text-gray-500 mb-2">📊 Metric Requirements</h4>
-               <p className="text-xs text-gray-500 mb-2">Specify how much of each metric is required per unit of this item</p>
-               {formData.metric_requirements?.map((req, index) => (
-                 <div key={index} className="flex gap-2 mb-2">
-                   <input 
-                     placeholder="Metric (e.g. Plywood)" 
-                     value={req.metric} 
-                     onChange={(e) => {
-                       const updated = [...formData.metric_requirements!];
-                       updated[index] = {...updated[index], metric: e.target.value};
-                       setFormData({...formData, metric_requirements: updated});
-                     }}
-                     className="flex-1 px-3 py-2 bg-gray-50 border rounded-lg text-sm"
-                   />
-                   <input 
-                     placeholder="Unit (e.g. Sq.m)" 
-                     value={req.unit} 
-                     onChange={(e) => {
-                       const updated = [...formData.metric_requirements!];
-                       updated[index] = {...updated[index], unit: e.target.value};
-                       setFormData({...formData, metric_requirements: updated});
-                     }}
-                     className="w-24 px-3 py-2 bg-gray-50 border rounded-lg text-sm"
-                   />
-                   <input 
-                     type="number"
-                     placeholder="Qty/Unit"
-                     value={req.qtyPerUnit}
-                     onChange={(e) => {
-                       const updated = [...formData.metric_requirements!];
-                       updated[index] = {...updated[index], qtyPerUnit: parseFloat(e.target.value) || 0};
-                       setFormData({...formData, metric_requirements: updated});
-                     }}
-                     className="w-24 px-3 py-2 bg-gray-50 border rounded-lg text-sm text-end"
-                   />
-                   <button 
-                     type="button" 
-                     onClick={() => {
-                       setFormData({...formData, metric_requirements: formData.metric_requirements!.filter((_, i) => i !== index)});
-                     }}
-                     className="text-red-400 hover:text-red-600 font-bold"
-                   >
-                     ✕
-                   </button>
-                 </div>
-               ))}
-               <button 
-                 type="button" 
-                 onClick={() => {
-                   setFormData({...formData, metric_requirements: [...(formData.metric_requirements || []), { metric: '', unit: '', qtyPerUnit: 0 }]});
-                 }}
-                 className="text-purple-600 text-sm font-bold hover:text-purple-800"
-               >
-                 + Add Metric Requirement
-               </button>
+          </div>
+
+          {/* Items section: wraps both sticky header + scrollable cards */}
+          <div className="rounded-xl border border-gray-200 bg-white flex flex-col flex-1 min-h-0">
+            <div className="flex-shrink-0 flex items-center justify-between p-5 pb-3">
+              <div>
+                <h4 className="text-xs font-black uppercase tracking-widest text-gray-500">Items</h4>
+                <p className="text-[11px] text-gray-400 mt-0.5">Add item masters one by one</p>
+              </div>
+              {!editingItem && <button type="button" onClick={addItemRow} className="flex items-center gap-1.5 rounded-xl border border-orange-200 bg-orange-50 px-4 py-2.5 text-xs font-black text-orange-700 hover:bg-orange-100"><Plus size={14} /> Add Item</button>}
             </div>
-            
-            <button type="submit" className="w-full py-4 bg-orange-600 text-white rounded-xl font-black shadow-lg">{editingItem ? 'Save Item' : 'Register Item Master'}</button>
+
+            {/* Scrollable item cards */}
+            <div className="flex-1 overflow-y-auto min-h-0 px-5 pb-5 space-y-4">
+            {itemRows.map((row, index) => (
+              <div key={index} className="rounded-xl border border-orange-200 bg-orange-50/40 p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-sm font-black uppercase tracking-widest text-gray-500">Item {index + 1}</span>
+                  {!editingItem && <button type="button" onClick={() => removeItemRow(index)} className="text-xs font-bold text-red-400 hover:text-red-600">Remove</button>}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
+                  <div className="md:col-span-2">
+                    <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block">Item Name</label>
+                    <input required={index === 0} placeholder="e.g. Wooden Box 12x8" value={row.name} onChange={e => updateItemRow(index, 'name', e.target.value)} className="w-full px-4 py-3 bg-white border rounded-lg text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block">Drawing No.</label>
+                    <input required={index === 0} placeholder="e.g. DWG-001" value={row.drawing_no} onChange={e => updateItemRow(index, 'drawing_no', e.target.value)} className="w-full px-4 py-3 bg-white border rounded-lg text-sm" />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block">Drawing File</label>
+                    <label className="flex min-h-[48px] cursor-pointer items-center justify-between gap-3 rounded-lg border bg-white px-4 py-3 text-sm font-bold text-gray-500 hover:bg-orange-50">
+                      <span className="min-w-0 truncate">{row.drawing_file ? row.drawing_file.name : 'Upload PDF'}</span>
+                      <Upload size={16} className="flex-shrink-0 text-orange-600" />
+                      <input type="file" accept="application/pdf,image/*" onChange={e => updateItemDrawingFile(index, e.target.files?.[0] || null)} className="hidden" />
+                    </label>
+                  </div>
+                </div>
+
+                {/* Inline Metric Requirements */}
+                <div className="border-t border-orange-200 pt-4">
+                  <h5 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-3 flex items-center gap-1.5">📊 Metric Requirements {(row.metric_requirements?.length || 0) > 0 && <span className="text-purple-600 font-black">({row.metric_requirements!.length})</span>}</h5>
+                  {row.metric_requirements && row.metric_requirements.length > 0 && (
+                    <div className="overflow-x-auto mb-3">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-[10px] font-black uppercase text-gray-400 border-b">
+                            <th className="text-left py-2 pr-3">Metric</th>
+                            <th className="text-left py-2 px-3">Unit</th>
+                            <th className="text-right py-2 pl-3">Qty/Unit</th>
+                            <th className="w-10 py-2"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {row.metric_requirements.map((req, mi) => (
+                            <tr key={mi}>
+                              <td className="py-2 pr-3">
+                                <input placeholder="e.g. Plywood" value={req.metric} onChange={e => { const updated = [...itemRows[index].metric_requirements]; updated[mi] = {...updated[mi], metric: e.target.value}; updateItemRow(index, 'metric_requirements', updated); }} className="w-full px-3 py-2 bg-white border rounded-lg text-sm" />
+                              </td>
+                              <td className="py-2 px-3">
+                                <input placeholder="e.g. Sq.m" value={req.unit} onChange={e => { const updated = [...itemRows[index].metric_requirements]; updated[mi] = {...updated[mi], unit: e.target.value}; updateItemRow(index, 'metric_requirements', updated); }} className="w-24 px-3 py-2 bg-white border rounded-lg text-sm" />
+                              </td>
+                              <td className="py-2 pl-3">
+                                <input type="number" step="any" placeholder="0" value={req.qtyPerUnit} onChange={e => { const updated = [...itemRows[index].metric_requirements]; updated[mi] = {...updated[mi], qtyPerUnit: parseFloat(e.target.value) || 0}; updateItemRow(index, 'metric_requirements', updated); }} className="w-24 px-3 py-2 bg-white border rounded-lg text-sm text-right" />
+                              </td>
+                              <td className="py-2 text-center">
+                                <button type="button" onClick={() => { const updated = itemRows[index].metric_requirements.filter((_, i) => i !== mi); updateItemRow(index, 'metric_requirements', updated); }} className="text-red-400 hover:text-red-600 font-bold text-sm">✕</button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  <button type="button" onClick={() => { const updated = [...(itemRows[index].metric_requirements || []), { metric: '', unit: '', qtyPerUnit: 0 }]; updateItemRow(index, 'metric_requirements', updated); }} className="text-purple-600 text-sm font-bold hover:text-purple-800 flex items-center gap-1"><Plus size={14} /> Add Metric Requirement</button>
+                </div>
+              </div>
+            ))}
+          </div>
+          </div>
+
+          {/* Sticky bottom: Submit */}
+          <div className="flex-shrink-0">
+            <button type="submit" className="w-full py-4 bg-orange-600 text-white rounded-xl font-black shadow-lg hover:bg-orange-700 text-sm">{editingItem ? 'Save Item' : 'Register Item Master'}</button>
+          </div>
         </form>
       </Modal>
 
@@ -4078,18 +4086,20 @@ const ChildItemListView: React.FC<{ onError: () => void }> = ({ onError }) => {
                     </div>
                   </td>
                   <td className="px-6 py-4 text-center">
-                    <button 
-                      onClick={() => openEditComponent(c)} 
-                      className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-all"
-                    >
-                        <Edit size={16}/>
-                    </button>
-                    <button 
-                      onClick={() => deleteComponent(c)} 
-                      className="p-2 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                    >
-                        <Trash2 size={16}/>
-                    </button>
+                    <div className="flex items-center justify-center gap-1">
+                      <button 
+                        onClick={() => openEditComponent(c)} 
+                        className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-all"
+                      >
+                          <Edit size={16}/>
+                      </button>
+                      <button 
+                        onClick={() => deleteComponent(c)} 
+                        className="p-2 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                      >
+                          <Trash2 size={16}/>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -7724,11 +7734,29 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
   const [otWorkers, setOtWorkers] = useState(0);
   const [otHours, setOtHours] = useState(2);
   const [entryItems, setEntryItems] = useState<{ itemId: number; qty: number }[]>([{ itemId: 0, qty: 0 }]);
+  const [itemSearchText, setItemSearchText] = useState<string[]>(['']);
+  const [openDropdownIdx, setOpenDropdownIdx] = useState<number | null>(null);
   const [metricResults, setMetricResults] = useState<MetricResult[]>([]);
 
   const totalShiftHours = shiftWorkers * shiftHours;
   const totalOtHours = otWorkers * otHours;
   const grandTotalHours = totalShiftHours + totalOtHours;
+
+  // When in a non-list sub-mode, push history entry so browser back returns to list
+  const prevModeRef = useRef(mode);
+  useEffect(() => {
+    if (mode !== 'list' && prevModeRef.current === 'list') {
+      window.history.pushState(null, '');
+    }
+    prevModeRef.current = mode;
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode === 'list') return;
+    const onPop = () => { setMode('list'); setSelectedReport(null); setCompareIds([]); };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [mode]);
 
   const dept = departments.find(d => d.name === selectedDept);
   const deptMetricTypes = new Set((dept?.metrics || []).map(m => m.type));
@@ -7841,6 +7869,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
     setOtWorkers(0);
     setOtHours(2);
     setEntryItems([{ itemId: 0, qty: 0 }]);
+    setItemSearchText(['']);
     setMetricResults([]);
   };
 
@@ -8125,24 +8154,62 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
               <div className="space-y-3">
                   {entryItems.map((item, idx) => (
                     <div key={idx} className="flex items-end gap-2">
-                      <div className="flex-1">
+                      <div className="flex-1 relative">
                         <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Item</label>
-                        <select value={item.itemId} onChange={e => { const val = Number(e.target.value); setEntryItems(prev => { const next = [...prev]; next[idx] = { ...next[idx], itemId: val }; return next; }); }} className="w-full px-3 py-2.5 bg-gray-50 border rounded-xl mt-1 text-sm">
-                          <option value={0}>Select Item</option>
-                          {items.filter(i => !selectedDept || (i.departments || []).includes(selectedDept)).map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-                        </select>
-                        {!selectedDept && <div className="text-[10px] text-gray-400 mt-1">Select a department first to see relevant items</div>}
+                        {!selectedDept ? (
+                          <div className="w-full px-3 py-2.5 bg-gray-100 border rounded-xl mt-1 text-sm text-gray-400">Select a department first</div>
+                        ) : (
+                          <>
+                            <input
+                              placeholder="Search items..."
+                              value={itemSearchText[idx] ?? ''}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setItemSearchText(prev => { const next = [...prev]; next[idx] = val; return next; });
+                                if (item.itemId > 0) {
+                                  setEntryItems(prev => { const next = [...prev]; next[idx] = { ...next[idx], itemId: 0 }; return next; });
+                                }
+                                setOpenDropdownIdx(idx);
+                              }}
+                              onFocus={() => setOpenDropdownIdx(idx)}
+                              onBlur={() => setTimeout(() => setOpenDropdownIdx(null), 200)}
+                              className="w-full px-3 py-2.5 bg-gray-50 border rounded-xl mt-1 text-sm outline-none focus:border-orange-400 transition-colors"
+                            />
+                            {openDropdownIdx === idx && (
+                              <div className="absolute z-20 left-0 right-0 mt-1 bg-white border rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                                {items.filter(i => (i.departments || []).includes(selectedDept!))
+                                  .filter(i => !itemSearchText[idx] || i.name.toLowerCase().includes(itemSearchText[idx].toLowerCase()))
+                                  .slice(0, 50)
+                                  .map(i => (
+                                    <button
+                                      type="button"
+                                      key={i.id}
+                                      onMouseDown={() => {
+                                        setEntryItems(prev => { const next = [...prev]; next[idx] = { ...next[idx], itemId: i.id }; return next; });
+                                        setItemSearchText(prev => { const next = [...prev]; next[idx] = i.name; return next; });
+                                        setOpenDropdownIdx(null);
+                                      }}
+                                      className={`w-full text-left px-3 py-2 text-sm hover:bg-orange-50 transition-colors ${item.itemId === i.id ? 'bg-orange-100 font-bold' : ''}`}
+                                    >{i.name}</button>
+                                  ))}
+                                {items.filter(i => (i.departments || []).includes(selectedDept!)).filter(i => !itemSearchText[idx] || i.name.toLowerCase().includes(itemSearchText[idx].toLowerCase())).length === 0 && (
+                                  <div className="px-3 py-2 text-sm text-gray-400 italic">No items match</div>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        )}
                     </div>
                     <div className="w-24">
                       <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Qty</label>
                       <input type="number" min="0" value={item.qty} onChange={e => { const val = Number(e.target.value); setEntryItems(prev => { const next = [...prev]; next[idx] = { ...next[idx], qty: val }; return next; }); }} className="w-full px-3 py-2.5 bg-gray-50 border rounded-xl mt-1 text-sm" />
                     </div>
                     {entryItems.length > 1 && (
-                      <button onClick={() => setEntryItems(prev => prev.filter((_, i) => i !== idx))} className="pb-1 text-red-400 hover:text-red-600"><Trash2 size={18} /></button>
+                      <button onClick={() => { setEntryItems(prev => prev.filter((_, i) => i !== idx)); setItemSearchText(prev => prev.filter((_, i) => i !== idx)); }} className="pb-1 text-red-400 hover:text-red-600"><Trash2 size={18} /></button>
                     )}
                   </div>
                 ))}
-                <button onClick={() => setEntryItems(prev => [...prev, { itemId: 0, qty: 0 }])} className="text-indigo-600 text-sm font-bold hover:text-indigo-800 flex items-center gap-1">
+                <button onClick={() => { setEntryItems(prev => [...prev, { itemId: 0, qty: 0 }]); setItemSearchText(prev => [...prev, '']); }} className="text-indigo-600 text-sm font-bold hover:text-indigo-800 flex items-center gap-1">
                   <Plus size={16} /> Add Item
                 </button>
               </div>
@@ -8331,6 +8398,28 @@ export default function App() {
     swReady: false,
     lastError: '',
   });
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const currentVersionRef = useRef<string>('');
+
+  useEffect(() => {
+    const POLL_INTERVAL = 300_000;
+
+    const check = async () => {
+      try {
+        const res = await fetch('/version.json?_=' + Date.now());
+        const data = await res.json();
+        if (!currentVersionRef.current) {
+          currentVersionRef.current = data.version;
+        } else if (data.version !== currentVersionRef.current) {
+          setUpdateAvailable(true);
+        }
+      } catch {}
+    };
+
+    check();
+    const id = setInterval(check, POLL_INTERVAL);
+    return () => clearInterval(id);
+  }, []);
 
   // Define role and department constants
   const OFFICE_MANAGER_LEVEL = '1-Manager';
@@ -9094,6 +9183,15 @@ export default function App() {
 
   return (
     <div className="liquid-app min-h-screen flex bg-[#f3f6f9] overflow-x-hidden">
+      {updateAvailable && (
+        <div className="fixed top-0 left-0 right-0 z-[9999] flex items-center justify-between gap-3 bg-orange-500 px-4 py-2.5 text-sm font-bold text-white shadow-lg">
+          <span>A new version is available.</span>
+          <div className="flex items-center gap-2">
+            <button onClick={() => window.location.reload()} className="rounded-lg bg-white px-3 py-1 text-xs font-black text-orange-600 hover:bg-orange-50">Refresh</button>
+            <button onClick={() => setUpdateAvailable(false)} className="text-white/70 hover:text-white text-lg leading-none">✕</button>
+          </div>
+        </div>
+      )}
       <style>{`
         @page {
           size: A4 portrait;
