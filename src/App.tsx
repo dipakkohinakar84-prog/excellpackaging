@@ -55,7 +55,8 @@ import {
   Square,
   Truck,
   Bell,
-  Upload
+  Upload,
+  Pencil
 } from 'lucide-react';
 import { AppView, User, Customer, Item, WorkOrder, Department, WOStatus, ChildItem, DepartmentStatus, Metric } from './types';
 import { supabase, supabaseAnonKey, loginWithMobilePassword, getCurrentAuthUser, logoutAuth } from './supabase';
@@ -2966,6 +2967,8 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
      name: '', customer_name: '', drawing_no: '', departments: [] 
    });
   const [itemRows, setItemRows] = useState<Array<{ name: string; drawing_no: string; drawing_file: File | null; departments: string[]; metric_requirements: ItemMetricRequirement[] }>>([{ name: '', drawing_no: '', drawing_file: null, departments: [], metric_requirements: [] }]);
+  const [rowWithDeptError, setRowWithDeptError] = useState<number | null>(null);
+  const itemCardRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   const involvingDepartments = useMemo(
     () => departments.filter(d => isInvolvingDepartment(d.name)),
@@ -3020,6 +3023,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
   };
 
    const handleDeptToggle = (rowIndex: number, name: string) => {
+     setRowWithDeptError(null);
      const dept = departments.find(d => d.name === name);
      setItemRows(prev => {
        const row = prev[rowIndex];
@@ -3047,6 +3051,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
    const resetItemForm = () => {
      setFormData({ name: '', customer_name: '', drawing_no: '', departments: [] });
      setItemRows([{ name: '', drawing_no: '', drawing_file: null, departments: [], metric_requirements: [] }]);
+     setRowWithDeptError(null);
    };
 
   const updateItemRow = (index: number, field: 'name' | 'drawing_no' | 'metric_requirements' | 'departments', value: string | ItemMetricRequirement[] | string[]) => {
@@ -3301,7 +3306,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
         <button onClick={() => { setEditingItem(null); resetItemForm(); setIsModalOpen(true); }} className="bg-orange-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg hover:bg-orange-700 transition-colors"><Plus size={18} /></button>
       </div>
 
-      <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingItem(null); }} title={editingItem ? "Edit Item" : "New Item"} maxWidthClassName="max-w-4xl">
+      <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingItem(null); }} title={editingItem ? "Edit Item" : "New Item"} maxWidthClassName="max-w-6xl">
         <form onSubmit={async (e) => { 
           e.preventDefault(); 
           const customerKey = normalizeDuplicateKey(formData.customer_name);
@@ -3310,6 +3315,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
               name: row.name.trim().replace(/\s+/g, ' '),
               drawing_no: row.drawing_no.trim(),
               drawing_file: row.drawing_file,
+              departments: row.departments,
               metric_requirements: row.metric_requirements || [],
             }))
             .filter(row => row.name || row.drawing_no || row.drawing_file);
@@ -3328,6 +3334,11 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
           // Check each row has at least one department
           const rowsWithoutDept = validRows.filter(row => !row.departments || row.departments.length === 0);
           if (rowsWithoutDept.length > 0) {
+            const errIdx = itemRows.findIndex(r => !r.departments || r.departments.length === 0);
+            if (errIdx >= 0) {
+              setRowWithDeptError(errIdx);
+              setTimeout(() => itemCardRefs.current[errIdx]?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+            }
             alert(`Item "${rowsWithoutDept[0].name}" needs at least one department.`);
             return;
           }
@@ -3410,76 +3421,70 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
             {/* Scrollable item cards */}
             <div className="flex-1 overflow-y-auto min-h-0 px-5 pb-5 space-y-4">
             {itemRows.map((row, index) => (
-              <div key={index} className="rounded-xl border border-orange-200 bg-orange-50/40 p-5">
+              <div key={index} ref={el => itemCardRefs.current[index] = el} className={`rounded-xl border p-5 transition-shadow ${rowWithDeptError === index ? 'border-red-400 bg-red-50 shadow-[0_0_0_2px_rgba(239,68,68,0.2)]' : 'border-orange-200 bg-orange-50/40'}`}>
                 <div className="flex items-center justify-between mb-4">
                   <span className="text-sm font-black uppercase tracking-widest text-gray-500">Item {index + 1}</span>
                   {!editingItem && <button type="button" onClick={() => removeItemRow(index)} className="text-xs font-bold text-red-400 hover:text-red-600">Remove</button>}
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
-                  <div className="md:col-span-2">
-                    <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block">Item Name</label>
-                    <input required={index === 0} placeholder="e.g. Wooden Box 12x8" value={row.name} onChange={e => updateItemRow(index, 'name', e.target.value)} className="w-full px-4 py-3 bg-white border rounded-lg text-sm" />
-                  </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block">Drawing No.</label>
-                    <input required={index === 0} placeholder="e.g. DWG-001" value={row.drawing_no} onChange={e => updateItemRow(index, 'drawing_no', e.target.value)} className="w-full px-4 py-3 bg-white border rounded-lg text-sm" />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block">Drawing File</label>
-                    <label className="flex min-h-[48px] cursor-pointer items-center justify-between gap-3 rounded-lg border bg-white px-4 py-3 text-sm font-bold text-gray-500 hover:bg-orange-50">
-                      <span className="min-w-0 truncate">{row.drawing_file ? row.drawing_file.name : 'Upload PDF'}</span>
-                      <Upload size={16} className="flex-shrink-0 text-orange-600" />
-                      <input type="file" accept="application/pdf,image/*" onChange={e => updateItemDrawingFile(index, e.target.files?.[0] || null)} className="hidden" />
-                    </label>
-                  </div>
-                </div>
 
-                {/* Per-row Department toggle */}
-                <div className="border-t border-orange-200 pt-4 mb-4">
-                  <h5 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-3">Departments</h5>
-                  <div className="flex flex-wrap gap-2">
-                    {involvingDepartments.map(d => (
-                      <button key={d.id} type="button" onClick={() => handleDeptToggle(index, d.name)} className={`px-4 py-2 text-xs font-black border rounded-xl transition-all ${(row.departments || []).includes(d.name) ? 'bg-orange-600 text-white shadow-md border-orange-600' : 'bg-gray-50 text-gray-400 border-gray-200 hover:border-orange-300'}`}>{d.name}</button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Inline Metric Requirements */}
-                <div className="border-t border-orange-200 pt-4">
-                  <h5 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-3 flex items-center gap-1.5">📊 Metric Requirements {(row.metric_requirements?.length || 0) > 0 && <span className="text-purple-600 font-black">({row.metric_requirements!.length})</span>}</h5>
-                  {row.metric_requirements && row.metric_requirements.length > 0 && (
-                    <div className="overflow-x-auto mb-3">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="text-[10px] font-black uppercase text-gray-400 border-b">
-                            <th className="text-left py-2 pr-3">Metric</th>
-                            <th className="text-left py-2 px-3">Unit</th>
-                            <th className="text-right py-2 pl-3">Qty/Unit</th>
-                            <th className="w-10 py-2"></th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                          {row.metric_requirements.map((req, mi) => (
-                            <tr key={mi}>
-                              <td className="py-2 pr-3">
-                                <input placeholder="e.g. Plywood" value={req.metric} onChange={e => { const updated = [...itemRows[index].metric_requirements]; updated[mi] = {...updated[mi], metric: e.target.value}; updateItemRow(index, 'metric_requirements', updated); }} className="w-full px-3 py-2 bg-white border rounded-lg text-sm" />
-                              </td>
-                              <td className="py-2 px-3">
-                                <input placeholder="e.g. Sq.m" value={req.unit} onChange={e => { const updated = [...itemRows[index].metric_requirements]; updated[mi] = {...updated[mi], unit: e.target.value}; updateItemRow(index, 'metric_requirements', updated); }} className="w-24 px-3 py-2 bg-white border rounded-lg text-sm" />
-                              </td>
-                              <td className="py-2 pl-3">
-                                <input type="number" step="any" placeholder="0" value={req.qtyPerUnit} onChange={e => { const updated = [...itemRows[index].metric_requirements]; updated[mi] = {...updated[mi], qtyPerUnit: parseFloat(e.target.value) || 0}; updateItemRow(index, 'metric_requirements', updated); }} className="w-24 px-3 py-2 bg-white border rounded-lg text-sm text-right" />
-                              </td>
-                              <td className="py-2 text-center">
-                                <button type="button" onClick={() => { const updated = itemRows[index].metric_requirements.filter((_, i) => i !== mi); updateItemRow(index, 'metric_requirements', updated); }} className="text-red-400 hover:text-red-600 font-bold text-sm">✕</button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                      <div className="md:col-span-3">
+                        <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block">Item Name</label>
+                        <input required={index === 0} placeholder="e.g. Wooden Box 12x8" value={row.name} onChange={e => updateItemRow(index, 'name', e.target.value)} className="w-full px-5 py-3.5 bg-white border rounded-lg text-base" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block">Drawing No.</label>
+                        <input required={index === 0} placeholder="e.g. DWG-001" value={row.drawing_no} onChange={e => updateItemRow(index, 'drawing_no', e.target.value)} className="w-full px-4 py-3 bg-white border rounded-lg text-sm" />
+                      </div>
+                      <div className="md:col-span-1">
+                        <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block">Drawing File</label>
+                        <label className="flex min-h-[48px] cursor-pointer items-center justify-between gap-3 rounded-lg border bg-white px-4 py-3 text-sm font-bold text-gray-500 hover:bg-orange-50">
+                          <span className="min-w-0 truncate">{row.drawing_file ? row.drawing_file.name : 'Upload PDF'}</span>
+                          <Upload size={16} className="flex-shrink-0 text-orange-600" />
+                          <input type="file" accept="application/pdf,image/*" onChange={e => updateItemDrawingFile(index, e.target.files?.[0] || null)} className="hidden" />
+                        </label>
+                      </div>
                     </div>
-                  )}
-                  <button type="button" onClick={() => { const updated = [...(itemRows[index].metric_requirements || []), { metric: '', unit: '', qtyPerUnit: 0 }]; updateItemRow(index, 'metric_requirements', updated); }} className="text-purple-600 text-sm font-bold hover:text-purple-800 flex items-center gap-1"><Plus size={14} /> Add Metric Requirement</button>
+
+                    {/* Departments */}
+                    <div className="mt-4">
+                      <h5 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-3">Departments</h5>
+                      <div className="flex flex-wrap gap-2">
+                        {involvingDepartments.map(d => (
+                          <button key={d.id} type="button" onClick={() => handleDeptToggle(index, d.name)} className={`px-4 py-2 text-xs font-black border rounded-xl transition-all ${(row.departments || []).includes(d.name) ? 'bg-orange-600 text-white shadow-md border-orange-600' : 'bg-gray-50 text-gray-400 border-gray-200 hover:border-orange-300'}`}>{d.name}</button>
+                        ))}
+                      </div>
+                      {rowWithDeptError === index && <p className="mt-2 text-xs font-bold text-red-500">Please select at least one department.</p>}
+                    </div>
+
+                  </div>
+
+                  <div>
+                    <div className="rounded-xl border border-orange-200 bg-white p-4">
+                      <h5 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-3 flex items-center gap-1.5">📊 Metric Requirements {(row.metric_requirements?.length || 0) > 0 && <span className="text-purple-600 font-black">({row.metric_requirements!.length})</span>}</h5>
+                      {row.metric_requirements && row.metric_requirements.length > 0 && (
+                          <div className="space-y-2 mb-3">
+                            <div className="flex items-center gap-2 text-[10px] font-black uppercase text-gray-400 px-1">
+                              <span className="flex-1">Metric</span>
+                              <span className="w-20 text-center">Unit</span>
+                              <span className="w-20 text-right">Qty/Unit</span>
+                              <span className="w-7"></span>
+                            </div>
+                            {row.metric_requirements.map((req, mi) => (
+                              <div key={mi} className="flex items-center gap-2">
+                                <input placeholder="e.g. Plywood" value={req.metric} onChange={e => { const updated = [...itemRows[index].metric_requirements]; updated[mi] = {...updated[mi], metric: e.target.value}; updateItemRow(index, 'metric_requirements', updated); }} className="flex-1 px-3 py-2 bg-white border rounded-lg text-sm" />
+                                <input placeholder="e.g. Sq.m" value={req.unit} onChange={e => { const updated = [...itemRows[index].metric_requirements]; updated[mi] = {...updated[mi], unit: e.target.value}; updateItemRow(index, 'metric_requirements', updated); }} className="w-20 px-3 py-2 bg-white border rounded-lg text-sm" />
+                                <input type="number" step="any" placeholder="0" value={req.qtyPerUnit} onChange={e => { const updated = [...itemRows[index].metric_requirements]; updated[mi] = {...updated[mi], qtyPerUnit: parseFloat(e.target.value) || 0}; updateItemRow(index, 'metric_requirements', updated); }} className="w-20 px-3 py-2 bg-white border rounded-lg text-sm text-right" />
+                                <button type="button" onClick={() => { const updated = itemRows[index].metric_requirements.filter((_, i) => i !== mi); updateItemRow(index, 'metric_requirements', updated); }} className="text-red-400 hover:text-red-600 font-bold text-sm px-1">✕</button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <button type="button" onClick={() => { const updated = [...(itemRows[index].metric_requirements || []), { metric: '', unit: '', qtyPerUnit: 0 }]; updateItemRow(index, 'metric_requirements', updated); }} className="text-purple-600 text-sm font-bold hover:text-purple-800 flex items-center gap-1"><Plus size={14} /> Add Metric Requirement</button>
+                      </div>
+                  </div>
                 </div>
               </div>
             ))}
@@ -3493,7 +3498,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
         </form>
       </Modal>
 
-      <Modal isOpen={isImageModalOpen} onClose={() => setIsImageModalOpen(false)} title="Drawing PDF Preview">
+      <Modal isOpen={isImageModalOpen} onClose={() => setIsImageModalOpen(false)} title="Drawing PDF Preview" maxWidthClassName="max-w-6xl">
          {selectedItem?.drawing_image_url ? (
             <div className="flex flex-col items-center gap-4">
                <iframe src={selectedItem.drawing_image_url} title="Drawing PDF" className="w-full h-[70vh] rounded-xl border shadow-xl bg-white" />
@@ -4334,7 +4339,7 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
         </select>
       </div>
 
-      <Modal isOpen={isImageModalOpen} onClose={() => setIsImageModalOpen(false)} title="Drawing PDF Preview">
+      <Modal isOpen={isImageModalOpen} onClose={() => setIsImageModalOpen(false)} title="Drawing PDF Preview" maxWidthClassName="max-w-6xl">
          <div className="flex flex-col items-center">
             {selectedImageUrl ? (
                <div className="w-full space-y-3">
@@ -4994,7 +4999,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
         </form>
       </Modal>
 
-      <Modal isOpen={isImageModalOpen} onClose={() => setIsImageModalOpen(false)} title="Drawing PDF Preview">
+      <Modal isOpen={isImageModalOpen} onClose={() => setIsImageModalOpen(false)} title="Drawing PDF Preview" maxWidthClassName="max-w-6xl">
          <div className="flex flex-col items-center">
             {selectedImageUrl ? (
                <div className="w-full space-y-3">
@@ -7721,7 +7726,22 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
   );
 };
 
-// --- Production Reports ---
+// --- Production Entry ---
+
+const formatDateDMY = (dateStr: string) => {
+  if (!dateStr) return '';
+  const [y, m, d] = dateStr.split('-');
+  if (!y || !m || !d) return dateStr;
+  return `${d}/${m}/${y.slice(2)}`;
+};
+
+const parseDMY = (dmy: string) => {
+  const parts = dmy.split('/');
+  if (parts.length !== 3) return '';
+  const [d, m, y] = parts;
+  const fullY = y.length === 2 ? `20${y}` : y;
+  return `${fullY}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+};
 
 const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
   const [mode, setMode] = useState<'list' | 'entry' | 'detail' | 'compare'>('list');
@@ -7732,8 +7752,12 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
   const [saving, setSaving] = useState(false);
   const [selectedReport, setSelectedReport] = useState<ProductionReport | null>(null);
   const [compareIds, setCompareIds] = useState<number[]>([]);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [searchText, setSearchText] = useState('');
+  const [filterDept, setFilterDept] = useState('');
 
   // Entry form state
+  const [reportDate, setReportDate] = useState(new Date().toISOString().slice(0, 10));
   const [selectedDept, setSelectedDept] = useState('');
   const [shiftWorkers, setShiftWorkers] = useState(0);
   const [shiftHours, setShiftHours] = useState(8);
@@ -7822,6 +7846,23 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
       alert('Please select a department and at least one item with qty > 0');
       return;
     }
+    const itemIds = validItems.map(e => e.itemId);
+    if (new Set(itemIds).size !== itemIds.length) {
+      alert('An item cannot be added twice in the same report.');
+      return;
+    }
+    if (!editingId) {
+      const { data: existing } = await supabase
+        .from('production_reports')
+        .select('id')
+        .eq('date', reportDate)
+        .eq('department', selectedDept);
+      if (existing && existing.length > 0) {
+        alert(`A report for ${selectedDept} on ${formatDateDMY(reportDate)} already exists. Only one report per department per date is allowed.`);
+        setSaving(false);
+        return;
+      }
+    }
     setSaving(true);
     const itemsPayload = validItems.map(e => {
       const item = items.find(i => i.id === e.itemId);
@@ -7853,12 +7894,17 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
       total_shift_hours: totalShiftHours,
       total_ot_hours: totalOtHours,
       grand_total_hours: grandTotalHours,
-      date: new Date().toISOString().slice(0, 10),
+      date: reportDate,
       results: metricResults,
       created_by: getStoredLoggedInUser() || '',
       items: itemsPayload,
     };
-    const { error } = await supabase.from('production_reports').insert([payload]);
+    let error;
+    if (editingId) {
+      ({ error } = await supabase.from('production_reports').update(payload).eq('id', editingId));
+    } else {
+      ({ error } = await supabase.from('production_reports').insert([payload]));
+    }
     if (error) alert(error.message);
     else {
       setMode('list');
@@ -7868,7 +7914,26 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
     setSaving(false);
   };
 
+  const populateForm = (r: ProductionReport) => {
+    setEditingId(r.id);
+    setReportDate(r.date);
+    setSelectedDept(r.department);
+    setShiftWorkers(r.shift_workers);
+    setShiftHours(r.shift_hours);
+    setOtWorkers(r.ot_workers);
+    setOtHours(r.ot_hours);
+    if (r.items && r.items.length > 0) {
+      setEntryItems(r.items.map(it => ({ itemId: it.item_id, qty: it.qty_produced })));
+      setItemSearchText(r.items.map(it => it.item_name));
+    } else {
+      setEntryItems([{ itemId: r.item_id, qty: r.qty_produced }]);
+      setItemSearchText([r.item_name]);
+    }
+  };
+
   const resetForm = () => {
+    setEditingId(null);
+    setReportDate(new Date().toISOString().slice(0, 10));
     setSelectedDept('');
     setShiftWorkers(0);
     setShiftHours(8);
@@ -7892,7 +7957,10 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h2 className="text-xl font-black text-gray-800">Production Report</h2>
-          <button onClick={() => setMode('list')} className="text-sm font-bold text-gray-500 hover:text-gray-700">← Back to List</button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => { populateForm(r); setMode('entry'); }} className="text-sm font-bold text-indigo-600 hover:text-indigo-800">Edit</button>
+            <button onClick={() => setMode('list')} className="text-sm font-bold text-gray-500 hover:text-gray-700">← Back to List</button>
+          </div>
         </div>
 
         {r.results && r.results.length > 0 && (
@@ -7912,7 +7980,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
           <Card>
             <h3 className="font-black text-gray-700 mb-4 text-sm uppercase tracking-wider">Report Info</h3>
             <div className="space-y-3">
-              <div><span className="text-[10px] font-black uppercase text-gray-400">Date</span><div className="font-bold text-gray-800">{r.date}</div></div>
+              <div><span className="text-[10px] font-black uppercase text-gray-400">Date</span><div className="font-bold text-gray-800">{formatDateDMY(r.date)}</div></div>
               <div><span className="text-[10px] font-black uppercase text-gray-400">Department</span><div className="font-bold text-gray-800">{r.department}</div></div>
               {r.items && r.items.length > 0 ? (
                 <div>
@@ -7932,7 +8000,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
                   <div><span className="text-[10px] font-black uppercase text-gray-400">Qty Produced</span><div className="font-bold text-indigo-700 text-lg">{r.qty_produced}</div></div>
                 </>
               )}
-              <div><span className="text-[10px] font-black uppercase text-gray-400">Created By</span><div className="font-semibold text-gray-600">{r.created_by}</div></div>
+
             </div>
           </Card>
 
@@ -7956,7 +8024,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
                 </div>
               </div>
               <div className="rounded-xl bg-green-50 p-4 border border-green-200 text-center">
-                <span className="text-xs font-black uppercase text-green-600">Grand Total Hours</span>
+                <span className="text-xs font-black uppercase text-green-600">Total Man Hour</span>
                 <div className="text-2xl font-black text-green-700">{r.grand_total_hours} hrs</div>
               </div>
             </div>
@@ -8020,7 +8088,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
             <thead className="bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b">
               <tr>
                 <th className="px-4 py-3 text-left w-44">Field</th>
-                {compareList.map(r => <th key={r.id} className="px-4 py-3 text-center min-w-[160px]">{r.date}<br /><span className="text-gray-500 font-bold">{r.department}</span></th>)}
+                {compareList.map(r => <th key={r.id} className="px-4 py-3 text-center min-w-[160px]">{formatDateDMY(r.date)}<br /><span className="text-gray-500 font-bold">{r.department}</span></th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -8028,7 +8096,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
               {[
                 { key: 'department', label: 'Department', render: (r: ProductionReport) => r.department },
                 { key: 'item_name', label: 'Item', render: (r: ProductionReport) => r.items && r.items.length > 1 ? `${r.items[0].item_name} (+${r.items.length - 1})` : r.item_name },
-                { key: 'created_by', label: 'Created By', render: (r: ProductionReport) => r.created_by },
+
               ].map(({ key, label, render }) => {
                 const rowVals = vals(render);
                 const diff = isDiff(rowVals);
@@ -8061,7 +8129,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
                 );
               })}
               <tr className="bg-green-50 hover:bg-green-100/50">
-                <td className="px-4 py-3 font-black text-green-800">Grand Total Hours</td>
+                <td className="px-4 py-3 font-black text-green-800">Total Man Hour</td>
                 {compareList.map(r => (
                   <td key={r.id} className="px-4 py-3 text-center font-black text-green-700 text-base">{r.grand_total_hours}h</td>
                 ))}
@@ -8102,7 +8170,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
     return (
       <div className="space-y-6">
         <div className="flex justify-between items-center">
-          <h2 className="text-xl font-black text-gray-800">New Production Report</h2>
+          <h2 className="text-xl font-black text-gray-800">{editingId ? 'Edit Production Report' : 'New Production Report'}</h2>
           <button onClick={() => { setMode('list'); resetForm(); }} className="text-sm font-bold text-gray-500 hover:text-gray-700">← Back</button>
         </div>
 
@@ -8110,6 +8178,10 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
           <Card>
             <h3 className="font-black text-gray-700 mb-4 text-sm">Department & Labor</h3>
             <div className="space-y-4">
+              <div>
+                <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Date</label>
+                <input type="text" placeholder="dd/mm/yy" value={formatDateDMY(reportDate)} onChange={e => { const parsed = parseDMY(e.target.value); if (parsed) setReportDate(parsed); else setReportDate(e.target.value); }} className="w-full px-4 py-3 bg-gray-50 border rounded-xl mt-1" />
+              </div>
               <div>
                 <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Department</label>
                 <select value={selectedDept} onChange={e => setSelectedDept(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border rounded-xl mt-1">
@@ -8148,7 +8220,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
                 </div>
               </div>
               <div className="rounded-xl bg-green-50 p-4 border border-green-200 text-center">
-                <span className="text-xs font-black uppercase text-green-600">Grand Total Hours</span>
+                <span className="text-xs font-black uppercase text-green-600">Total Man Hour</span>
                 <div className="text-2xl font-black text-green-700">{grandTotalHours} hrs</div>
               </div>
             </div>
@@ -8185,6 +8257,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
                               <div className="absolute z-20 left-0 right-0 mt-1 bg-white border rounded-xl shadow-lg max-h-48 overflow-y-auto">
                                 {items.filter(i => (i.departments || []).includes(selectedDept!))
                                   .filter(i => !itemSearchText[idx] || i.name.toLowerCase().includes(itemSearchText[idx].toLowerCase()))
+                                  .filter(i => !entryItems.some((e, ei) => ei !== idx && e.itemId === i.id))
                                   .slice(0, 50)
                                   .map(i => (
                                     <button
@@ -8198,7 +8271,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
                                       className={`w-full text-left px-3 py-2 text-sm hover:bg-orange-50 transition-colors ${item.itemId === i.id ? 'bg-orange-100 font-bold' : ''}`}
                                     >{i.name}</button>
                                   ))}
-                                {items.filter(i => (i.departments || []).includes(selectedDept!)).filter(i => !itemSearchText[idx] || i.name.toLowerCase().includes(itemSearchText[idx].toLowerCase())).length === 0 && (
+                                {items.filter(i => (i.departments || []).includes(selectedDept!)).filter(i => !itemSearchText[idx] || i.name.toLowerCase().includes(itemSearchText[idx].toLowerCase())).filter(i => !entryItems.some((e, ei) => ei !== idx && e.itemId === i.id)).length === 0 && (
                                   <div className="px-3 py-2 text-sm text-gray-400 italic">No items match</div>
                                 )}
                               </div>
@@ -8263,7 +8336,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
                 disabled={saving}
                 className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black shadow-lg hover:bg-indigo-700 disabled:opacity-50"
               >
-                {saving ? 'Saving...' : 'Save Report'}
+                {saving ? 'Saving...' : editingId ? 'Update Entry' : 'Save Entry'}
               </button>
             </div>
           </Card>
@@ -8275,7 +8348,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center gap-4">
-        <h2 className="text-xl font-black text-gray-800">Production Reports</h2>
+        <h2 className="text-xl font-black text-gray-800">Production Entry</h2>
         <div className="flex items-center gap-2">
           {compareIds.length >= 2 && (
             <button onClick={() => setMode('compare')} className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg hover:bg-emerald-700 transition-colors text-sm flex items-center gap-1">
@@ -8283,9 +8356,21 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
             </button>
           )}
           <button onClick={() => setMode('entry')} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg hover:bg-indigo-700 transition-colors flex items-center gap-2">
-            <Plus size={18} /> New Report
+            <Plus size={18} /> New Entry
           </button>
         </div>
+      </div>
+
+      {/* Search & Filter */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input type="text" placeholder="Search by item name..." value={searchText} onChange={e => setSearchText(e.target.value)} className="w-full pl-9 pr-4 py-2.5 border rounded-xl text-sm bg-white" />
+        </div>
+        <select value={filterDept} onChange={e => setFilterDept(e.target.value)} className="px-4 py-2.5 border rounded-xl text-sm bg-white">
+          <option value="">All Departments</option>
+          {departments.filter(d => !['Office', 'Quality Control', 'Dispatch', 'QC', 'QC Control', 'Quality_Control'].includes(d.name)).map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+        </select>
       </div>
 
       {loading ? (
@@ -8294,6 +8379,19 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
         <div className="text-center py-20 text-gray-400 italic">No production reports yet.</div>
       ) : (
         <>
+        {(() => {
+          const filtered = reports.filter(r => {
+            if (filterDept && r.department !== filterDept) return false;
+            if (searchText) {
+              const q = searchText.toLowerCase();
+              const itemMatch = r.items ? r.items.some(it => it.item_name.toLowerCase().includes(q)) : r.item_name.toLowerCase().includes(q);
+              if (!itemMatch) return false;
+            }
+            return true;
+          });
+          return filtered.length === 0 ? (
+            <div className="text-center py-20 text-gray-400 italic">No reports match your search.</div>
+          ) : (
         <div className="overflow-x-auto rounded-2xl border shadow-sm bg-white">
           <table className="w-full min-w-[900px] text-sm">
             <thead className="bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b">
@@ -8308,17 +8406,16 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
                 <th className="px-4 py-3 text-right">OT</th>
                 <th className="px-4 py-3 text-right">Total Hrs</th>
                 <th className="px-4 py-3 text-right">Qty</th>
-                <th className="px-4 py-3 text-right">Created By</th>
                 <th className="px-4 py-3 text-right"></th>
               </tr>
             </thead>
               <tbody className="divide-y divide-gray-100">
-                {reports.map(r => (
+                {filtered.map(r => (
                   <tr key={r.id} className="hover:bg-indigo-50/30 transition-colors cursor-pointer">
                     <td className="px-2 py-3 text-center" onClick={e => e.stopPropagation()}>
                       <input type="checkbox" checked={compareIds.includes(r.id)} onChange={e => setCompareIds(prev => e.target.checked ? [...prev, r.id] : prev.filter(id => id !== r.id))} className="cursor-pointer" />
                     </td>
-                    <td className="px-4 py-3 font-semibold text-gray-700" onClick={() => { setSelectedReport(r); setMode('detail'); }}>{r.date}</td>
+                    <td className="px-4 py-3 font-semibold text-gray-700" onClick={() => { setSelectedReport(r); setMode('detail'); }}>{formatDateDMY(r.date)}</td>
                     <td className="px-4 py-3 font-bold text-gray-800" onClick={() => { setSelectedReport(r); setMode('detail'); }}>{r.department}</td>
                     <td className="px-4 py-3 text-gray-700" onClick={() => { setSelectedReport(r); setMode('detail'); }}>
                       {r.items && r.items.length > 1
@@ -8329,8 +8426,8 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
                     <td className="px-4 py-3 text-right text-gray-600" onClick={() => { setSelectedReport(r); setMode('detail'); }}>{r.total_ot_hours}h</td>
                     <td className="px-4 py-3 text-right font-bold text-indigo-700" onClick={() => { setSelectedReport(r); setMode('detail'); }}>{r.grand_total_hours}h</td>
                     <td className="px-4 py-3 text-right font-semibold text-gray-700" onClick={() => { setSelectedReport(r); setMode('detail'); }}>{r.qty_produced}</td>
-                    <td className="px-4 py-3 text-right text-gray-500" onClick={() => { setSelectedReport(r); setMode('detail'); }}>{r.created_by}</td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      <button onClick={e => { e.stopPropagation(); populateForm(r); setMode('entry'); }} className="p-1 text-indigo-300 hover:text-indigo-500 mr-1"><Pencil size={14} /></button>
                       <button onClick={e => { e.stopPropagation(); handleDelete(r.id); }} className="p-1 text-red-300 hover:text-red-500"><Trash2 size={14} /></button>
                     </td>
                   </tr>
@@ -8338,46 +8435,14 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
               </tbody>
           </table>
         </div>
+          );
+        })()}
         {compareIds.length > 0 && (
           <div className="text-xs text-gray-400 text-right">Compare ({compareIds.length} selected) <button onClick={() => setCompareIds([])} className="text-red-400 hover:text-red-600 ml-2">Clear</button></div>
         )}
         </>
       )}
 
-      {reports.length > 0 && reports.filter(r => r.results?.length > 0).length > 0 && (
-        <Card>
-          <h3 className="font-black text-gray-700 mb-4 text-sm">📊 Recent Metric Calculations</h3>
-          <div className="space-y-3">
-            {reports.slice(0, 5).filter(r => r.results?.length > 0).map(r => (
-              <details key={r.id} className="rounded-xl border border-gray-200">
-                <summary className="px-4 py-3 cursor-pointer font-bold text-sm text-gray-700 hover:bg-gray-50 rounded-xl">
-                  {r.date} — {r.item_name} ({r.qty_produced} units)
-                </summary>
-                <div className="px-4 pb-3">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-[10px] font-black uppercase text-gray-400 border-b">
-                        <th className="text-left py-1">Metric</th>
-                        <th className="text-right py-1">Total</th>
-                        <th className="text-right py-1">Unit</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {r.results.map((res, idx) => (
-                        <tr key={idx}>
-                          <td className="py-1 font-semibold text-gray-700">{res.metric}</td>
-                          <td className="py-1 text-right font-bold text-indigo-700">{res.totalQty}</td>
-                          <td className="py-1 text-right font-bold text-gray-500">{res.unit}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </details>
-            ))}
-          </div>
-        </Card>
-      )}
     </div>
   );
 };
@@ -8900,7 +8965,7 @@ export default function App() {
          items: [
            { id: 'production-plan' as AppView, label: 'Prod Plan', icon: FileText, highlight: true },
            { id: 'custom-bom-plan' as AppView, label: 'Custom BOM', icon: ListPlus, highlight: true },
-           { id: 'production-reports' as AppView, label: 'PR Entry', icon: ClipboardList, highlight: true },
+           { id: 'production-reports' as AppView, label: 'Production Entry', icon: ClipboardList, highlight: true },
            { id: 'reports' as AppView, label: 'Reports', icon: GanttChartSquare, highlight: true },
          ],
        },
