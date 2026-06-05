@@ -8196,7 +8196,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
             <div className="space-y-4">
               <div>
                 <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Date</label>
-                <input type="text" placeholder="dd/mm/yy" value={formatDateDMY(reportDate)} onChange={e => { const parsed = parseDMY(e.target.value); if (parsed) setReportDate(parsed); else setReportDate(e.target.value); }} className="w-full px-4 py-3 bg-gray-50 border rounded-xl mt-1" />
+                <input type="date" value={reportDate} onChange={e => setReportDate(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border rounded-xl mt-1" />
               </div>
               <div>
                 <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Department</label>
