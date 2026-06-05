@@ -121,6 +121,7 @@ export interface ProductionReport {
   results: MetricResult[];
   created_by: string;
   items?: ReportItem[];
+  other_work?: string;
 }
 
 export type DepartmentWOStatus = 'Not Started' | 'Work Started' | 'Ready for QC';

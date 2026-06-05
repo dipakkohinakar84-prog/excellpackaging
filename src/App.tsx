@@ -7755,6 +7755,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [searchText, setSearchText] = useState('');
   const [filterDept, setFilterDept] = useState('');
+  const [expandedOtherReports, setExpandedOtherReports] = useState<Set<number>>(new Set());
 
   // Entry form state
   const [reportDate, setReportDate] = useState(new Date().toISOString().slice(0, 10));
@@ -7767,6 +7768,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
   const [itemSearchText, setItemSearchText] = useState<string[]>(['']);
   const [openDropdownIdx, setOpenDropdownIdx] = useState<number | null>(null);
   const [metricResults, setMetricResults] = useState<MetricResult[]>([]);
+  const [otherWork, setOtherWork] = useState('');
 
   const totalShiftHours = shiftWorkers * shiftHours;
   const totalOtHours = otWorkers * otHours;
@@ -7783,15 +7785,15 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
 
   useEffect(() => {
     if (mode === 'list') return;
-    const onPop = () => { setMode('list'); setSelectedReport(null); setCompareIds([]); };
+    const onPop = () => { setMode('list'); setSelectedReport(null); setCompareIds([]); setExpandedOtherReports(new Set()); };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, [mode]);
 
   const dept = departments.find(d => d.name === selectedDept);
-  const deptMetricTypes = new Set((dept?.metrics || []).map(m => m.type));
 
   useEffect(() => {
+    const deptMetricTypes = new Set((dept?.metrics || []).map(m => m.type));
     const validItems = entryItems.filter(e => e.itemId > 0 && e.qty > 0);
     if (!selectedDept || validItems.length === 0) {
       setMetricResults([]);
@@ -7818,7 +7820,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
       }
     }
     setMetricResults(Array.from(combined.values()));
-  }, [entryItems, selectedDept, items, deptMetricTypes]);
+  }, [entryItems, selectedDept, items, dept]);
 
   const fetchReports = useCallback(async () => {
     setLoading(true);
@@ -7890,13 +7892,14 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
       shift_hours: shiftHours,
       ot_workers: otWorkers,
       ot_hours: otHours,
-      qty_produced: metricResults.reduce((s, r) => s + r.totalQty, 0),
+      qty_produced: validItems.reduce((s, e) => s + e.qty, 0),
       total_shift_hours: totalShiftHours,
       total_ot_hours: totalOtHours,
       grand_total_hours: grandTotalHours,
       date: reportDate,
       results: metricResults,
       created_by: getStoredLoggedInUser() || '',
+      other_work: otherWork || null,
       items: itemsPayload,
     };
     let error;
@@ -7922,6 +7925,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
     setShiftHours(r.shift_hours);
     setOtWorkers(r.ot_workers);
     setOtHours(r.ot_hours);
+    setOtherWork(r.other_work || '');
     if (r.items && r.items.length > 0) {
       setEntryItems(r.items.map(it => ({ itemId: it.item_id, qty: it.qty_produced })));
       setItemSearchText(r.items.map(it => it.item_name));
@@ -7942,6 +7946,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
     setEntryItems([{ itemId: 0, qty: 0 }]);
     setItemSearchText(['']);
     setMetricResults([]);
+    setOtherWork('');
   };
 
   const handleDelete = async (id: number) => {
@@ -8000,6 +8005,8 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
                   <div><span className="text-[10px] font-black uppercase text-gray-400">Qty Produced</span><div className="font-bold text-indigo-700 text-lg">{r.qty_produced}</div></div>
                 </>
               )}
+
+              {r.other_work && <div><span className="text-[10px] font-black uppercase text-gray-400">Other Work</span><div className="font-semibold text-gray-700 whitespace-pre-wrap">{r.other_work}</div></div>}
 
             </div>
           </Card>
@@ -8081,7 +8088,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h2 className="text-xl font-black text-gray-800">Compare Reports</h2>
-          <button onClick={() => { setMode('list'); setCompareIds([]); }} className="text-sm font-bold text-gray-500 hover:text-gray-700">← Back to List</button>
+          <button onClick={() => { setMode('list'); setCompareIds([]); setExpandedOtherReports(new Set()); }} className="text-sm font-bold text-gray-500 hover:text-gray-700">← Back to List</button>
         </div>
         <div className="overflow-x-auto rounded-2xl border shadow-sm bg-white">
           <table className="w-full text-sm">
@@ -8109,6 +8116,15 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
                   </tr>
                 );
               })}
+
+              <tr className="hover:bg-gray-50">
+                <td className="px-4 py-3 font-bold text-gray-700">Other Work</td>
+                {compareList.map(r => (
+                  <td key={r.id} className={`px-4 py-3 text-center ${expandedOtherReports.has(r.id) ? '' : 'max-w-[200px]'} ${r.other_work ? 'cursor-pointer' : ''}`} onClick={() => { if (r.other_work) { setExpandedOtherReports(prev => { const n = new Set(prev); if (n.has(r.id)) n.delete(r.id); else n.add(r.id); return n; }); } }}>
+                    <span className={`font-semibold text-gray-800 ${expandedOtherReports.has(r.id) ? 'whitespace-pre-wrap' : 'line-clamp-1'}`}>{r.other_work || '—'}</span>
+                  </td>
+                ))}
+              </tr>
 
               <SectionRow label="👷 Labor Breakdown" bg="bg-amber-50" textColor="text-amber-700" />
               {[
@@ -8330,6 +8346,11 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
                   </div>
                 </div>
               )}
+
+              <div>
+                <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block">Other Work</label>
+                <textarea placeholder="Describe any other work done..." value={otherWork} onChange={e => setOtherWork(e.target.value)} rows={3} className="w-full px-4 py-3 bg-gray-50 border rounded-xl text-sm resize-none" />
+              </div>
 
               <button
                 onClick={handleSave}
