@@ -6986,8 +6986,8 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
   const [searchQuery, setSearchQuery] = useState('');
   const activityOffsetRef = useRef(0);
   const notificationOffsetRef = useRef(0);
-  const ACTIVITY_PAGE = 500;
-  const NOTIFICATION_PAGE = 300;
+  const ACTIVITY_PAGE = 100;
+  const NOTIFICATION_PAGE = 100;
 
   const toArray = (value: any) => Array.isArray(value) ? value : value ? [value] : [];
 
