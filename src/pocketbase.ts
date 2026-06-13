@@ -245,6 +245,7 @@ class PocketBaseQuery<T = any> implements PromiseLike<QueryResult<T>> {
   private filters: Filter[] = [];
   private sorts: { field: string; ascending: boolean }[] = [];
   private maxRows?: number;
+  private offset = 0;
   private wantsSingle = false;
   private readonly pocketBaseCollectionName: string;
 
@@ -298,6 +299,12 @@ class PocketBaseQuery<T = any> implements PromiseLike<QueryResult<T>> {
     return this;
   }
 
+  range(start: number, end: number) {
+    this.offset = start;
+    this.maxRows = end - start + 1;
+    return this;
+  }
+
   single() {
     this.wantsSingle = true;
     return this;
@@ -329,7 +336,8 @@ class PocketBaseQuery<T = any> implements PromiseLike<QueryResult<T>> {
         }
 
         if (this.maxRows) {
-          const result = await collection.getList(1, this.maxRows, { filter, sort, requestKey: null });
+          const page = this.offset > 0 ? Math.floor(this.offset / this.maxRows) + 1 : 1;
+          const result = await collection.getList(page, this.maxRows, { filter, sort, requestKey: null });
           const rows = result.items.map((record) => normalizeRecord(record));
           return { data: rows as T, error: null, count: result.totalItems };
         }
