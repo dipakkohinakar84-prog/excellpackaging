@@ -63,6 +63,8 @@ import { supabase, supabaseAnonKey, loginWithMobilePassword, getCurrentAuthUser,
 import { canAccessView, filterWorkOrdersByDepartment, getQCApprovalProgress, sendNotification, normalizeDepartment } from './utils';
 import DepartmentStatusTracker from './DepartmentStatusTracker';
 import { getCachedData, invalidateCachedData, primeCachedData } from './dataCache';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -2312,7 +2314,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
 
 // --- User Management ---
 
-const UserList: React.FC<{ onError: () => void }> = ({ onError }) => {
+const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onError, editingId }) => {
   const [users, setUsers] = useState<User[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2338,6 +2340,16 @@ const UserList: React.FC<{ onError: () => void }> = ({ onError }) => {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  useEffect(() => {
+    if (editingId && users.length > 0) {
+      const found = users.find(u => Number(u.id) === Number(editingId));
+      if (found) {
+        openEditUser(found);
+        (window as any)._id = undefined;
+      }
+    }
+  }, [editingId, users]);
 
   const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2786,7 +2798,7 @@ const DepartmentList: React.FC<{ onError: () => void }> = ({ onError }) => {
 
 // --- Customer Management ---
 
-const CustomerManagement: React.FC<{ onError: () => void }> = ({ onError }) => {
+const CustomerManagement: React.FC<{ onError: () => void; editingId?: number }> = ({ onError, editingId }) => {
   const [data, setData] = useState<Customer[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2808,6 +2820,18 @@ const CustomerManagement: React.FC<{ onError: () => void }> = ({ onError }) => {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  useEffect(() => {
+    if (editingId && data.length > 0) {
+      const found = data.find(c => Number(c.id) === Number(editingId));
+      if (found) {
+        setEditingCustomer(found);
+        setFormData({ name: found.name || '', proprietor: found.proprietor || '', address: found.address || '', city: found.city || '', contact: found.contact || '', email: found.email || '', gst: found.gst || '', type: found.type || 'Direct', reference: found.reference || '', remarks: found.remarks || '' });
+        setIsModalOpen(true);
+        (window as any)._id = undefined;
+      }
+    }
+  }, [editingId, data]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2934,11 +2958,13 @@ const CustomerManagement: React.FC<{ onError: () => void }> = ({ onError }) => {
 
 // --- Item Master ---
 
-const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
+const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onError, editingId }) => {
   const [data, setData] = useState<Item[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [departmentFilter, setDepartmentFilter] = useState('All');
   
   // Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -2976,6 +3002,27 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
   );
   const bomReferenceIndex = useMemo(() => buildBomReferenceIndex(data), [data]);
 
+  const departmentOptions = useMemo(() => {
+    const uniqueDepartments = new Set<string>();
+    data.forEach(item => {
+      (item.departments || []).forEach((dept: string) => uniqueDepartments.add(dept));
+    });
+    return Array.from(uniqueDepartments).sort((a, b) => a.localeCompare(b));
+  }, [data]);
+
+  const filteredData = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return data.filter(item => {
+      const matchesSearch = !query ||
+        item.name.toLowerCase().includes(query) ||
+        (item.customer_name || '').toLowerCase().includes(query) ||
+        (item.drawing_no || '').toLowerCase().includes(query);
+      const matchesDepartment = departmentFilter === 'All' ||
+        (item.departments || []).includes(departmentFilter);
+      return matchesSearch && matchesDepartment;
+    });
+  }, [data, searchQuery, departmentFilter]);
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -2992,6 +3039,13 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  useEffect(() => {
+    if (editingId && data.length > 0) {
+      const found = data.find(item => Number(item.id) === Number(editingId));
+      if (found) { openEditItem(found); (window as any)._id = undefined; }
+    }
+  }, [editingId, data]);
 
   // Fetch library components when modal opens
   const openComponentManager = async (item: Item) => {
@@ -3304,6 +3358,29 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-black text-gray-800">Item Master</h2>
         <button onClick={() => { setEditingItem(null); resetItemForm(); setIsModalOpen(true); }} className="bg-orange-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg hover:bg-orange-700 transition-colors"><Plus size={18} /></button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+          <input
+            type="text"
+            placeholder="Search items by name, customer or drawing no..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+          />
+        </div>
+        <select
+          value={departmentFilter}
+          onChange={e => setDepartmentFilter(e.target.value)}
+          className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="All">All Departments</option>
+          {departmentOptions.map(dept => (
+            <option key={dept} value={dept}>{dept.replace(/_/g, ' ')}</option>
+          ))}
+        </select>
       </div>
 
       <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingItem(null); }} title={editingItem ? "Edit Item" : "New Item"} maxWidthClassName="max-w-6xl">
@@ -3666,7 +3743,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {data.map(c => (
+              {filteredData.map(c => (
                 <tr key={c.id} className="hover:bg-indigo-50/20 transition-colors">
                   <td className="px-6 py-4 font-bold text-indigo-700">{c.name}</td>
                   <td className="px-6 py-4">{c.customer_name}</td>
@@ -3691,7 +3768,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
                   </td>
                 </tr>
               ))}
-              {data.length === 0 && (
+              {filteredData.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-6 py-12 text-center text-gray-400 italic">No items found.</td>
                 </tr>
@@ -3701,7 +3778,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
         </div>
 
         <div className="md:hidden p-2 space-y-2">
-          {data.map(c => (
+          {filteredData.map(c => (
             <div key={c.id} className="rounded-xl border border-gray-200 bg-white p-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
@@ -3765,7 +3842,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
             </div>
           ))}
 
-          {data.length === 0 && (
+          {filteredData.length === 0 && (
             <div className="py-8 text-center text-gray-400 italic text-sm">No items found.</div>
           )}
         </div>
@@ -3776,7 +3853,7 @@ const ItemList: React.FC<{ onError: () => void }> = ({ onError }) => {
 
 // --- Child Item List View ---
 
-const ChildItemListView: React.FC<{ onError: () => void }> = ({ onError }) => {
+const ChildItemListView: React.FC<{ onError: () => void; editingId?: number | string }> = ({ onError, editingId }) => {
   const [data, setData] = useState<any[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -3809,6 +3886,13 @@ const ChildItemListView: React.FC<{ onError: () => void }> = ({ onError }) => {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  useEffect(() => {
+    if (editingId && data.length > 0) {
+      const found = data.find(c => String(c.id) === String(editingId));
+      if (found) { openEditComponent(found); (window as any)._id = undefined; }
+    }
+  }, [editingId, data]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -4693,15 +4777,6 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
     }
   };
 
-  const toggleDeptSelection = (deptName: string) => {
-    setFormData(prev => ({
-      ...prev,
-      assigned_departments: prev.assigned_departments.includes(deptName)
-        ? prev.assigned_departments.filter(d => d !== deptName)
-        : [...prev.assigned_departments, deptName]
-    }));
-  };
-
   const filteredOrders = useMemo(() => {
     const statusFiltered = statusFilter === 'All' ? data : data.filter(wo => wo.status === statusFilter);
 
@@ -4968,22 +5043,20 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
               </select>
             </div>
            
-           <div>
-             <label className="text-[10px] font-black uppercase text-gray-400 mb-2 block tracking-widest">Involved Departments</label>
-             <div className="mb-2 text-[10px] font-semibold text-gray-400">Auto-selected from parent item and nested item BOM. You can add extra departments if needed.</div>
-             <div className="flex flex-wrap gap-2">
-                {involvingDepartments.map(d => (
-                  <button 
-                    key={d.id} 
-                    type="button" 
-                    onClick={() => toggleDeptSelection(d.name)}
-                    className={`px-3 py-1.5 rounded-xl text-[10px] font-bold transition-all border ${formData.assigned_departments.includes(d.name) ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-gray-400 border-gray-100 hover:border-blue-200'}`}
-                  >
-                    {d.name.replace(/_/g, ' ')}
-                  </button>
-                ))}
-             </div>
-           </div>
+     <div>
+        <label className="text-[10px] font-black uppercase text-gray-400 mb-2 block tracking-widest">Involved Departments</label>
+        {formData.assigned_departments.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {formData.assigned_departments.map(dept => (
+              <span key={dept} className="px-3 py-1.5 rounded-xl text-[10px] font-bold bg-blue-600 text-white border border-blue-600">
+                {dept.replace(/_/g, ' ')}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <div className="text-[10px] font-semibold text-gray-400 italic">Select an Item Master to auto-populate departments.</div>
+        )}
+     </div>
 
            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
              <div>
@@ -5398,28 +5471,40 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                  <button className="w-full py-3 bg-white/10 hover:bg-white/20 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-2 border border-white/5">
                     <Printer size={18}/> PRINT JOB CARD
                  </button>
-                 {isOffice && (
-                   <button onClick={async () => { if(confirm("Delete Order?")) { await supabase.from('work_orders').delete().eq('id', id); onBack(); } }} className="w-full py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-2 border border-red-500/20 mt-2">
-                      <Trash2 size={18}/> DELETE ORDER
-                   </button>
-                 )}
-              </div>
-           </Card>
+                  {isOffice && (
+                    <button onClick={async () => {
+                      if(confirm("Delete Order?")) {
+                        await supabase.from('work_orders').delete().eq('id', id);
+                        void logActivity({ eventType: 'work_order', action: 'deleted', title: 'Order Deleted', body: `Deleted order #${id} from WO Details`, actor: getStoredLoggedInUser(), targetCollection: 'work_orders', targetId: id, severity: 'warning' });
+                        onBack();
+                      }
+                    }} className="w-full py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-2 border border-red-500/20 mt-2">
+                       <Trash2 size={18}/> DELETE ORDER
+                    </button>
+                  )}
+               </div>
+            </Card>
 
-           <details className="xl:hidden bg-slate-900 text-white rounded-2xl p-4 border border-slate-700">
-             <summary className="list-none cursor-pointer flex items-center justify-between text-xs font-black uppercase tracking-widest text-blue-300">
-               <span>Quick Controls</span>
-               <span>Open</span>
-             </summary>
-             <div className="mt-3 space-y-3">
-               <button className="w-full py-3 bg-white/10 hover:bg-white/20 rounded-xl text-[10px] font-black transition-all flex items-center justify-center gap-3 border border-white/10">
-                 <Printer size={16}/> PRINT JOB CARD
-               </button>
-               {isOffice && (
-                 <button onClick={async () => { if(confirm("Delete Order?")) { await supabase.from('work_orders').delete().eq('id', id); onBack(); } }} className="w-full py-3 bg-red-500/10 hover:bg-red-500/20 text-red-300 rounded-xl text-[10px] font-black transition-all flex items-center justify-center gap-3 border border-red-500/20">
-                   <Trash2 size={16}/> DELETE ORDER
-                 </button>
-               )}
+            <details className="xl:hidden bg-slate-900 text-white rounded-2xl p-4 border border-slate-700">
+              <summary className="list-none cursor-pointer flex items-center justify-between text-xs font-black uppercase tracking-widest text-blue-300">
+                <span>Quick Controls</span>
+                <span>Open</span>
+              </summary>
+              <div className="mt-3 space-y-3">
+                <button className="w-full py-3 bg-white/10 hover:bg-white/20 rounded-xl text-[10px] font-black transition-all flex items-center justify-center gap-3 border border-white/10">
+                  <Printer size={16}/> PRINT JOB CARD
+                </button>
+                {isOffice && (
+                  <button onClick={async () => {
+                    if(confirm("Delete Order?")) {
+                      await supabase.from('work_orders').delete().eq('id', id);
+                      void logActivity({ eventType: 'work_order', action: 'deleted', title: 'Order Deleted', body: `Deleted order #${id} from WO Details`, actor: getStoredLoggedInUser(), targetCollection: 'work_orders', targetId: id, severity: 'warning' });
+                      onBack();
+                    }
+                  }} className="w-full py-3 bg-red-500/10 hover:bg-red-500/20 text-red-300 rounded-xl text-[10px] font-black transition-all flex items-center justify-center gap-3 border border-red-500/20">
+                    <Trash2 size={16}/> DELETE ORDER
+                  </button>
+                )}
              </div>
            </details>
         </div>
@@ -5712,6 +5797,15 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
       return;
     }
 
+    void logActivity({
+      eventType: 'custom_bom',
+      action: editingPlanId ? 'updated' : 'created',
+      title: editingPlanId ? 'BOM Plan Updated' : 'BOM Plan Created',
+      body: `Plan: ${planName}, Company: ${selectedCompany}`,
+      actor: getStoredLoggedInUser(),
+      targetCollection: 'custom_bom_plans',
+      severity: 'success',
+    });
     alert(editingPlanId ? 'BOM updated successfully' : 'BOM created successfully');
     resetBuilder();
     fetchData();
@@ -5831,6 +5925,15 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
 
         createdComponents.push(...((createdRows || []) as any[]));
         setAllComponents(prev => [...prev, ...createdComponents]);
+        void logActivity({
+          eventType: 'component',
+          action: 'created',
+          title: 'Components Added to Library',
+          body: `Added ${namesToCreate.length} component(s) from BOM builder`,
+          actor: getStoredLoggedInUser(),
+          targetCollection: 'child_items',
+          severity: 'info',
+        });
       }
 
       const nextComponents = [...existingToSelect, ...createdComponents];
@@ -5865,6 +5968,18 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
       return;
     }
 
+    void logActivity({
+      eventType: 'item',
+      action: 'bom_updated',
+      title: 'Item BOM Updated',
+      body: `Saved ${children.length} component(s) to item: ${componentItem.name}`,
+      actor: getStoredLoggedInUser(),
+      targetCollection: 'items',
+      targetId: componentItem.id,
+      targetLabel: componentItem.name,
+      customerName: componentItem.customer_name,
+      severity: 'info',
+    });
     setComponentItem(null);
     setComponentRows([]);
     setBomMode('saved');
@@ -5893,6 +6008,35 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
     if (qtyInput === null) return;
 
     const multiplier = Math.max(1, Number(qtyInput) || 1);
+    (window as any)._customPlan = plan;
+    (window as any)._customPlanPrintQty = multiplier;
+    (window as any)._setView?.('custom-bom-print');
+  };
+
+  const printSavedItemBom = (item: Item) => {
+    const qtyInput = prompt('Enter quantity for production plan', '1');
+    if (qtyInput === null) return;
+
+    const multiplier = Math.max(1, Number(qtyInput) || 1);
+    const plan = {
+      plan_name: item.name,
+      company_name: item.customer_name,
+      plan_items: [{
+        local_id: makeLocalId(),
+        item_id: item.id,
+        item_name: item.name,
+        drawing_no: item.drawing_no || '',
+        item_qty: 1,
+        components: (item.children || []).map(child => ({
+          component_type: (child as any).type || 'component',
+          component_id: String((child as any).id || ''),
+          component_name: child.name,
+          departments: Array.isArray(child.departments) ? child.departments : [],
+          qty_per_item: Math.max(1, Number((child as any).qtyPerMaster) || 1),
+          total_qty: Math.max(1, Number((child as any).qtyPerMaster) || 1),
+        })),
+      }],
+    };
     (window as any)._customPlan = plan;
     (window as any)._customPlanPrintQty = multiplier;
     (window as any)._setView?.('custom-bom-print');
@@ -5935,6 +6079,15 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
       return;
     }
 
+    void logActivity({
+      eventType: 'component',
+      action: 'created',
+      title: 'Component Created',
+      body: `Component: ${newComponent.name}`,
+      actor: getStoredLoggedInUser(),
+      targetCollection: 'child_items',
+      severity: 'success',
+    });
     setNewComponent({ name: '', departments: [] });
     setIsComponentModalOpen(false);
     fetchData();
@@ -6134,6 +6287,7 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
                   <td className="px-4 py-2 text-xs text-gray-500">Saved in Item Master</td>
                   <td className="px-4 py-2 text-right space-x-2">
                     <button onClick={() => openItemBomComponentDialog(row.item_ref)} className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-black">Edit BOM</button>
+                    <button onClick={() => printSavedItemBom(row.item_ref)} className="px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg text-xs font-black">Print</button>
                   </td>
                 </tr>
               ))}
@@ -6174,8 +6328,9 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
               <div className="mt-2 text-xs text-gray-600 font-semibold">
                 {row.components_count} component(s)
               </div>
-              <div className="mt-3">
-                <button onClick={() => openItemBomComponentDialog(row.item_ref)} className="w-full px-2 py-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-black">Edit BOM</button>
+              <div className="mt-3 flex gap-2">
+                <button onClick={() => openItemBomComponentDialog(row.item_ref)} className="flex-1 px-2 py-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-black">Edit BOM</button>
+                <button onClick={() => printSavedItemBom(row.item_ref)} className="flex-1 px-2 py-2 bg-emerald-50 text-emerald-600 rounded-lg text-xs font-black">Print</button>
               </div>
             </div>
           ))}
@@ -6826,7 +6981,13 @@ const PlanGenerator: React.FC<{ ids: number[]; onBack: () => void }> = ({ ids, o
 const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) => {
   const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const activityOffsetRef = useRef(0);
+  const notificationOffsetRef = useRef(0);
+  const ACTIVITY_PAGE = 500;
+  const NOTIFICATION_PAGE = 300;
 
   const toArray = (value: any) => Array.isArray(value) ? value : value ? [value] : [];
 
@@ -6861,12 +7022,19 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
     return 'border-l-blue-500';
   };
 
-  const fetchEvents = useCallback(async () => {
-    setLoading(true);
+  const fetchEvents = useCallback(async (isLoadMore = false) => {
+    if (isLoadMore) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+      activityOffsetRef.current = 0;
+      notificationOffsetRef.current = 0;
+      setHasMore(true);
+    }
     try {
       const [activityResult, notificationResult] = await Promise.all([
-        supabase.from('activity_events').select('*').limit(250),
-        supabase.from('notification_events').select('*').limit(150),
+        supabase.from('activity_events').select('*').order('event_time', { ascending: false }).range(activityOffsetRef.current, activityOffsetRef.current + ACTIVITY_PAGE - 1),
+        supabase.from('notification_events').select('*').order('created_at', { ascending: false }).range(notificationOffsetRef.current, notificationOffsetRef.current + NOTIFICATION_PAGE - 1),
       ]);
 
       if (activityResult.error?.code === '42P01' || notificationResult.error?.code === '42P01') {
@@ -6874,18 +7042,34 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
         return;
       }
 
-      const sortedEvents = [
+      const newBatch = [
         ...(activityResult.data || []).map((event: any) => ({ ...event, _source: 'activity' })),
         ...(notificationResult.data || []).map((event: any) => ({ ...event, _source: 'notification' })),
-      ].sort((a: any, b: any) => {
-        return getEventTimestamp(b) - getEventTimestamp(a);
-      });
+      ];
 
-      setEvents(sortedEvents);
+      if (isLoadMore) {
+        setEvents(prev => {
+          const merged = [...prev, ...newBatch];
+          return merged.sort((a: any, b: any) => getEventTimestamp(b) - getEventTimestamp(a));
+        });
+      } else {
+        setEvents(newBatch.sort((a: any, b: any) => getEventTimestamp(b) - getEventTimestamp(a)));
+      }
+
+      activityOffsetRef.current += ACTIVITY_PAGE;
+      notificationOffsetRef.current += NOTIFICATION_PAGE;
+
+      const activityFull = (activityResult.data || []).length >= ACTIVITY_PAGE;
+      const notificationFull = (notificationResult.data || []).length >= NOTIFICATION_PAGE;
+      setHasMore(activityFull || notificationFull);
     } catch (_e) {
       onError();
     }
-    setLoading(false);
+    if (isLoadMore) {
+      setLoadingMore(false);
+    } else {
+      setLoading(false);
+    }
   }, [onError]);
 
   useEffect(() => {
@@ -7024,6 +7208,18 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
           </table>
         </div>
       </Card>
+
+      {hasMore && !loading && (
+        <div className="text-center">
+          <button
+            onClick={() => fetchEvents(true)}
+            disabled={loadingMore}
+            className="px-6 py-3 bg-slate-900 text-white rounded-xl text-sm font-black shadow-lg hover:bg-slate-800 transition-colors disabled:opacity-50"
+          >
+            {loadingMore ? 'Loading...' : 'Load More Events'}
+          </button>
+        </div>
+      )}
     </div>
   );
 };
@@ -7032,13 +7228,12 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<any[]>([]);
   const [dispatchLogs, setDispatchLogs] = useState<any[]>([]);
-  const [reportType, setReportType] = useState<'dispatch' | 'company' | 'item'>('dispatch');
+  const [productionReports, setProductionReports] = useState<any[]>([]);
+  const [items, setItems] = useState<Item[]>([]);
+  const [reportType, setReportType] = useState<'component-usage' | 'item-usage' | 'on-time' | 'delayed' | 'dept-wise' | 'company-performance'>('component-usage');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
-  const [invoiceSearch, setInvoiceSearch] = useState('');
-  const [vehicleSearch, setVehicleSearch] = useState('');
   const [companySearch, setCompanySearch] = useState('');
-  const [itemSearch, setItemSearch] = useState('');
   const [activePreset, setActivePreset] = useState<'today' | '7d' | '30d' | '90d' | 'all' | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
 
@@ -7048,9 +7243,11 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
     const fetchReportData = async () => {
       setLoading(true);
       try {
-        const [{ data: woRes, error: woErr }, { data: dispatchRes, error: dispatchErr }] = await Promise.all([
+        const [{ data: woRes, error: woErr }, { data: dispatchRes, error: dispatchErr }, { data: prodRes }, { data: itemsRes }] = await Promise.all([
           supabase.from('work_orders').select('*').order('id', { ascending: false }),
           supabase.from('dispatch_logs').select('*').order('created_at', { ascending: false }),
+          supabase.from('production_reports').select('*'),
+          supabase.from('items').select('*'),
         ]);
 
         if (woErr?.code === '42P01' || dispatchErr?.code === '42P01') {
@@ -7070,6 +7267,8 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
           console.warn('Dispatch logs fetch issue:', dispatchErr.message);
         }
         setDispatchLogs(dispatchRes || []);
+        setProductionReports(prodRes || []);
+        setItems(itemsRes || []);
       } catch (e) {
         onError();
       }
@@ -7084,6 +7283,12 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
     orders.forEach(order => map.set(Number(order.id), order));
     return map;
   }, [orders]);
+
+  const itemsById = useMemo(() => {
+    const map = new Map<number, Item>();
+    items.forEach(item => map.set(Number(item.id), item));
+    return map;
+  }, [items]);
 
   const parseDate = (value: string | null | undefined, fallbackMidday = false): Date | null => {
     if (!value) return null;
@@ -7101,198 +7306,143 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
     return true;
   };
 
-  const dispatchRows = useMemo(() => {
-    const invoiceQ = invoiceSearch.trim().toLowerCase();
-    const vehicleQ = vehicleSearch.trim().toLowerCase();
+  const readyStatuses = ['Ready for despatch', 'Dispatched', 'Delivered'];
 
-    const fromLogs = dispatchLogs
-      .map((log: any) => {
-        const order = orderById.get(Number(log.work_order_id));
-        return {
-          ...log,
-          order,
-          when: parseDate(log.created_at),
-        };
-      })
-      .filter((row: any) => {
-        if (!inRange(row.when)) return false;
-        if (invoiceQ && !String(row.invoice_no || '').toLowerCase().includes(invoiceQ)) return false;
-        if (vehicleQ && !String(row.vehicle_no || '').toLowerCase().includes(vehicleQ)) return false;
-        return true;
-      });
+  const delayDays = (dispatchDate: Date, etd: Date) => Math.max(0, Math.ceil((dispatchDate.getTime() - etd.getTime()) / 86400000));
 
-    if (fromLogs.length > 0) return fromLogs;
+  const componentUsageRows = useMemo(() => {
+    const q = companySearch.trim().toLowerCase();
+    const result: { component: string; parentItem: string; qtyUsed: number; company: string; orderId: number }[] = [];
+    for (const order of orders) {
+      if (!readyStatuses.includes(order.status)) continue;
+      const d = parseDate(order.created_at) || parseDate(order.etd, true);
+      if (!inRange(d)) continue;
+      const c = String(order.customer || 'Unknown');
+      if (q && !c.toLowerCase().includes(q)) continue;
+      const item = itemsById.get(Number(order.source_item_id || order.itemId));
+      if (!item?.children) continue;
+      for (const child of item.children) {
+        const qty = (child.qtyPerMaster || 0) * Number(order.qty);
+        result.push({ component: child.name, parentItem: item.name, qtyUsed: qty, company: c, orderId: Number(order.id) });
+      }
+    }
+    return result;
+  }, [orders, itemsById, fromDate, toDate, companySearch]);
 
-    return orders
-      .map((order: any) => {
-        const qtyDispatched = Number(order.qty_dispatched) || 0;
-        const invoice = String(order.last_invoice_no || '').trim();
-        const vehicle = String(order.last_vehicle_no || '').trim();
-        const when = parseDate(order.updated_at) || parseDate(order.created_at) || parseDate(order.etd, true);
-        return {
-          id: `fallback-${order.id}`,
-          work_order_id: order.id,
-          dispatch_qty: qtyDispatched,
-          invoice_no: invoice,
-          vehicle_no: vehicle,
-          dispatched_by: '-',
-          order,
-          when,
-        };
-      })
-      .filter((row: any) => {
-        const hasDispatchData = row.dispatch_qty > 0 || !!row.invoice_no || !!row.vehicle_no;
-        if (!hasDispatchData) return false;
-        if (!inRange(row.when)) return false;
-        if (invoiceQ && !String(row.invoice_no || '').toLowerCase().includes(invoiceQ)) return false;
-        if (vehicleQ && !String(row.vehicle_no || '').toLowerCase().includes(vehicleQ)) return false;
-        return true;
-      });
-  }, [dispatchLogs, orders, orderById, fromDate, toDate, invoiceSearch, vehicleSearch]);
-
-  const companyRows = useMemo(() => {
-    const companyQ = companySearch.trim().toLowerCase();
-    const grouped = new Map<string, {
-      company: string;
-      orders: number;
-      totalQty: number;
-      inStockQty: number;
-      dispatchedQty: number;
-      completedQty: number;
-      pendingQty: number;
-    }>();
-
-    orders.forEach((order: any) => {
-      const orderDate = parseDate(order.created_at) || parseDate(order.etd, true);
-      if (!inRange(orderDate)) return;
-
-      const company = String(order.customer || 'Unknown');
-      if (companyQ && !company.toLowerCase().includes(companyQ)) return;
-
-      const row = grouped.get(company) || {
-        company,
-        orders: 0,
-        totalQty: 0,
-        inStockQty: 0,
-        dispatchedQty: 0,
-        completedQty: 0,
-        pendingQty: 0,
-      };
-      const qty = Number(order.qty) || 0;
-      const dispatched = Number(order.qty_dispatched) || 0;
-      const pending = Math.max(0, qty - dispatched);
-      const isDelivered = order.status === 'Delivered';
-      const isReadyForDispatch = ['QC Approved', 'Ready for despatch', 'Dispatched'].includes(order.status) && pending > 0;
+  const itemUsageRows = useMemo(() => {
+    const q = companySearch.trim().toLowerCase();
+    const grouped = new Map<string, { item: string; orders: number; totalQty: number; companies: Set<string> }>();
+    for (const order of orders) {
+      if (!readyStatuses.includes(order.status)) continue;
+      const d = parseDate(order.created_at) || parseDate(order.etd, true);
+      if (!inRange(d)) continue;
+      const c = String(order.customer || 'Unknown');
+      if (q && !c.toLowerCase().includes(q)) continue;
+      const name = String(order.job_details || 'Unknown');
+      const row = grouped.get(name) || { item: name, orders: 0, totalQty: 0, companies: new Set<string>() };
       row.orders += 1;
-      row.totalQty += qty;
-      row.dispatchedQty += dispatched;
-      row.pendingQty += pending;
-      row.completedQty += isDelivered ? qty : 0;
-      row.inStockQty += isReadyForDispatch ? pending : 0;
-      grouped.set(company, row);
-    });
-
-    return Array.from(grouped.values()).sort((a, b) => b.orders - a.orders);
+      row.totalQty += Number(order.qty) || 0;
+      row.companies.add(c);
+      grouped.set(name, row);
+    }
+    return Array.from(grouped.values()).map(r => ({ ...r, companyCount: r.companies.size })).sort((a, b) => b.orders - a.orders);
   }, [orders, fromDate, toDate, companySearch]);
 
-  const itemRows = useMemo(() => {
-    const itemQ = itemSearch.trim().toLowerCase();
-    const grouped = new Map<string, {
-      item: string;
-      companies: Set<string>;
-      orders: number;
-      totalQty: number;
-      inStockQty: number;
-      dispatchedQty: number;
-      completedQty: number;
-      pendingQty: number;
-    }>();
+  const onTimeRows = useMemo(() => {
+    const q = companySearch.trim().toLowerCase();
+    return dispatchLogs.map((log: any) => {
+      const order = orderById.get(Number(log.work_order_id));
+      if (!order) return null;
+      const d = parseDate(log.created_at);
+      const etd = parseDate(order.etd, true);
+      if (!d || !etd || d > etd) return null;
+      if (!inRange(d)) return null;
+      const c = String(order.customer || 'Unknown');
+      if (q && !c.toLowerCase().includes(q)) return null;
+      return { ...log, order, when: d };
+    }).filter(Boolean);
+  }, [dispatchLogs, orderById, fromDate, toDate, companySearch]);
 
-    orders.forEach((order: any) => {
-      const orderDate = parseDate(order.created_at) || parseDate(order.etd, true);
-      if (!inRange(orderDate)) return;
+  const delayedRows = useMemo(() => {
+    const q = companySearch.trim().toLowerCase();
+    return dispatchLogs.map((log: any) => {
+      const order = orderById.get(Number(log.work_order_id));
+      if (!order) return null;
+      const d = parseDate(log.created_at);
+      const etd = parseDate(order.etd, true);
+      if (!d || !etd || d <= etd) return null;
+      if (!inRange(d)) return null;
+      const c = String(order.customer || 'Unknown');
+      if (q && !c.toLowerCase().includes(q)) return null;
+      return { ...log, order, when: d, daysDelay: delayDays(d, etd) };
+    }).filter(Boolean);
+  }, [dispatchLogs, orderById, fromDate, toDate, companySearch]);
 
-      const item = String(order.job_details || 'Unknown');
-      if (itemQ && !item.toLowerCase().includes(itemQ)) return;
+  const deptWiseRows = useMemo(() => {
+    const grouped = new Map<string, { dept: string; reports: number; shiftHrs: number; otHrs: number; totalHrs: number; qtyProduced: number }>();
+    for (const pr of productionReports) {
+      const d = parseDate(pr.date);
+      if (!inRange(d)) continue;
+      const name = String(pr.department || 'Unknown');
+      const row = grouped.get(name) || { dept: name, reports: 0, shiftHrs: 0, otHrs: 0, totalHrs: 0, qtyProduced: 0 };
+      row.reports += 1;
+      row.shiftHrs += Number(pr.total_shift_hours) || 0;
+      row.otHrs += Number(pr.total_ot_hours) || 0;
+      row.totalHrs += Number(pr.grand_total_hours) || 0;
+      row.qtyProduced += Number(pr.qty_produced) || 0;
+      if (pr.items) for (const item of pr.items) row.qtyProduced += Number(item.qty_produced) || 0;
+      grouped.set(name, row);
+    }
+    return Array.from(grouped.values()).sort((a, b) => b.reports - a.reports);
+  }, [productionReports, fromDate, toDate]);
 
-      const row = grouped.get(item) || {
-        item,
-        companies: new Set<string>(),
-        orders: 0,
-        totalQty: 0,
-        inStockQty: 0,
-        dispatchedQty: 0,
-        completedQty: 0,
-        pendingQty: 0,
-      };
-      const qty = Number(order.qty) || 0;
-      const dispatched = Number(order.qty_dispatched) || 0;
-      const pending = Math.max(0, qty - dispatched);
-      const isDelivered = order.status === 'Delivered';
-      const isReadyForDispatch = ['QC Approved', 'Ready for despatch', 'Dispatched'].includes(order.status) && pending > 0;
-      row.orders += 1;
-      row.totalQty += qty;
-      row.dispatchedQty += dispatched;
-      row.pendingQty += pending;
-      row.completedQty += isDelivered ? qty : 0;
-      row.inStockQty += isReadyForDispatch ? pending : 0;
-      row.companies.add(String(order.customer || 'Unknown'));
-      grouped.set(item, row);
-    });
+  const companyPerfRows = useMemo(() => {
+    const q = companySearch.trim().toLowerCase();
+    const grouped = new Map<string, { company: string; totalWOs: number; totalQty: number; onTime: number; delayed: number }>();
+    for (const order of orders) {
+      if (!readyStatuses.includes(order.status)) continue;
+      const d = parseDate(order.created_at) || parseDate(order.etd, true);
+      if (!inRange(d)) continue;
+      const c = String(order.customer || 'Unknown');
+      if (q && !c.toLowerCase().includes(q)) continue;
+      const row = grouped.get(c) || { company: c, totalWOs: 0, totalQty: 0, onTime: 0, delayed: 0 };
+      row.totalWOs += 1;
+      row.totalQty += Number(order.qty) || 0;
+      const orderDispatches = dispatchLogs.filter((dl: any) => Number(dl.work_order_id) === Number(order.id));
+      if (orderDispatches.length > 0) {
+        const etd = parseDate(order.etd, true);
+        if (etd) {
+          const allOnTime = orderDispatches.every((dl: any) => { const dd = parseDate(dl.created_at); return dd && dd <= etd; });
+          if (allOnTime) row.onTime += 1; else row.delayed += 1;
+        }
+      }
+      grouped.set(c, row);
+    }
+    return Array.from(grouped.values()).sort((a, b) => b.totalWOs - a.totalWOs);
+  }, [orders, dispatchLogs, fromDate, toDate, companySearch]);
 
-    return Array.from(grouped.values())
-      .map(row => ({
-        ...row,
-        companyCount: row.companies.size,
-      }))
-      .sort((a, b) => b.orders - a.orders);
-  }, [orders, fromDate, toDate, itemSearch]);
+  const reportRows = useMemo(() => {
+    switch (reportType) {
+      case 'component-usage': return componentUsageRows;
+      case 'item-usage': return itemUsageRows;
+      case 'on-time': return onTimeRows;
+      case 'delayed': return delayedRows;
+      case 'dept-wise': return deptWiseRows;
+      case 'company-performance': return companyPerfRows;
+    }
+  }, [reportType, componentUsageRows, itemUsageRows, onTimeRows, delayedRows, deptWiseRows, companyPerfRows]);
 
-  const vehicleOptions = useMemo(() => {
-    const unique = new Set<string>();
-    dispatchLogs.forEach((log: any) => {
-      const vehicle = String(log?.vehicle_no || '').trim();
-      if (vehicle) unique.add(vehicle);
-    });
-    return Array.from(unique).sort((a, b) => a.localeCompare(b));
-  }, [dispatchLogs]);
-
-  const itemOptions = useMemo(() => {
-    const unique = new Set<string>();
-    orders.forEach((order: any) => {
-      const item = String(order?.job_details || '').trim();
-      if (item) unique.add(item);
-    });
-    return Array.from(unique).sort((a, b) => a.localeCompare(b));
-  }, [orders]);
-
-  const reportRowsCount = reportType === 'dispatch' ? dispatchRows.length : reportType === 'company' ? companyRows.length : itemRows.length;
+  const reportRowsCount = reportRows.length;
 
   const reportTotals = useMemo(() => {
-    if (reportType === 'dispatch') {
-      return {
-        qty: dispatchRows.reduce((sum: number, row: any) => sum + (Number(row.dispatch_qty) || 0), 0),
-        uniqueWOs: new Set(dispatchRows.map((r: any) => r.work_order_id)).size,
-        uniqueCustomers: new Set(dispatchRows.map((r: any) => r.order?.customer).filter(Boolean)).size,
-      };
-    }
-    if (reportType === 'company') {
-      return {
-        qty: companyRows.reduce((sum, row) => sum + row.totalQty, 0),
-        inStock: companyRows.reduce((sum, row) => sum + row.inStockQty, 0),
-        dispatched: companyRows.reduce((sum, row) => sum + row.dispatchedQty, 0),
-        completed: companyRows.reduce((sum, row) => sum + row.completedQty, 0),
-        pending: companyRows.reduce((sum, row) => sum + row.pendingQty, 0),
-      };
-    }
+    const rows = reportRows as any[];
     return {
-      qty: itemRows.reduce((sum, row) => sum + row.totalQty, 0),
-      inStock: itemRows.reduce((sum, row) => sum + row.inStockQty, 0),
-      dispatched: itemRows.reduce((sum, row) => sum + row.dispatchedQty, 0),
-      completed: itemRows.reduce((sum, row) => sum + row.completedQty, 0),
-      pending: itemRows.reduce((sum, row) => sum + row.pendingQty, 0),
+      count: rows.length,
+      qty: rows.reduce((s: number, r: any) => s + (Number(r.qtyUsed ?? r.totalQty ?? r.dispatch_qty ?? r.qty) || 0), 0),
+      onTime: rows.reduce((s: number, r: any) => s + (Number(r.onTime ?? 0) || 0), 0),
+      delayed: rows.reduce((s: number, r: any) => s + (Number(r.delayed ?? 0) || 0), 0),
     };
-  }, [reportType, dispatchRows, companyRows, itemRows]);
+  }, [reportRows]);
 
   const handleSort = (key: string) => {
     setSortConfig(sc => sc?.key === key ? { key, dir: sc.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' });
@@ -7310,82 +7460,85 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
     });
   };
 
-  const sortedDispatchRows = useMemo(() => applySortGeneric(
-    dispatchRows.map((r: any) => ({
-      ...r,
-      _date: r.when ? r.when.getTime() : 0,
-      _customer: r.order?.customer || '',
-      _item: r.order?.job_details || '',
-    }))
-  ), [dispatchRows, sortConfig]);
+  const sortedRows = useMemo(() => applySortGeneric(reportRows.map((r: any) => ({
+    ...r,
+    _date: r.when ? r.when.getTime() : 0,
+    _customer: r.order?.customer || r.company || '',
+    _item: r.order?.job_details || '',
+  }))), [reportRows, sortConfig]);
 
-  const sortedCompanyRows = useMemo(() => applySortGeneric(companyRows), [companyRows, sortConfig]);
-  const sortedItemRows = useMemo(() => applySortGeneric(itemRows), [itemRows, sortConfig]);
+  const exportPdfReport = () => {
+    const rows = sortedRows as any[];
+    if (rows.length === 0) { alert('No rows available for export.'); return; }
 
-  const downloadCsv = (filename: string, rows: Record<string, any>[]) => {
-    if (rows.length === 0) {
-      alert('No rows available for export.');
-      return;
-    }
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const pageW = doc.internal.pageSize.getWidth();
 
-    const headers = Object.keys(rows[0]);
-    const csv = [
-      headers.join(','),
-      ...rows.map(row => headers.map(h => {
-        const raw = String(row[h] ?? '');
-        return raw.includes(',') || raw.includes('"') || raw.includes('\n') ? `"${raw.replace(/"/g, '""')}"` : raw;
-      }).join(',')),
-    ].join('\n');
+    const tabLabel = tabMeta.find(t => t.key === reportType)?.label || reportType;
+    const dateLabel = fromDate || toDate
+      ? `${fromDate || '…'} to ${toDate || '…'}`
+      : 'All dates';
 
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
+    // Title
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Excell Packaging - Report', pageW / 2, 20, { align: 'center' });
+    doc.setFontSize(13);
+    doc.setFont('helvetica', 'normal');
+    doc.text(tabLabel, pageW / 2, 28, { align: 'center' });
 
-  const exportCurrentReport = () => {
-    if (reportType === 'dispatch') {
-      downloadCsv('dispatch-report.csv', dispatchRows.map((row: any) => ({
-        date: row.when ? new Date(row.when).toLocaleString() : '-',
-        work_order_id: row.work_order_id,
-        customer: row.order?.customer || '-',
-        item: row.order?.job_details || '-',
-        dispatch_qty: row.dispatch_qty,
-        invoice_no: row.invoice_no,
-        vehicle_no: row.vehicle_no,
-        dispatched_by: row.dispatched_by || '-',
-      })));
-      return;
-    }
+    // Info line
+    doc.setFontSize(8);
+    doc.setTextColor(100);
+    doc.text(`Date range: ${dateLabel}  |  Generated: ${new Date().toLocaleString()}`, pageW / 2, 34, { align: 'center' });
 
-    if (reportType === 'company') {
-      downloadCsv('company-report.csv', companyRows.map(row => ({
-        company: row.company,
-        total_orders: row.orders,
-        total_qty: row.totalQty,
-        in_stock_qty: row.inStockQty,
-        dispatched_qty: row.dispatchedQty,
-        completed_qty: row.completedQty,
-        pending_qty: row.pendingQty,
-      })));
-      return;
-    }
+    const mapRow = (r: any) => {
+      switch (reportType) {
+        case 'component-usage':
+          return [String(r.component || ''), String(r.parentItem || ''), String(r.qtyUsed ?? 0), String(r.company || ''), `#${r.orderId || ''}`];
+        case 'item-usage':
+          return [String(r.item || ''), String(r.orders ?? 0), String(r.totalQty ?? 0), String(r.companyCount ?? 0)];
+        case 'on-time':
+          return [r.when ? new Date(r.when).toLocaleDateString() : '-', `#${r.work_order_id || ''}`, r.order?.customer || '-', r.order?.job_details || '-', String(r.dispatch_qty ?? 0), r.invoice_no || '-'];
+        case 'delayed':
+          return [r.when ? new Date(r.when).toLocaleDateString() : '-', `#${r.work_order_id || ''}`, r.order?.customer || '-', r.order?.job_details || '-', `${r.daysDelay || 0} days`, String(r.dispatch_qty ?? 0)];
+        case 'dept-wise':
+          return [String(r.dept || ''), String(r.reports ?? 0), String(r.shiftHrs ?? 0), String(r.otHrs ?? 0), String(r.totalHrs ?? 0), String(r.qtyProduced ?? 0)];
+        case 'company-performance':
+          const pct = r.totalWOs > 0 ? Math.round(r.onTime / r.totalWOs * 100) + '%' : '0%';
+          return [String(r.company || ''), String(r.totalWOs ?? 0), String(r.totalQty ?? 0), String(r.onTime ?? 0), String(r.delayed ?? 0), pct];
+      }
+    };
 
-    downloadCsv('item-report.csv', itemRows.map(row => ({
-      item: row.item,
-      companies: row.companyCount,
-      total_orders: row.orders,
-      total_qty: row.totalQty,
-      in_stock_qty: row.inStockQty,
-      dispatched_qty: row.dispatchedQty,
-      completed_qty: row.completedQty,
-      pending_qty: row.pendingQty,
-    })));
+    const columns: Record<string, string[]> = {
+      'component-usage': ['Component', 'Parent Item', 'Qty Used', 'Company', 'Order #'],
+      'item-usage': ['Item Name', 'Orders', 'Total Qty', 'Companies'],
+      'on-time': ['Date', 'WO #', 'Company', 'Item', 'Qty', 'Invoice'],
+      'delayed': ['Date', 'WO #', 'Company', 'Item', 'Days Late', 'Qty'],
+      'dept-wise': ['Department', 'Reports', 'Shift Hrs', 'OT Hrs', 'Total Hrs', 'Qty Produced'],
+      'company-performance': ['Company', 'Total WOs', 'Total Qty', 'On-Time', 'Delayed', 'On-Time %'],
+    };
+
+    autoTable(doc, {
+      head: [columns[reportType] || []],
+      body: rows.map(mapRow),
+      startY: 38,
+      margin: { top: 38, horizontal: 10 },
+      tableWidth: 'auto',
+      styles: { fontSize: 7, cellPadding: 2.5, lineColor: [200, 200, 200], lineWidth: 0.3 },
+      headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7 },
+      bodyStyles: { textColor: [50, 50, 50] },
+      alternateRowStyles: { fillColor: [245, 247, 250] },
+      columnStyles: { 0: { cellWidth: 'auto' } },
+      didDrawPage: (data: any) => {
+        doc.setFontSize(6);
+        doc.setTextColor(150);
+        doc.text(`Page ${data.pageNumber}`, pageW - 10, doc.internal.pageSize.getHeight() - 5, { align: 'right' });
+        doc.text('Excell Packaging ERP', 10, doc.internal.pageSize.getHeight() - 5);
+      },
+    });
+
+    doc.save(`${reportType}-report.pdf`);
   };
 
   const applyQuickRange = (range: 'today' | '7d' | '30d' | '90d' | 'all') => {
@@ -7430,16 +7583,29 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
     { key: 'all', label: 'All' },
   ];
 
+  const tabMeta: { key: typeof reportType; label: string }[] = [
+    { key: 'component-usage', label: 'Component Usage' },
+    { key: 'item-usage', label: 'Item Usage' },
+    { key: 'on-time', label: 'On-Time Delivery' },
+    { key: 'delayed', label: 'Delayed Delivery' },
+    { key: 'dept-wise', label: 'Department Wise' },
+    { key: 'company-performance', label: 'Company Performance' },
+  ];
+
+  const showCompanySearch = ['component-usage', 'item-usage', 'on-time', 'delayed', 'company-performance'].includes(reportType);
+
   return (
     <div className="space-y-4">
       <div className="sticky top-16 md:top-0 z-20 bg-gray-50/95 backdrop-blur p-2 rounded-xl border border-gray-100 flex flex-col md:flex-row gap-2 md:items-center justify-between">
         <div>
           <h2 className="text-xl sm:text-2xl font-black text-gray-800 tracking-tight">Reports</h2>
-          <p className="text-xs text-gray-500 font-semibold">Dispatch · Company · Item performance</p>
+          <p className="text-xs text-gray-500 font-semibold">
+            {tabMeta.find(t => t.key === reportType)?.label || ''}
+          </p>
         </div>
-        <button onClick={exportCurrentReport} className="w-full md:w-auto px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2">
+        <button onClick={exportPdfReport} className="w-full md:w-auto px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2">
           <FileText size={13} />
-          Export CSV
+          Export PDF
         </button>
       </div>
 
@@ -7484,129 +7650,175 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
         </div>
 
         {/* Report type tabs */}
-        <div className="inline-flex bg-gray-100 rounded-xl p-1 w-full sm:w-auto">
-          {([
-            { key: 'dispatch', label: 'Dispatch' },
-            { key: 'company', label: 'Company-wise' },
-            { key: 'item', label: 'Item-wise' },
-          ] as const).map(tab => (
+        <div className="flex flex-wrap bg-gray-100 rounded-xl p-1 gap-1">
+          {tabMeta.map(tab => (
             <button
               key={tab.key}
               onClick={() => { setReportType(tab.key); setSortConfig(null); }}
-              className={`flex-1 sm:flex-none px-3 py-2 rounded-lg text-xs font-black transition-all ${reportType === tab.key ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`px-3 py-2 rounded-lg text-xs font-black transition-all whitespace-nowrap ${
+                reportType === tab.key
+                  ? 'bg-white text-indigo-600 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
             >
               {tab.label}
             </button>
           ))}
         </div>
 
-        {/* Search filters */}
-        {reportType === 'dispatch' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <input
-              placeholder="Search invoice number"
-              value={invoiceSearch}
-              onChange={e => setInvoiceSearch(e.target.value)}
-              className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm"
-            />
-            <input
-              placeholder="Search vehicle number"
-              value={vehicleSearch}
-              onChange={e => setVehicleSearch(e.target.value)}
-              list="vehicle-options"
-              className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm"
-            />
-            <datalist id="vehicle-options">
-              {vehicleOptions.map(vehicle => (
-                <option key={vehicle} value={vehicle} />
-              ))}
-            </datalist>
-          </div>
-        )}
-
-        {reportType === 'company' && (
+        {/* Company search filter */}
+        {showCompanySearch && (
           <input
-            placeholder="Search company/customer"
+            placeholder="Filter by company/customer..."
             value={companySearch}
             onChange={e => setCompanySearch(e.target.value)}
             className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm"
           />
         )}
-
-        {reportType === 'item' && (
-          <>
-            <input
-              placeholder="Search item/job"
-              value={itemSearch}
-              onChange={e => setItemSearch(e.target.value)}
-              list="item-options"
-              className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm"
-            />
-            <datalist id="item-options">
-              {itemOptions.map(item => (
-                <option key={item} value={item} />
-              ))}
-            </datalist>
-          </>
-        )}
       </Card>
 
-      {/* Stats cards — 4 cards per tab */}
-      {reportType === 'dispatch' && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+      {/* Stats cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+        <Card className="p-3">
+          <div className="text-[10px] uppercase font-black text-gray-400">Records</div>
+          <div className="text-xl font-black text-gray-800 mt-1">{reportRowsCount}</div>
+        </Card>
+        {reportType === 'component-usage' && (
           <Card className="p-3">
-            <div className="text-[10px] uppercase font-black text-gray-400">Records</div>
-            <div className="text-xl font-black text-gray-800 mt-1">{dispatchRows.length}</div>
+            <div className="text-[10px] uppercase font-black text-gray-400">Total Qty Used</div>
+            <div className="text-xl font-black text-indigo-700 mt-1">{componentUsageRows.reduce((s, r) => s + r.qtyUsed, 0)}</div>
           </Card>
-          <Card className="p-3">
-            <div className="text-[10px] uppercase font-black text-gray-400">Total Dispatched</div>
-            <div className="text-xl font-black text-indigo-700 mt-1">{reportTotals.qty}</div>
-          </Card>
-          <Card className="p-3">
-            <div className="text-[10px] uppercase font-black text-gray-400">Work Orders</div>
-            <div className="text-xl font-black text-gray-800 mt-1">{(reportTotals as any).uniqueWOs ?? 0}</div>
-          </Card>
-          <Card className="p-3">
-            <div className="text-[10px] uppercase font-black text-gray-400">Customers</div>
-            <div className="text-xl font-black text-gray-800 mt-1">{(reportTotals as any).uniqueCustomers ?? 0}</div>
-          </Card>
-        </div>
-      )}
-
-      {(reportType === 'company' || reportType === 'item') && (
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3">
-          <Card className="p-3">
-            <div className="text-[10px] uppercase font-black text-gray-400">{reportType === 'company' ? 'Companies' : 'Items'}</div>
-            <div className="text-xl font-black text-gray-800 mt-1">{reportRowsCount}</div>
-          </Card>
+        )}
+        {reportType === 'item-usage' && (
           <Card className="p-3">
             <div className="text-[10px] uppercase font-black text-gray-400">Total Qty</div>
-            <div className="text-xl font-black text-indigo-700 mt-1">{reportTotals.qty}</div>
+            <div className="text-xl font-black text-indigo-700 mt-1">{itemUsageRows.reduce((s, r) => s + r.totalQty, 0)}</div>
           </Card>
+        )}
+        {reportType === 'on-time' && (
           <Card className="p-3">
-            <div className="text-[10px] uppercase font-black text-gray-400">In Stock</div>
-            <div className="text-xl font-black text-blue-700 mt-1">{(reportTotals as any).inStock ?? 0}</div>
+            <div className="text-[10px] uppercase font-black text-gray-400">Total Qty Dispatched</div>
+            <div className="text-xl font-black text-green-700 mt-1">{onTimeRows.reduce((s: number, r: any) => s + (Number(r.dispatch_qty) || 0), 0)}</div>
           </Card>
-          <Card className="p-3">
-            <div className="text-[10px] uppercase font-black text-gray-400">Dispatched</div>
-            <div className="text-xl font-black text-green-700 mt-1">{(reportTotals as any).dispatched ?? 0}</div>
-          </Card>
-          <Card className="p-3">
-            <div className="text-[10px] uppercase font-black text-gray-400">Completed</div>
-            <div className="text-xl font-black text-emerald-700 mt-1">{(reportTotals as any).completed ?? 0}</div>
-          </Card>
-          <Card className="p-3 col-span-2 sm:col-span-1">
-            <div className="text-[10px] uppercase font-black text-gray-400">Pending</div>
-            <div className="text-xl font-black text-orange-600 mt-1">{(reportTotals as any).pending ?? 0}</div>
-          </Card>
-        </div>
-      )}
+        )}
+        {reportType === 'delayed' && (
+          <>
+            <Card className="p-3">
+              <div className="text-[10px] uppercase font-black text-gray-400">Total Qty Dispatched</div>
+              <div className="text-xl font-black text-orange-700 mt-1">{delayedRows.reduce((s: number, r: any) => s + (Number(r.dispatch_qty) || 0), 0)}</div>
+            </Card>
+            <Card className="p-3">
+              <div className="text-[10px] uppercase font-black text-gray-400">Avg Delay (Days)</div>
+              <div className="text-xl font-black text-red-700 mt-1">
+                {delayedRows.length > 0 ? (delayedRows.reduce((s: number, r: any) => s + (r.daysDelay || 0), 0) / delayedRows.length).toFixed(1) : 0}
+              </div>
+            </Card>
+          </>
+        )}
+        {reportType === 'dept-wise' && (
+          <>
+            <Card className="p-3">
+              <div className="text-[10px] uppercase font-black text-gray-400">Departments</div>
+              <div className="text-xl font-black text-gray-800 mt-1">{deptWiseRows.length}</div>
+            </Card>
+            <Card className="p-3">
+              <div className="text-[10px] uppercase font-black text-gray-400">Total Hrs</div>
+              <div className="text-xl font-black text-indigo-700 mt-1">{deptWiseRows.reduce((s, r) => s + r.totalHrs, 0)}</div>
+            </Card>
+          </>
+        )}
+        {reportType === 'company-performance' && (
+          <>
+            <Card className="p-3">
+              <div className="text-[10px] uppercase font-black text-gray-400">Total Qty</div>
+              <div className="text-xl font-black text-indigo-700 mt-1">{companyPerfRows.reduce((s, r) => s + r.totalQty, 0)}</div>
+            </Card>
+            <Card className="p-3">
+              <div className="text-[10px] uppercase font-black text-gray-400">On-Time %</div>
+              <div className="text-xl font-black text-green-700 mt-1">
+                {companyPerfRows.reduce((s, r) => s + r.totalWOs, 0) > 0
+                  ? Math.round(companyPerfRows.reduce((s, r) => s + r.onTime, 0) / companyPerfRows.reduce((s, r) => s + r.totalWOs, 0) * 100) + '%'
+                  : '0%'}
+              </div>
+            </Card>
+          </>
+        )}
+      </div>
 
-      {/* Dispatch table */}
-      {reportType === 'dispatch' && (
+      {/* Component Usage table */}
+      {reportType === 'component-usage' && (
         <Card className="p-0 overflow-hidden shadow-sm">
           <div className="hidden md:block overflow-x-auto">
-            <table className="w-full min-w-[980px] text-sm">
+            <table className="w-full min-w-[700px] text-sm">
+              <thead className="bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b">
+                <tr>
+                  <th className={thClass} onClick={() => handleSort('component')}>Component <SortIcon col="component" /></th>
+                  <th className={thClass} onClick={() => handleSort('parentItem')}>Parent Item <SortIcon col="parentItem" /></th>
+                  <th className={thClass} onClick={() => handleSort('qtyUsed')}>Qty Used <SortIcon col="qtyUsed" /></th>
+                  <th className={thClass} onClick={() => handleSort('company')}>Company <SortIcon col="company" /></th>
+                  <th className={thClass} onClick={() => handleSort('orderId')}>Order # <SortIcon col="orderId" /></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {sortedRows.map((row: any, i: number) => (
+                  <tr key={i} className="hover:bg-blue-50/30 transition-colors">
+                    <td className="px-4 py-3 font-semibold text-gray-800">{row.component}</td>
+                    <td className="px-4 py-3 text-gray-600">{row.parentItem}</td>
+                    <td className="px-4 py-3 font-black text-gray-800">{row.qtyUsed}</td>
+                    <td className="px-4 py-3 text-gray-600">{row.company}</td>
+                    <td className="px-4 py-3 font-semibold text-indigo-600">#{row.orderId}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="md:hidden p-2 space-y-2">
+            {sortedRows.map((row: any, i: number) => (
+              <div key={i} className="rounded-lg border border-gray-200 p-2.5">
+                <div className="font-black text-sm text-gray-800">{row.component}</div>
+                <div className="text-xs text-gray-600 mt-0.5">Item: {row.parentItem} · Qty: {row.qtyUsed}</div>
+                <div className="text-xs text-gray-500">Company: {row.company} · WO #{row.orderId}</div>
+              </div>
+            ))}
+          </div>
+          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-400 italic text-sm">No component usage data for the selected range.</div>}
+        </Card>
+      )}
+
+      {/* Item Usage table */}
+      {reportType === 'item-usage' && (
+        <Card className="p-0 overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[600px] text-sm">
+              <thead className="bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b">
+                <tr>
+                  <th className={thClass} onClick={() => handleSort('item')}>Item Name <SortIcon col="item" /></th>
+                  <th className={thClass} onClick={() => handleSort('orders')}>Orders <SortIcon col="orders" /></th>
+                  <th className={thClass} onClick={() => handleSort('totalQty')}>Total Qty <SortIcon col="totalQty" /></th>
+                  <th className={thClass} onClick={() => handleSort('companyCount')}>Companies <SortIcon col="companyCount" /></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {sortedRows.map((row: any) => (
+                  <tr key={row.item} className="hover:bg-blue-50/30 transition-colors">
+                    <td className="px-4 py-3 font-black text-gray-800">{row.item}</td>
+                    <td className="px-4 py-3 font-semibold text-gray-700">{row.orders}</td>
+                    <td className="px-4 py-3 font-semibold text-indigo-700">{row.totalQty}</td>
+                    <td className="px-4 py-3 text-gray-600">{row.companyCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-400 italic text-sm">No item usage data for the selected range.</div>}
+        </Card>
+      )}
+
+      {/* On-Time Delivery table */}
+      {reportType === 'on-time' && (
+        <Card className="p-0 overflow-hidden shadow-sm">
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full min-w-[800px] text-sm">
               <thead className="bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b">
                 <tr>
                   <th className={thClass} onClick={() => handleSort('_date')}>Date <SortIcon col="_date" /></th>
@@ -7615,111 +7827,148 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
                   <th className={thClass} onClick={() => handleSort('_item')}>Item <SortIcon col="_item" /></th>
                   <th className={thClass} onClick={() => handleSort('dispatch_qty')}>Qty <SortIcon col="dispatch_qty" /></th>
                   <th className={thClass} onClick={() => handleSort('invoice_no')}>Invoice <SortIcon col="invoice_no" /></th>
-                  <th className={thClass} onClick={() => handleSort('vehicle_no')}>Vehicle <SortIcon col="vehicle_no" /></th>
-                  <th className="px-4 py-3 text-left whitespace-nowrap">By</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {sortedDispatchRows.map((row: any) => (
-                  <tr key={row.id} className="hover:bg-blue-50/30 transition-colors">
+                {sortedRows.map((row: any) => (
+                  <tr key={row.id} className="hover:bg-green-50/30 transition-colors">
                     <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{row.when ? new Date(row.when).toLocaleString() : '-'}</td>
                     <td className="px-4 py-3 font-black text-indigo-600">#{row.work_order_id}</td>
                     <td className="px-4 py-3 font-semibold text-gray-700">{row.order?.customer || '-'}</td>
-                    <td className="px-4 py-3 font-semibold text-gray-700">{row.order?.job_details || '-'}</td>
-                    <td className="px-4 py-3 font-black text-gray-800">{row.dispatch_qty}</td>
-                    <td className="px-4 py-3 font-semibold text-gray-700">{row.invoice_no || '-'}</td>
-                    <td className="px-4 py-3 font-semibold text-gray-700">{row.vehicle_no || '-'}</td>
-                    <td className="px-4 py-3 font-semibold text-gray-700">{row.dispatched_by || '-'}</td>
+                    <td className="px-4 py-3 text-gray-600">{row.order?.job_details || '-'}</td>
+                    <td className="px-4 py-3 font-black text-green-700">{row.dispatch_qty}</td>
+                    <td className="px-4 py-3 text-gray-600">{row.invoice_no || '-'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
           <div className="md:hidden p-2 space-y-2">
-            {dispatchRows.map((row: any) => (
-              <div key={row.id} className="rounded-lg border border-gray-200 p-2.5">
+            {sortedRows.map((row: any) => (
+              <div key={row.id} className="rounded-lg border border-green-200 p-2.5">
                 <div className="flex items-center justify-between gap-2">
                   <div className="font-black text-indigo-700 text-sm">WO #{row.work_order_id}</div>
-                  <div className="text-[11px] font-semibold text-gray-500">Qty: {row.dispatch_qty}</div>
+                  <div className="text-[11px] font-semibold text-green-700">Qty: {row.dispatch_qty} ✓</div>
                 </div>
-                <div className="text-xs text-gray-700 font-semibold mt-1 break-words">{row.order?.customer || '-'} • {row.order?.job_details || '-'}</div>
-                <div className="text-[11px] text-gray-500 font-semibold mt-1">Invoice: {row.invoice_no || '-'} | Vehicle: {row.vehicle_no || '-'}</div>
+                <div className="text-xs text-gray-700 font-semibold mt-1">{row.order?.customer || '-'} • {row.order?.job_details || '-'}</div>
+                <div className="text-[11px] text-gray-500 mt-1">Invoice: {row.invoice_no || '-'}</div>
               </div>
             ))}
           </div>
-          {dispatchRows.length === 0 && <div className="py-12 text-center text-gray-400 italic text-sm">No dispatch records for the selected range.</div>}
+          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-400 italic text-sm">No on-time deliveries for the selected range.</div>}
         </Card>
       )}
 
-      {/* Company-wise table */}
-      {reportType === 'company' && (
+      {/* Delayed Delivery table */}
+      {reportType === 'delayed' && (
         <Card className="p-0 overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full min-w-[900px] text-sm">
               <thead className="bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b">
                 <tr>
-                  <th className={thClass} onClick={() => handleSort('company')}>Company Name <SortIcon col="company" /></th>
-                  <th className={thClass} onClick={() => handleSort('orders')}>Total Orders <SortIcon col="orders" /></th>
-                  <th className={thClass} onClick={() => handleSort('totalQty')}>Total Qty <SortIcon col="totalQty" /></th>
-                  <th className={thClass} onClick={() => handleSort('inStockQty')}>In Stock <SortIcon col="inStockQty" /></th>
-                  <th className={thClass} onClick={() => handleSort('dispatchedQty')}>Dispatched <SortIcon col="dispatchedQty" /></th>
-                  <th className={thClass} onClick={() => handleSort('completedQty')}>Completed <SortIcon col="completedQty" /></th>
-                  <th className={thClass} onClick={() => handleSort('pendingQty')}>Pending <SortIcon col="pendingQty" /></th>
+                  <th className={thClass} onClick={() => handleSort('_date')}>Date <SortIcon col="_date" /></th>
+                  <th className={thClass} onClick={() => handleSort('work_order_id')}>WO <SortIcon col="work_order_id" /></th>
+                  <th className={thClass} onClick={() => handleSort('_customer')}>Company <SortIcon col="_customer" /></th>
+                  <th className={thClass} onClick={() => handleSort('_item')}>Item <SortIcon col="_item" /></th>
+                  <th className={thClass} onClick={() => handleSort('daysDelay')}>Days Late <SortIcon col="daysDelay" /></th>
+                  <th className={thClass} onClick={() => handleSort('dispatch_qty')}>Qty <SortIcon col="dispatch_qty" /></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {sortedCompanyRows.map(row => (
+                {sortedRows.map((row: any) => (
+                  <tr key={row.id} className="hover:bg-red-50/30 transition-colors">
+                    <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{row.when ? new Date(row.when).toLocaleString() : '-'}</td>
+                    <td className="px-4 py-3 font-black text-indigo-600">#{row.work_order_id}</td>
+                    <td className="px-4 py-3 font-semibold text-gray-700">{row.order?.customer || '-'}</td>
+                    <td className="px-4 py-3 text-gray-600">{row.order?.job_details || '-'}</td>
+                    <td className="px-4 py-3"><span className="px-2 py-0.5 rounded-lg bg-red-100 text-red-700 font-black text-xs">{row.daysDelay}d</span></td>
+                    <td className="px-4 py-3 font-black text-gray-800">{row.dispatch_qty}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="md:hidden p-2 space-y-2">
+            {sortedRows.map((row: any) => (
+              <div key={row.id} className="rounded-lg border border-red-200 p-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="font-black text-indigo-700 text-sm">WO #{row.work_order_id}</div>
+                  <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-black text-xs">{row.daysDelay}d late</span>
+                </div>
+                <div className="text-xs text-gray-700 font-semibold mt-1">{row.order?.customer || '-'} • {row.order?.job_details || '-'}</div>
+                <div className="text-[11px] text-gray-500 mt-1">Qty: {row.dispatch_qty}</div>
+              </div>
+            ))}
+          </div>
+          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-400 italic text-sm">No delayed deliveries for the selected range.</div>}
+        </Card>
+      )}
+
+      {/* Department-Wise table */}
+      {reportType === 'dept-wise' && (
+        <Card className="p-0 overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[700px] text-sm">
+              <thead className="bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b">
+                <tr>
+                  <th className={thClass} onClick={() => handleSort('dept')}>Department <SortIcon col="dept" /></th>
+                  <th className={thClass} onClick={() => handleSort('reports')}>Reports <SortIcon col="reports" /></th>
+                  <th className={thClass} onClick={() => handleSort('shiftHrs')}>Shift Hrs <SortIcon col="shiftHrs" /></th>
+                  <th className={thClass} onClick={() => handleSort('otHrs')}>OT Hrs <SortIcon col="otHrs" /></th>
+                  <th className={thClass} onClick={() => handleSort('totalHrs')}>Total Hrs <SortIcon col="totalHrs" /></th>
+                  <th className={thClass} onClick={() => handleSort('qtyProduced')}>Qty Produced <SortIcon col="qtyProduced" /></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {sortedRows.map((row: any) => (
+                  <tr key={row.dept} className="hover:bg-blue-50/30 transition-colors">
+                    <td className="px-4 py-3 font-black text-gray-800">{row.dept}</td>
+                    <td className="px-4 py-3 font-semibold text-gray-700">{row.reports}</td>
+                    <td className="px-4 py-3 text-gray-600">{row.shiftHrs}</td>
+                    <td className="px-4 py-3 text-gray-600">{row.otHrs}</td>
+                    <td className="px-4 py-3 font-semibold text-indigo-700">{row.totalHrs}</td>
+                    <td className="px-4 py-3 font-black text-gray-800">{row.qtyProduced}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-400 italic text-sm">No department-wise data for the selected range.</div>}
+        </Card>
+      )}
+
+      {/* Company Performance table */}
+      {reportType === 'company-performance' && (
+        <Card className="p-0 overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[700px] text-sm">
+              <thead className="bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b">
+                <tr>
+                  <th className={thClass} onClick={() => handleSort('company')}>Company <SortIcon col="company" /></th>
+                  <th className={thClass} onClick={() => handleSort('totalWOs')}>Total WOs <SortIcon col="totalWOs" /></th>
+                  <th className={thClass} onClick={() => handleSort('totalQty')}>Total Qty <SortIcon col="totalQty" /></th>
+                  <th className={thClass} onClick={() => handleSort('onTime')}>On-Time <SortIcon col="onTime" /></th>
+                  <th className={thClass} onClick={() => handleSort('delayed')}>Delayed <SortIcon col="delayed" /></th>
+                  <th className="px-4 py-3 text-left whitespace-nowrap">On-Time %</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {sortedRows.map((row: any) => (
                   <tr key={row.company} className="hover:bg-blue-50/30 transition-colors">
                     <td className="px-4 py-3 font-black text-gray-800">{row.company}</td>
-                    <td className="px-4 py-3 font-semibold text-gray-700">{row.orders}</td>
-                    <td className="px-4 py-3 font-semibold text-gray-700">{row.totalQty}</td>
-                    <td className="px-4 py-3 font-semibold text-blue-700">{row.inStockQty}</td>
-                    <td className="px-4 py-3 font-semibold text-green-700">{row.dispatchedQty}</td>
-                    <td className="px-4 py-3 font-semibold text-emerald-700">{row.completedQty}</td>
-                    <td className="px-4 py-3 font-semibold text-orange-700">{row.pendingQty}</td>
+                    <td className="px-4 py-3 font-semibold text-gray-700">{row.totalWOs}</td>
+                    <td className="px-4 py-3 font-semibold text-indigo-700">{row.totalQty}</td>
+                    <td className="px-4 py-3 font-semibold text-green-700">{row.onTime}</td>
+                    <td className="px-4 py-3 font-semibold text-red-700">{row.delayed}</td>
+                    <td className="px-4 py-3 font-black text-gray-800">
+                      {row.totalWOs > 0 ? Math.round(row.onTime / row.totalWOs * 100) + '%' : '0%'}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          {companyRows.length === 0 && <div className="py-12 text-center text-gray-400 italic text-sm">No company data for the selected range.</div>}
-        </Card>
-      )}
-
-      {/* Item-wise table */}
-      {reportType === 'item' && (
-        <Card className="p-0 overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px] text-sm">
-              <thead className="bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b">
-                <tr>
-                  <th className={thClass} onClick={() => handleSort('item')}>Item Name <SortIcon col="item" /></th>
-                  <th className={thClass} onClick={() => handleSort('companyCount')}>Companies <SortIcon col="companyCount" /></th>
-                  <th className={thClass} onClick={() => handleSort('orders')}>Total Orders <SortIcon col="orders" /></th>
-                  <th className={thClass} onClick={() => handleSort('totalQty')}>Total Qty <SortIcon col="totalQty" /></th>
-                  <th className={thClass} onClick={() => handleSort('inStockQty')}>In Stock <SortIcon col="inStockQty" /></th>
-                  <th className={thClass} onClick={() => handleSort('dispatchedQty')}>Dispatched <SortIcon col="dispatchedQty" /></th>
-                  <th className={thClass} onClick={() => handleSort('completedQty')}>Completed <SortIcon col="completedQty" /></th>
-                  <th className={thClass} onClick={() => handleSort('pendingQty')}>Pending <SortIcon col="pendingQty" /></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {sortedItemRows.map(row => (
-                  <tr key={row.item} className="hover:bg-blue-50/30 transition-colors">
-                    <td className="px-4 py-3 font-black text-gray-800">{row.item}</td>
-                    <td className="px-4 py-3 font-semibold text-gray-700">{row.companyCount}</td>
-                    <td className="px-4 py-3 font-semibold text-gray-700">{row.orders}</td>
-                    <td className="px-4 py-3 font-semibold text-gray-700">{row.totalQty}</td>
-                    <td className="px-4 py-3 font-semibold text-blue-700">{row.inStockQty}</td>
-                    <td className="px-4 py-3 font-semibold text-green-700">{row.dispatchedQty}</td>
-                    <td className="px-4 py-3 font-semibold text-emerald-700">{row.completedQty}</td>
-                    <td className="px-4 py-3 font-semibold text-orange-700">{row.pendingQty}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {itemRows.length === 0 && <div className="py-12 text-center text-gray-400 italic text-sm">No item data for the selected range.</div>}
+          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-400 italic text-sm">No company performance data for the selected range.</div>}
         </Card>
       )}
     </div>
@@ -7910,6 +8159,15 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
     }
     if (error) alert(error.message);
     else {
+      void logActivity({
+        eventType: 'production_report',
+        action: editingId ? 'updated' : 'created',
+        title: editingId ? 'Production Report Updated' : 'Production Report Created',
+        body: `Department: ${selectedDept}, Date: ${reportDate}`,
+        actor: getStoredLoggedInUser(),
+        targetCollection: 'production_reports',
+        severity: 'success',
+      });
       setMode('list');
       resetForm();
       fetchReports();
@@ -7953,7 +8211,19 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
     if (!confirm('Delete this report?')) return;
     const { error } = await supabase.from('production_reports').delete().eq('id', id);
     if (error) alert(error.message);
-    else fetchReports();
+    else {
+      void logActivity({
+        eventType: 'production_report',
+        action: 'deleted',
+        title: 'Production Report Deleted',
+        body: `Report ID: ${id}`,
+        actor: getStoredLoggedInUser(),
+        targetCollection: 'production_reports',
+        targetId: id,
+        severity: 'warning',
+      });
+      fetchReports();
+    }
   };
 
   if (mode === 'detail' && selectedReport) {
@@ -8244,12 +8514,21 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
 
           <Card>
             <h3 className="font-black text-gray-700 mb-4 text-sm">Item & Production</h3>
-            <div className="space-y-4">
-              <div className="space-y-3">
+             <div className="space-y-4">
+               <div className="text-xs font-bold text-gray-500 mb-1">Items ({entryItems.length})</div>
+               <div className="max-h-[260px] overflow-y-auto space-y-3">
+                   <div className="flex items-end gap-2 mb-1">
+                    <div className="flex-1">
+                      <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Item</label>
+                    </div>
+                    <div className="w-24">
+                      <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Qty</label>
+                    </div>
+                    <div className="w-10" />
+                  </div>
                   {entryItems.map((item, idx) => (
                     <div key={idx} className="flex items-end gap-2">
                       <div className="flex-1 relative">
-                        <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Item</label>
                         {!selectedDept ? (
                           <div className="w-full px-3 py-2.5 bg-gray-100 border rounded-xl mt-1 text-sm text-gray-400">Select a department first</div>
                         ) : (
@@ -8296,7 +8575,6 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
                         )}
                     </div>
                     <div className="w-24">
-                      <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Qty</label>
                       <input type="number" min="0" value={item.qty} onChange={e => { const val = Number(e.target.value); setEntryItems(prev => { const next = [...prev]; next[idx] = { ...next[idx], qty: val }; return next; }); }} className="w-full px-3 py-2.5 bg-gray-50 border rounded-xl mt-1 text-sm" />
                     </div>
                     {entryItems.length > 1 && (
@@ -8304,10 +8582,10 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
                     )}
                   </div>
                 ))}
+              </div>
                 <button onClick={() => { setEntryItems(prev => [...prev, { itemId: 0, qty: 0 }]); setItemSearchText(prev => [...prev, '']); }} className="text-indigo-600 text-sm font-bold hover:text-indigo-800 flex items-center gap-1">
                   <Plus size={16} /> Add Item
                 </button>
-              </div>
 
               {metricResults.length > 0 && (
                 <div className="border-t pt-4">
@@ -8352,13 +8630,15 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
                 <textarea placeholder="Describe any other work done..." value={otherWork} onChange={e => setOtherWork(e.target.value)} rows={3} className="w-full px-4 py-3 bg-gray-50 border rounded-xl text-sm resize-none" />
               </div>
 
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black shadow-lg hover:bg-indigo-700 disabled:opacity-50"
-              >
-                {saving ? 'Saving...' : editingId ? 'Update Entry' : 'Save Entry'}
-              </button>
+              <div className="sticky bottom-0 bg-white pb-2 pt-4">
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black shadow-lg hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {saving ? 'Saving...' : editingId ? 'Update' : 'Save'}
+                </button>
+              </div>
             </div>
           </Card>
         </div>
@@ -9104,6 +9384,7 @@ export default function App() {
             subtitle: [customer.city, customer.contact].filter(Boolean).join(' - ') || 'Customer master',
             icon: UserCircle,
             view: 'customers' as AppView,
+            payload: { id: customer.id },
           }));
 
         const itemResults: GlobalSearchResult[] = cachedItems
@@ -9116,6 +9397,7 @@ export default function App() {
             subtitle: [item.customer_name, item.drawing_no].filter(Boolean).join(' - ') || 'Item master',
             icon: Package,
             view: 'items' as AppView,
+            payload: { id: item.id },
           }));
 
         const componentResults: GlobalSearchResult[] = childItems
@@ -9128,6 +9410,7 @@ export default function App() {
             subtitle: (component.departments || []).map(dept => dept.replace(/_/g, ' ')).join(', ') || 'Component library',
             icon: Layers,
             view: 'child-items' as AppView,
+            payload: { id: component.id },
           }));
 
         const userResults: GlobalSearchResult[] = users
@@ -9140,6 +9423,7 @@ export default function App() {
             subtitle: `${user.department.replace(/_/g, ' ')} - ${user.level}`,
             icon: Users,
             view: 'users' as AppView,
+            payload: { id: user.id },
           }));
 
         if (!cancelled) {
@@ -9259,11 +9543,11 @@ export default function App() {
       case 'dashboard': return <Dashboard user={loggedInUser} setView={navigateTo} onError={onError} />;
       case 'worker-dashboard': return <WorkerDashboard onError={onError} onView={id => navigateTo('wo-details', { payload: { id } })} onViewPlan={id => navigateTo('plan-generator', { payload: { ids: [id], backView: 'worker-dashboard' } })} loggedInUser={loggedInUser} />;
       case 'dispatch-dashboard': return <DispatchDashboard onError={onError} onView={id => navigateTo('wo-details', { payload: { id } })} loggedInUser={loggedInUser} />;
-      case 'users': return <UserList onError={onError} />;
+      case 'users': return <UserList onError={onError} editingId={(window as any)._id} />;
       case 'departments': return <DepartmentList onError={onError} />;
-      case 'customers': return <CustomerManagement onError={onError} />;
-      case 'items': return <ItemList onError={onError} />;
-      case 'child-items': return <ChildItemListView onError={onError} />;
+      case 'customers': return <CustomerManagement onError={onError} editingId={(window as any)._id} />;
+      case 'items': return <ItemList onError={onError} editingId={(window as any)._id} />;
+      case 'child-items': return <ChildItemListView onError={onError} editingId={(window as any)._id} />;
       case 'work-orders': return <WorkOrderList onError={onError} onView={id => navigateTo('wo-details', { payload: { id } })} onViewPlan={id => navigateTo('plan-generator', { payload: { ids: [id], backView: 'work-orders' } })} loggedInUser={loggedInUser} />;
       case 'wo-details': return <WODetails id={(window as any)._id} onBack={() => {
          const normDept = normalizeDepartment(loggedInUser.department);
