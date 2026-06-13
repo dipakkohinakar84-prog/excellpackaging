@@ -8226,13 +8226,174 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
     }
   };
 
+  const exportProductionPdf = (r: ProductionReport) => {
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pw = doc.internal.pageSize.getWidth();
+    const ph = doc.internal.pageSize.getHeight();
+    const ml = 18;
+    const cw = pw - ml * 2;
+    const slate = [30, 41, 59] as [number, number, number];
+    const muted = [100, 100, 100] as [number, number, number];
+    const lightBg = [248, 250, 252] as [number, number, number];
+    const border = [226, 232, 240] as [number, number, number];
+
+    let y = 24;
+
+    const sectionTitle = (title: string) => {
+      doc.setFontSize(9.5);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(slate[0], slate[1], slate[2]);
+      doc.text(title, ml, y);
+      doc.setDrawColor(border[0], border[1], border[2]);
+      doc.setLineWidth(0.3);
+      doc.line(ml, y + 1.5, pw - ml, y + 1.5);
+      y += 6;
+    };
+
+    // ── Header ──────────────────────────────────────
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(slate[0], slate[1], slate[2]);
+    doc.text('Excell Packaging', pw / 2, y, { align: 'center' });
+    doc.setDrawColor(border[0], border[1], border[2]);
+    doc.setLineWidth(0.5);
+    doc.line(ml, y + 4, pw - ml, y + 4);
+    y += 12;
+
+    // ── Section 1: Production Report ────────────────
+    sectionTitle('Production Report');
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(muted[0], muted[1], muted[2]);
+    const col1 = ml, col2 = ml + 70;
+    doc.text('Date:', col1, y);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(slate[0], slate[1], slate[2]);
+    doc.text(formatDateDMY(r.date), col1 + 14, y);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(muted[0], muted[1], muted[2]);
+    doc.text('Department:', col2, y);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(slate[0], slate[1], slate[2]);
+    doc.text(r.department, col2 + 24, y);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(muted[0], muted[1], muted[2]);
+    doc.text('Report #:', col1, y + 6);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(slate[0], slate[1], slate[2]);
+    doc.text(String(r.id), col1 + 20, y + 6);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(muted[0], muted[1], muted[2]);
+    doc.text('Created by:', col2, y + 6);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(slate[0], slate[1], slate[2]);
+    doc.text(r.created_by || '-', col2 + 24, y + 6);
+    y += 14;
+
+    // ── Section 2: Work Breakdown ───────────────────
+    sectionTitle('Work Breakdown');
+    const sw = Number(r.shift_workers) || 0;
+    const sh = Number(r.shift_hours) || 0;
+    const ow = Number(r.ot_workers) || 0;
+    const oh = Number(r.ot_hours) || 0;
+    const tsh = sw * sh;
+    const toh = ow * oh;
+    const gth = tsh + toh;
+    autoTable(doc, {
+      startY: y,
+      tableWidth: cw,
+      margin: { left: ml },
+      head: [['', 'Workers', 'Hrs/Each', 'Total']],
+      body: [
+        ['Shift', String(sw), `${sh}h`, `${tsh}h`],
+        ['Overtime', String(ow), `${oh}h`, `${toh}h`],
+      ],
+      foot: [['GRAND TOTAL', '', '', `${gth}h`]],
+      styles: { fontSize: 7.5, cellPadding: { top: 1.5, right: 3, bottom: 1.5, left: 3 }, lineColor: border, lineWidth: 0.2 },
+      headStyles: { fillColor: slate, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7 },
+      bodyStyles: { textColor: [50, 50, 50] },
+      footStyles: { fillColor: lightBg, textColor: slate, fontStyle: 'bold', fontSize: 8 },
+      alternateRowStyles: { fillColor: lightBg },
+      columnStyles: { 0: { cellWidth: 32, fontStyle: 'bold' }, 1: { cellWidth: 24, halign: 'center' }, 2: { cellWidth: 24, halign: 'center' }, 3: { cellWidth: 24, halign: 'center', fontStyle: 'bold' } },
+      tableLineColor: border,
+      tableLineWidth: 0.2,
+    });
+    y = (doc as any).lastAutoTable.finalY + 8;
+
+    // ── Section 3: Items ───────────────────────────
+    sectionTitle('Items');
+    const itemsArr = (r.items?.length ? r.items : [{ item_name: r.item_name, qty_produced: r.qty_produced, results: r.results || [] }]) as any[];
+    autoTable(doc, {
+      startY: y,
+      tableWidth: cw,
+      margin: { left: ml },
+      head: [['Item', 'Qty', 'Metrics']],
+      body: itemsArr.map((it: any) => {
+        const mets = (it.results || []) as MetricResult[];
+        const metricsText = mets.length ? mets.map(m => `${m.metric}: ${m.totalQty} ${m.unit}`).join(', ') : '-';
+        return [it.item_name, String(it.qty_produced ?? 0), metricsText];
+      }),
+      styles: { fontSize: 7.5, cellPadding: { top: 1.5, right: 3, bottom: 1.5, left: 3 }, lineColor: border, lineWidth: 0.2 },
+      headStyles: { fillColor: slate, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7 },
+      bodyStyles: { textColor: [50, 50, 50] },
+      alternateRowStyles: { fillColor: lightBg },
+      columnStyles: { 0: { cellWidth: 56 }, 1: { cellWidth: 16, halign: 'center' } },
+      tableLineColor: border,
+      tableLineWidth: 0.2,
+    });
+    y = (doc as any).lastAutoTable.finalY + 8;
+
+    // ── Section 4: Metrics Total ────────────────────
+    if (r.results?.length) {
+      sectionTitle('Metrics Total');
+      autoTable(doc, {
+        startY: y,
+        tableWidth: cw,
+        margin: { left: ml },
+        head: [['Metric', 'Req / Unit', 'Total Qty', 'Unit']],
+        body: r.results.map(res => [res.metric, res.qtyPerUnit ? String(res.qtyPerUnit) : '-', String(res.totalQty), res.unit]),
+        styles: { fontSize: 7.5, cellPadding: { top: 1.5, right: 3, bottom: 1.5, left: 3 }, lineColor: border, lineWidth: 0.2, textColor: [50, 50, 50] },
+        headStyles: { fillColor: slate, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7 },
+        alternateRowStyles: { fillColor: lightBg },
+        columnStyles: { 2: { halign: 'right', fontStyle: 'bold', textColor: slate } },
+        tableLineColor: border,
+        tableLineWidth: 0.2,
+      });
+      y = (doc as any).lastAutoTable.finalY + 8;
+    }
+
+    // ── Section 5: Other Work ───────────────────────
+    if (r.other_work) {
+      sectionTitle('Other Work');
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(80);
+      const lines = doc.splitTextToSize(r.other_work || '', cw);
+      doc.text(lines, ml, y);
+    }
+
+    // ── Footer ──────────────────────────────────────
+    const fy = ph - 14;
+    doc.setDrawColor(border[0], border[1], border[2]);
+    doc.setLineWidth(0.3);
+    doc.line(ml, fy, pw - ml, fy);
+    doc.setFontSize(6.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(160);
+    doc.text('Excell Packaging', ml, fy + 5);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, pw - ml, fy + 5, { align: 'right' });
+
+    doc.save(`production-report-${r.id}.pdf`);
+  };
+
   if (mode === 'detail' && selectedReport) {
     const r = selectedReport;
     return (
-      <div className="space-y-6">
+      <div className="space-y-2">
         <div className="flex justify-between items-center">
           <h2 className="text-xl font-black text-gray-800">Production Report</h2>
           <div className="flex items-center gap-2">
+            <button onClick={() => exportProductionPdf(r)} className="text-sm font-bold text-green-600 hover:text-green-800 flex items-center gap-1"><FileText size={13} /> PDF</button>
             <button onClick={() => { populateForm(r); setMode('entry'); }} className="text-sm font-bold text-indigo-600 hover:text-indigo-800">Edit</button>
             <button onClick={() => setMode('list')} className="text-sm font-bold text-gray-500 hover:text-gray-700">← Back to List</button>
           </div>
@@ -8251,92 +8412,127 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card>
-            <h3 className="font-black text-gray-700 mb-4 text-sm uppercase tracking-wider">Report Info</h3>
-            <div className="space-y-3">
-              <div><span className="text-[10px] font-black uppercase text-gray-400">Date</span><div className="font-bold text-gray-800">{formatDateDMY(r.date)}</div></div>
-              <div><span className="text-[10px] font-black uppercase text-gray-400">Department</span><div className="font-bold text-gray-800">{r.department}</div></div>
-              {r.items && r.items.length > 0 ? (
-                <div>
-                  <span className="text-[10px] font-black uppercase text-gray-400">Items</span>
-                  <div className="space-y-2 mt-1">
-                    {r.items.map((it, idx) => (
-                      <div key={idx} className="bg-gray-50 rounded-lg px-3 py-2 flex justify-between items-center">
-                        <span className="font-semibold text-gray-700">{it.item_name}</span>
-                        <span className="font-bold text-indigo-700">{it.qty_produced}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div><span className="text-[10px] font-black uppercase text-gray-400">Item</span><div className="font-bold text-gray-800">{r.item_name}</div></div>
-                  <div><span className="text-[10px] font-black uppercase text-gray-400">Qty Produced</span><div className="font-bold text-indigo-700 text-lg">{r.qty_produced}</div></div>
-                </>
-              )}
+        {/* ── Production Report Info ── */}
+        <Card>
+          <h3 className="font-black text-gray-700 mb-4 text-sm uppercase tracking-wider">Production Report</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-2 text-sm">
+            <div><span className="text-gray-400 font-semibold">Date:</span> <span className="font-bold text-gray-800 ml-1">{formatDateDMY(r.date)}</span></div>
+            <div><span className="text-gray-400 font-semibold">Department:</span> <span className="font-bold text-gray-800 ml-1">{r.department}</span></div>
+            <div><span className="text-gray-400 font-semibold">Report #:</span> <span className="font-bold text-gray-800 ml-1">{r.id}</span></div>
+            <div><span className="text-gray-400 font-semibold">Created by:</span> <span className="font-bold text-gray-800 ml-1">{r.created_by || '-'}</span></div>
+          </div>
+        </Card>
 
-              {r.other_work && <div><span className="text-[10px] font-black uppercase text-gray-400">Other Work</span><div className="font-semibold text-gray-700 whitespace-pre-wrap">{r.other_work}</div></div>}
+        {/* ── Work Breakdown ── */}
+        <Card>
+          <h3 className="font-black text-gray-700 mb-4 text-sm uppercase tracking-wider">Work Breakdown</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-[10px] font-black uppercase text-gray-400 border-b">
+                  <th className="text-left py-2"></th>
+                  <th className="text-center py-2">Workers</th>
+                  <th className="text-center py-2">Hrs/Each</th>
+                  <th className="text-center py-2">Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                <tr>
+                  <td className="py-2.5 font-bold text-gray-800">Shift</td>
+                  <td className="py-2.5 text-center font-semibold text-gray-700">{r.shift_workers}</td>
+                  <td className="py-2.5 text-center font-semibold text-gray-700">{r.shift_hours}h</td>
+                  <td className="py-2.5 text-center font-bold text-blue-700">{r.total_shift_hours}h</td>
+                </tr>
+                <tr>
+                  <td className="py-2.5 font-bold text-gray-800">Overtime</td>
+                  <td className="py-2.5 text-center font-semibold text-gray-700">{r.ot_workers}</td>
+                  <td className="py-2.5 text-center font-semibold text-gray-700">{r.ot_hours}h</td>
+                  <td className="py-2.5 text-center font-bold text-orange-700">{r.total_ot_hours}h</td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-gray-200 bg-gray-50">
+                  <td className="py-3 font-black text-gray-800"></td>
+                  <td className="py-3 text-center" colSpan={2}><span className="font-black text-gray-800">GRAND TOTAL</span></td>
+                  <td className="py-3 text-center font-black text-green-700 text-base">{r.grand_total_hours}h</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </Card>
 
-            </div>
-          </Card>
-
-          <Card>
-            <h3 className="font-black text-gray-700 mb-4 text-sm uppercase tracking-wider">Labor Breakdown</h3>
-            <div className="space-y-4">
-              <div className="rounded-xl bg-blue-50/50 p-4 border border-blue-100">
-                <div className="text-[10px] font-black uppercase text-blue-500 mb-2">Shift</div>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div><span className="text-gray-500">Workers:</span> <span className="font-bold">{r.shift_workers}</span></div>
-                  <div><span className="text-gray-500">Hours:</span> <span className="font-bold">{r.shift_hours}</span></div>
-                  <div className="col-span-2"><span className="text-gray-500">Total:</span> <span className="font-bold text-blue-700">{r.total_shift_hours}h</span></div>
-                </div>
-              </div>
-              <div className="rounded-xl bg-orange-50/50 p-4 border border-orange-100">
-                <div className="text-[10px] font-black uppercase text-orange-500 mb-2">Overtime</div>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div><span className="text-gray-500">Workers:</span> <span className="font-bold">{r.ot_workers}</span></div>
-                  <div><span className="text-gray-500">Hours:</span> <span className="font-bold">{r.ot_hours}</span></div>
-                  <div className="col-span-2"><span className="text-gray-500">Total:</span> <span className="font-bold text-orange-700">{r.total_ot_hours}h</span></div>
-                </div>
-              </div>
-              <div className="rounded-xl bg-green-50 p-4 border border-green-200 text-center">
-                <span className="text-xs font-black uppercase text-green-600">Total Man Hour</span>
-                <div className="text-2xl font-black text-green-700">{r.grand_total_hours} hrs</div>
-              </div>
-            </div>
-          </Card>
-
-          <Card>
-            <h3 className="font-black text-gray-700 mb-4 text-sm uppercase tracking-wider">Metric Results</h3>
-            {r.results && r.results.length > 0 ? (
+        {/* ── Items ── */}
+        <Card>
+          <h3 className="font-black text-gray-700 mb-4 text-sm uppercase tracking-wider">Items</h3>
+          {(() => {
+            const itemsArr = (r.items?.length ? r.items : [{ item_name: r.item_name, qty_produced: r.qty_produced, results: r.results || [] }]) as any[];
+            return (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-[10px] font-black uppercase text-gray-400 border-b">
-                      <th className="text-left py-2">Metric</th>
-                      <th className="text-right py-2">Req/Unit</th>
-                      <th className="text-right py-2">Total</th>
-                      <th className="text-right py-2">Unit</th>
+                      <th className="text-left py-2">Item</th>
+                      <th className="text-center py-2 w-16">Qty</th>
+                      <th className="text-left py-2">Metrics</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y">
-                    {r.results.map((res, i) => (
-                      <tr key={i}>
-                        <td className="py-2 font-bold text-gray-700">{res.metric}</td>
-                        <td className="py-2 text-right text-gray-500">{res.qtyPerUnit}</td>
-                        <td className="py-2 text-right font-black text-indigo-700">{res.totalQty}</td>
-                        <td className="py-2 text-right font-bold text-gray-500">{res.unit}</td>
-                      </tr>
-                    ))}
+                  <tbody className="divide-y divide-gray-100">
+                    {itemsArr.map((it: any, idx: number) => {
+                      const mets = (it.results || []) as MetricResult[];
+                      const metricsText = mets.length ? mets.map(m => `${m.metric}: ${m.totalQty} ${m.unit}`).join(', ') : '-';
+                      return (
+                        <tr key={idx}>
+                          <td className="py-2.5 font-semibold text-gray-800">{it.item_name}</td>
+                          <td className="py-2.5 text-center font-bold text-indigo-700">{it.qty_produced}</td>
+                          <td className="py-2.5 text-gray-600">{metricsText}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
-            ) : (
-              <div className="text-center py-8 text-gray-400 italic text-sm">No metric data for this report.</div>
-            )}
+            );
+          })()}
+        </Card>
+
+        {/* ── Metrics Total ── */}
+        <Card>
+          <h3 className="font-black text-gray-700 mb-4 text-sm uppercase tracking-wider">Metrics Total</h3>
+          {r.results && r.results.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-[10px] font-black uppercase text-gray-400 border-b">
+                    <th className="text-left py-2">Metric</th>
+                    <th className="text-right py-2">Req / Unit</th>
+                    <th className="text-right py-2">Total Qty</th>
+                    <th className="text-right py-2">Unit</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {r.results.map((res, i) => (
+                    <tr key={i}>
+                      <td className="py-2.5 font-semibold text-gray-800">{res.metric}</td>
+                      <td className="py-2.5 text-right text-gray-500">{res.qtyPerUnit ?? '-'}</td>
+                      <td className="py-2.5 text-right font-bold text-indigo-700">{res.totalQty}</td>
+                      <td className="py-2.5 text-right font-semibold text-gray-500">{res.unit}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-400 italic text-sm">No metric data for this report.</div>
+          )}
+        </Card>
+
+        {/* ── Other Work ── */}
+        {r.other_work && (
+          <Card>
+            <h3 className="font-black text-gray-700 mb-4 text-sm uppercase tracking-wider">Other Work</h3>
+            <p className="text-sm text-gray-700 whitespace-pre-wrap">{r.other_work}</p>
           </Card>
-        </div>
+        )}
       </div>
     );
   }
@@ -8604,7 +8800,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
                         {metricResults.map((r, i) => (
                           <tr key={i} className="text-sm">
                             <td className="py-2 font-bold text-gray-700">{r.metric}</td>
-                            <td className="py-2 text-right text-gray-500">{r.qtyPerUnit}</td>
+                            <td className="py-2 text-right text-gray-500">{r.qtyPerUnit ?? '-'}</td>
                             <td className="py-2 text-right font-black text-indigo-700">{r.totalQty}</td>
                             <td className="py-2 text-right font-bold text-gray-500">{r.unit}</td>
                           </tr>
