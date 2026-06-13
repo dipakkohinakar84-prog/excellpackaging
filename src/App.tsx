@@ -7034,7 +7034,7 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
     try {
       const [activityResult, notificationResult] = await Promise.all([
         supabase.from('activity_events').select('*').order('event_time', { ascending: false }).range(activityOffsetRef.current, activityOffsetRef.current + ACTIVITY_PAGE - 1),
-        supabase.from('notification_events').select('*').order('created_at', { ascending: false }).range(notificationOffsetRef.current, notificationOffsetRef.current + NOTIFICATION_PAGE - 1),
+        supabase.from('notification_events').select('*').order('event_time', { ascending: false }).range(notificationOffsetRef.current, notificationOffsetRef.current + NOTIFICATION_PAGE - 1),
       ]);
 
       if (activityResult.error?.code === '42P01' || notificationResult.error?.code === '42P01') {
