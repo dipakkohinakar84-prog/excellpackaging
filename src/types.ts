@@ -183,6 +183,13 @@ export interface ClientOrder {
   updated_at: string;
 }
 
+export interface Notice {
+  id: number | string;
+  message: string;
+  is_active: boolean;
+  created_at: string;
+}
+
 export interface WorkOrder {
   id: number;
   itemId?: number; 

@@ -844,7 +844,7 @@ const getStoredLoggedInUser = (): User | null => {
 
 // --- Login View ---
 
-const Login: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) => {
+const Login: React.FC<{ onLogin: (user: User) => void; onNavigate?: (v: AppView) => void }> = ({ onLogin, onNavigate }) => {
   const [mobile, setMobile] = useState('');
   const [passkey, setPasskey] = useState('');
   const [showPasskey, setShowPasskey] = useState(false);
@@ -946,8 +946,13 @@ const Login: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) => {
             </form>
           </div>
 
-          <div className="border-t border-slate-200 bg-slate-50 px-8 py-7 text-center sm:px-10">
+          <div className="border-t border-slate-200 bg-slate-50 px-8 py-5 text-center sm:px-10">
             <div className="text-xs font-medium text-slate-500">Authorized Excell Packaging users only</div>
+            {onNavigate && (
+              <button onClick={() => onNavigate('client-login')} className="mt-2 text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors">
+                Client Portal →
+              </button>
+            )}
           </div>
         </div>
       </section>
@@ -9001,7 +9006,12 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
 
 // --- App Root ---
 export default function App() {
-  const [view, setView] = useState<AppView>('dashboard');
+  const initialView = (): AppView => {
+    const host = window.location.hostname.toLowerCase();
+    if (host === 'portal.excellpackaging.in' || host.startsWith('portal.')) return 'client-login';
+    return 'dashboard';
+  };
+  const [view, setView] = useState<AppView>(initialView);
   const [loggedInUser, setLoggedInUser] = useState<User | null>(null);
   const [clientUser, setClientUser] = useState<any>(null);
   const [liveScreenUser, setLiveScreenUser] = useState<any>(null);
@@ -9801,7 +9811,7 @@ export default function App() {
     return <LiveScreen loggedInUser={loggedInUser} onBack={() => navigateTo('dashboard')} />;
   }
 
-  if (!loggedInUser) return <Login onLogin={handleLogin} />;
+  if (!loggedInUser) return <Login onLogin={handleLogin} onNavigate={(v) => navigateTo(v)} />;
 
   const renderContent = () => {
     // Initial check for unauthorized view access
