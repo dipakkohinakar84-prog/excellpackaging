@@ -50,8 +50,8 @@ const DailyTasks: React.FC<Props> = ({ loggedInUser }) => {
 
   const fetchTasks = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase.from('daily_tasks').select('*').order('created_at', { ascending: false });
-    if (!error && data) setTasks(data as DailyTask[]);
+    const { data, error } = await supabase.from('daily_tasks').select('*').limit(200);
+    if (!error && data) setTasks((data as DailyTask[]).sort((a, b) => (b.id > a.id ? 1 : -1)));
     setLoading(false);
   }, []);
 
@@ -65,7 +65,7 @@ const DailyTasks: React.FC<Props> = ({ loggedInUser }) => {
     setFormError('');
     let res;
     if (editingTask) {
-      res = await supabase.from('daily_tasks').update({ ...form, updated_at: new Date().toISOString() }).eq('id', editingTask.id);
+      res = await supabase.from('daily_tasks').update({ ...form }).eq('id', editingTask.id);
     } else {
       res = await supabase.from('daily_tasks').insert({ ...form, status: 'Pending', created_by: loggedInUser.username });
     }

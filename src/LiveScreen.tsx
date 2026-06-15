@@ -34,11 +34,11 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
 
   const fetchData = useCallback(async () => {
     const [woRes, taskRes] = await Promise.all([
-      supabase.from('work_orders').select('*').order('created_at', { ascending: false }).limit(50),
-      supabase.from('daily_tasks').select('*').order('created_at', { ascending: false }).limit(50),
+      supabase.from('work_orders').select('*').limit(50),
+      supabase.from('daily_tasks').select('*').limit(50),
     ]);
-    if (!woRes.error && woRes.data) setOrders(woRes.data as WorkOrder[]);
-    if (!taskRes.error && taskRes.data) setTasks(taskRes.data as DailyTask[]);
+    if (!woRes.error && woRes.data) setOrders((woRes.data as WorkOrder[]).sort((a, b) => (b.id > a.id ? 1 : -1)));
+    if (!taskRes.error && taskRes.data) setTasks((taskRes.data as DailyTask[]).sort((a, b) => (b.id > a.id ? 1 : -1)));
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);

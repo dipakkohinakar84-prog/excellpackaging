@@ -72,10 +72,6 @@ const idFieldCollections = new Set([
   'custom_bom_plans',
   'notification_events',
   'activity_events',
-  'daily_tasks',
-  'client_users',
-  'client_orders',
-  'live_screen_users',
 ]);
 
 const legacyIdStart: Record<string, number> = {
@@ -89,10 +85,6 @@ const legacyIdStart: Record<string, number> = {
   custom_bom_plans: 1,
   notification_events: 1,
   activity_events: 1,
-  daily_tasks: 1,
-  client_users: 1,
-  client_orders: 1,
-  live_screen_users: 1,
 };
 
 const isValidLegacyId = (value: any) => (
@@ -214,8 +206,10 @@ const escapeFilterValue = (value: any): string => {
 
 const toPocketBaseField = (collection: string, field: string) => {
   if (field === 'id' && idFieldCollections.has(collection)) return 'legacy_id';
-  if (field === 'created_at') return 'created';
-  if (field === 'updated_at') return 'updated';
+  if (field === 'created_at' && idFieldCollections.has(collection)) return 'legacy_id';
+  if (field === 'updated_at' && idFieldCollections.has(collection)) return 'legacy_id';
+  if (field === 'created_at') return 'id';
+  if (field === 'updated_at') return 'id';
   return field;
 };
 
@@ -267,8 +261,8 @@ class PocketBaseQuery<T = any> implements PromiseLike<QueryResult<T>> {
     return this;
   }
 
-  insert(payload: Record<string, any>[]) {
-    this.mutation = { type: 'insert', payload };
+  insert(payload: Record<string, any>[] | Record<string, any>) {
+    this.mutation = { type: 'insert', payload: Array.isArray(payload) ? payload : [payload] };
     return this;
   }
 
