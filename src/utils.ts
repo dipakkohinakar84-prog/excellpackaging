@@ -110,12 +110,12 @@ export const canAccessView = (user: User | null, view: string): boolean => {
   }
   
   if (normDept === 'Quality_Control') {
-    return ['worker-dashboard', 'wo-details'].includes(view);
+    return ['worker-dashboard', 'wo-details', 'daily-tasks', 'live-screen', 'live-screen-login'].includes(view);
   }
 
   // Dispatch Department
   if (normDept === 'Dispatch') {
-    return ['dispatch-dashboard', 'wo-details'].includes(view);
+    return ['dispatch-dashboard', 'wo-details', 'daily-tasks', 'live-screen', 'live-screen-login'].includes(view);
   }
   
   if (normDept === 'Office' && (level === '3-Staff' || level === '2-Supervisor')) {
@@ -133,7 +133,11 @@ export const canAccessView = (user: User | null, view: string): boolean => {
         'reports',
         'production-reports',
         'notification-audit',
-        'departments'
+        'departments',
+        'daily-tasks',
+        'live-screen',
+        'live-screen-login',
+        'client-orders'
       ];
     return allowedViews.includes(view);
   }
@@ -141,7 +145,7 @@ export const canAccessView = (user: User | null, view: string): boolean => {
   // Production Departments
   const productionDepts = ['Wood_Work', 'Plywood', 'Corrugation', 'Trading_Consumables', 'Foam_Plastic_bags'];
   if (productionDepts.includes(normDept)) {
-    return ['worker-dashboard', 'wo-details', 'plan-generator'].includes(view);
+    return ['worker-dashboard', 'wo-details', 'plan-generator', 'daily-tasks', 'live-screen', 'live-screen-login'].includes(view);
   }
   
   return false;

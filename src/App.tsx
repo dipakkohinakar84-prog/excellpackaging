@@ -56,12 +56,19 @@ import {
   Truck,
   Bell,
   Upload,
-  Pencil
+  Pencil,
+  ListTodo,
+  Monitor,
+  ShoppingCart
 } from 'lucide-react';
 import { AppView, User, Customer, Item, WorkOrder, Department, WOStatus, ChildItem, DepartmentStatus, Metric } from './types';
 import { supabase, supabaseAnonKey, loginWithMobilePassword, getCurrentAuthUser, logoutAuth } from './supabase';
 import { canAccessView, filterWorkOrdersByDepartment, getQCApprovalProgress, sendNotification, normalizeDepartment } from './utils';
 import DepartmentStatusTracker from './DepartmentStatusTracker';
+import DailyTasks from './DailyTasks';
+import LiveScreen from './LiveScreen';
+import ClientPortal from './ClientPortal';
+import ClientOrderManager from './ClientOrderManager';
 import { getCachedData, invalidateCachedData, primeCachedData } from './dataCache';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -116,6 +123,17 @@ const StatusBadge: React.FC<{ status: WOStatus }> = ({ status }) => {
       {style.label}
     </span>
   );
+};
+
+const statusTabColors: Record<string, string> = {
+  'Not Started': 'bg-gray-100 text-gray-700 border-gray-200',
+  'Work Started': 'bg-blue-100 text-blue-700 border-blue-200',
+  'Ready for QC': 'bg-yellow-100 text-yellow-700 border-yellow-200',
+  'QC Approved': 'bg-green-100 text-green-700 border-green-200',
+  'Ready for despatch': 'bg-purple-100 text-purple-700 border-purple-200',
+  'Dispatched': 'bg-indigo-100 text-indigo-700 border-indigo-200',
+  'Delivered': 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  'Cancelled': 'bg-red-100 text-red-700 border-red-200',
 };
 
 const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = "" }) => (
@@ -976,6 +994,44 @@ const Login: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) => {
   );
 };
 
+const LiveScreenLogin: React.FC<{ onLogin: (user: any) => void }> = ({ onLogin }) => {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async () => {
+    setError('');
+    setLoading(true);
+    const { data, error: err } = await supabase.from('live_screen_users').select('*').eq('username', username).single();
+    if (err || !data) { setError('Invalid username or password.'); setLoading(false); return; }
+    if (data.password !== password) { setError('Invalid username or password.'); setLoading(false); return; }
+    if (!data.is_active) { setError('This account is disabled.'); setLoading(false); return; }
+    setLoading(false);
+    onLogin(data);
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center px-4">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-8 max-w-sm w-full">
+        <div className="text-center mb-6">
+          <Monitor size={48} className="text-blue-400 mx-auto mb-3" />
+          <h1 className="text-xl font-black text-white">Live Screen</h1>
+          <p className="text-sm text-gray-400 mt-1">Sign in to display</p>
+        </div>
+        {error && <div className="mb-4 px-3 py-2 rounded-lg bg-red-900/50 text-red-400 text-xs font-semibold">{error}</div>}
+        <div className="space-y-3">
+          <input value={username} onChange={e => setUsername(e.target.value)} placeholder="Username" className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-sm font-semibold text-white outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-gray-500" />
+          <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-sm font-semibold text-white outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-gray-500" />
+          <button onClick={handleSubmit} disabled={loading} className="w-full py-3 bg-blue-600 text-white rounded-xl text-sm font-black hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+            {loading ? 'Signing in...' : 'SIGN IN'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // --- Database Setup View ---
 
 const DatabaseSetup: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
@@ -1067,6 +1123,53 @@ CREATE TABLE IF NOT EXISTS notification_events (
 );
 
 ALTER TABLE notification_events ADD COLUMN IF NOT EXISTS actor TEXT;
+
+-- 14. Daily tasks table (SQLite syntax)
+CREATE TABLE IF NOT EXISTS daily_tasks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  description TEXT,
+  assignee TEXT NOT NULL,
+  due_date TEXT,
+  priority TEXT NOT NULL DEFAULT 'Medium',
+  status TEXT NOT NULL DEFAULT 'Pending',
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- 15. Client portal users (SQLite syntax)
+CREATE TABLE IF NOT EXISTS client_users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id INTEGER NOT NULL,
+  portal_id TEXT NOT NULL UNIQUE,
+  portal_password TEXT NOT NULL,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- 16. Client orders (SQLite syntax)
+CREATE TABLE IF NOT EXISTS client_orders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id INTEGER NOT NULL,
+  customer_name TEXT NOT NULL,
+  items TEXT NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL DEFAULT 'Pending',
+  rejection_reason TEXT,
+  notes TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- 17. Live screen users (SQLite syntax)
+CREATE TABLE IF NOT EXISTS live_screen_users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT NOT NULL UNIQUE,
+  password TEXT NOT NULL,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `;
 
   const copySql = () => {
@@ -1973,16 +2076,12 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
             className="w-full pl-12 pr-4 py-3 bg-white border rounded-xl" 
           />
         </div>
-        <select
-          value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value)}
-          className="w-full px-4 py-3 bg-white border rounded-xl text-sm font-semibold text-gray-700"
-        >
-          <option value="All">All Statuses</option>
-          {statusOptions.map(status => (
-            <option key={status} value={status}>{status}</option>
+        <div className="flex gap-1.5 flex-wrap items-center">
+          <button onClick={() => setStatusFilter('All')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === 'All' ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>All</button>
+          {statusOptions.map(s => (
+            <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === s ? (statusTabColors[s] || 'bg-slate-900 text-white') : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{s}</button>
           ))}
-        </select>
+        </div>
       </div>
 
       <Modal isOpen={isDispatchMetaModalOpen} onClose={() => { if (!isSubmittingDispatch) setIsDispatchMetaModalOpen(false); }} title="Dispatch Details">
@@ -4411,16 +4510,12 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
             className="w-full pl-12 pr-4 py-2.5 sm:py-4 bg-white border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm"
           />
         </div>
-        <select
-          value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value)}
-          className="w-full px-4 py-2.5 sm:py-4 bg-white border border-gray-200 rounded-2xl text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="All">All Statuses</option>
-          {statusOptions.map(status => (
-            <option key={status} value={status}>{status}</option>
+        <div className="flex gap-1.5 flex-wrap items-center">
+          <button onClick={() => setStatusFilter('All')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === 'All' ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>All</button>
+          {statusOptions.map(s => (
+            <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === s ? (statusTabColors[s] || 'bg-slate-900 text-white') : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{s}</button>
           ))}
-        </select>
+        </div>
       </div>
 
       <Modal isOpen={isImageModalOpen} onClose={() => setIsImageModalOpen(false)} title="Drawing PDF Preview" maxWidthClassName="max-w-6xl">
@@ -4965,16 +5060,12 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
             <span className="text-blue-600">{statusFilter !== 'All' || departmentFilter !== 'All' ? 'Active' : 'Open'}</span>
           </summary>
           <div className="mt-2 grid gap-2">
-            <select
-              value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value)}
-              className="w-full min-w-0 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="All">All Statuses</option>
-              {statusOptions.map(status => (
-                <option key={status} value={status}>{status}</option>
+            <div className="flex gap-1.5 flex-wrap">
+              <button onClick={() => setStatusFilter('All')} className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${statusFilter === 'All' ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>All</button>
+              {statusOptions.map(s => (
+                <button key={s} onClick={() => setStatusFilter(s)} className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${statusFilter === s ? (statusTabColors[s] || 'bg-slate-900 text-white') : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{s}</button>
               ))}
-            </select>
+            </div>
 
             {canFilterByDepartment && (
               <select
@@ -4992,16 +5083,12 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
         </details>
 
         <div className={`hidden md:grid gap-2 ${canFilterByDepartment ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'}`}>
-          <select
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value)}
-            className="w-full min-w-0 px-3 sm:px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="All">All Statuses</option>
-            {statusOptions.map(status => (
-              <option key={status} value={status}>{status}</option>
+          <div className="flex gap-1.5 flex-wrap items-center">
+            <button onClick={() => setStatusFilter('All')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === 'All' ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>All</button>
+            {statusOptions.map(s => (
+              <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === s ? (statusTabColors[s] || 'bg-slate-900 text-white') : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{s}</button>
             ))}
-          </select>
+          </div>
 
           {canFilterByDepartment && (
             <select
@@ -5292,45 +5379,46 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
 
   return (
     <div className="space-y-3 sm:space-y-4 max-[375px]:space-y-3 animate-in fade-in slide-in-from-right-4 duration-300">
-      <button onClick={onBack} className="flex items-center gap-2 max-[375px]:gap-1.5 text-[10px] max-[375px]:text-[9px] font-black text-slate-300 md:text-gray-400 hover:text-indigo-600 transition-colors uppercase tracking-widest">
-        <ChevronLeft size={16}/> Back
-      </button>
+      <div className="no-print">
+        <button onClick={onBack} className="flex items-center gap-2 max-[375px]:gap-1.5 text-[10px] max-[375px]:text-[9px] font-black text-slate-300 md:text-gray-400 hover:text-indigo-600 transition-colors uppercase tracking-widest">
+          <ChevronLeft size={16}/> Back
+        </button>
+      </div>
        
-      <div className="flex flex-col xl:flex-row gap-4 max-[375px]:gap-3">
-        <div className="flex-1 space-y-4">
-          <Card className="p-3 md:p-5 max-[375px]:p-3 border-t-0 md:border-t-4 md:border-t-indigo-600 rounded-3xl md:rounded-xl overflow-hidden relative">
-             <div className="md:hidden absolute inset-x-0 top-0 h-1.5 bg-blue-600" />
-             <div className="flex flex-col md:flex-row justify-between items-start mb-3 md:mb-5 max-[375px]:mb-3 gap-2 md:gap-3 max-[375px]:gap-2">
-                 <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="bg-indigo-50 text-indigo-600 px-3 max-[375px]:px-2 py-1 rounded-full md:rounded-lg text-[10px] max-[375px]:text-[9px] font-black tracking-widest border border-indigo-100">ORDER-#{wo.id}</span>
-                      {wo.order_type === 'suborder' && <Badge color="purple">Suborder Of #{wo.parent_work_order_id || '-'}</Badge>}
-                    </div>
-                    <h1 className="text-lg md:text-2xl max-[375px]:text-base font-black text-gray-800 mt-2 mb-1 break-words leading-tight line-clamp-2">{wo.job_details}</h1>
-                    {wo.parent_work_order_id && <p className="text-[10px] font-black text-purple-500 uppercase tracking-wider">Parent Item: {wo.parent_item_name || 'Parent Item'}</p>}
-                    <p className="text-xs md:text-base max-[375px]:text-[11px] font-bold text-gray-400 uppercase tracking-tight">{wo.customer}</p>
+       <div className="flex flex-col xl:flex-row gap-4 max-[375px]:gap-3">
+         <div className="flex-1 space-y-4">
+            <Card className="p-3 md:p-5 border-t-[3px] border-t-indigo-600 rounded-xl overflow-hidden print-job-card">
+              <div className="flex flex-col md:flex-row justify-between items-start mb-5 gap-3">
+                  <div className="space-y-1">
+                     <div className="flex flex-wrap items-center gap-2">
+                       <span className="bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full text-xs font-bold tracking-widest border border-indigo-100">ORDER-#{wo.id}</span>
+                       {wo.order_type === 'suborder' && <Badge color="purple">Suborder Of #{wo.parent_work_order_id || '-'}</Badge>}
+                     </div>
+                     <h1 className="text-lg md:text-2xl font-bold text-gray-800 mt-1.5 mb-0.5 break-words leading-tight line-clamp-2">{wo.job_details}</h1>
+                     {wo.parent_work_order_id && <p className="text-xs font-semibold text-purple-500 uppercase tracking-wider">Parent Item: {wo.parent_item_name || 'Parent Item'}</p>}
+                     <p className="text-xs md:text-sm font-medium text-gray-400 uppercase tracking-tight">{wo.customer}</p>
+                  </div>
+                  <StatusBadge status={wo.status} />
+               </div>
+                
+               <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-3 py-4 border-y border-gray-100">
+                  <div>
+                     <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest block mb-0.5">Batch Size</label>
+                     <p className="text-base md:text-lg font-bold text-indigo-600">{wo.qty} <span className="text-xs text-gray-400 font-medium">PCS</span></p>
+                  </div>
+                  <div>
+                     <label className="text-xs font-semibold uppercase text-gray-400 tracking-widest block mb-0.5">Delivery ETD</label>
+                     <p className="text-sm font-semibold text-orange-600 flex items-center gap-1"><Clock size={14}/> {wo.etd || 'N/A'}</p>
+                  </div>
+                  <div className="hidden md:block">
+                     <label className="text-xs font-semibold uppercase text-gray-400 tracking-widest block mb-0.5">Blueprint Ref</label>
+                     <p className="text-xs font-mono font-medium text-gray-700 px-2 py-1 bg-gray-50 rounded inline-block break-all">{wo.drawing || 'NO DRAWING'}</p>
+                  </div>
+                  <div className="hidden md:block">
+                     <label className="text-xs font-semibold uppercase text-gray-400 tracking-widest block mb-0.5">QC/Ready Date</label>
+                     <p className="text-sm font-semibold text-green-600">{wo.ready_date || 'IN PROGRESS'}</p>
                  </div>
-                 <StatusBadge status={wo.status} />
               </div>
-               
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4 max-[375px]:gap-2 py-2 md:py-4 border-y border-gray-100">
-                 <div className="rounded-2xl bg-gray-50 p-2.5 md:bg-transparent md:p-0 md:rounded-none">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Batch Size</label>
-                    <p className="text-base md:text-xl max-[375px]:text-base font-black text-indigo-600">{wo.qty} <span className="text-[10px] text-gray-400 font-bold">PCS</span></p>
-                 </div>
-                 <div className="rounded-2xl bg-orange-50 p-2.5 md:bg-transparent md:p-0 md:rounded-none">
-                    <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest block mb-1">Delivery ETD</label>
-                    <p className="text-xs font-black text-orange-600 flex items-center gap-1"><Clock size={12}/> {wo.etd || 'N/A'}</p>
-                 </div>
-                 <div className="hidden md:block col-span-2 lg:col-span-1 rounded-2xl bg-gray-50 p-3 md:bg-transparent md:p-0 md:rounded-none">
-                    <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest block mb-1">Blueprint Ref</label>
-                    <p className="text-xs font-mono font-bold bg-gray-50 px-2 py-1 rounded inline-block break-all">{wo.drawing || 'NO DRAWING'}</p>
-                 </div>
-                 <div className="hidden md:block col-span-2 lg:col-span-1 rounded-2xl bg-emerald-50 p-3 md:bg-transparent md:p-0 md:rounded-none">
-                    <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest block mb-1">QC/Ready Date</label>
-                    <p className="text-xs font-black text-green-600">{wo.ready_date || 'IN PROGRESS'}</p>
-                </div>
-             </div>
 
              <div className="mt-4 max-[375px]:mt-3">
                  <DepartmentStatusTracker
@@ -5458,57 +5546,28 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                        setStatusActionKey(null);
                      }
                    }}
-                 />
-             </div>
-          </Card>
+                  />
+              </div>
 
-        </div>
-
-        <div className="w-full xl:w-72 space-y-4 max-[375px]:space-y-3">
-           <Card className="hidden xl:block bg-slate-900 text-white p-5 border-0 shadow-xl">
-              <h3 className="font-black text-base mb-3 flex items-center gap-2 text-blue-400">Controls</h3>
-              <div className="space-y-2">
-                 <button className="w-full py-3 bg-white/10 hover:bg-white/20 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-2 border border-white/5">
-                    <Printer size={18}/> PRINT JOB CARD
+               <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col sm:flex-row gap-2 no-print">
+                 <button onClick={() => window.print()} className="flex-1 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2">
+                    <Printer size={16}/> PRINT JOB CARD
                  </button>
-                  {isOffice && (
+                 {isOffice && (
                     <button onClick={async () => {
                       if(confirm("Delete Order?")) {
                         await supabase.from('work_orders').delete().eq('id', id);
                         void logActivity({ eventType: 'work_order', action: 'deleted', title: 'Order Deleted', body: `Deleted order #${id} from WO Details`, actor: getStoredLoggedInUser(), targetCollection: 'work_orders', targetId: id, severity: 'warning' });
                         onBack();
                       }
-                    }} className="w-full py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-2 border border-red-500/20 mt-2">
-                       <Trash2 size={18}/> DELETE ORDER
+                    }} className="flex-1 py-2.5 px-4 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 border border-red-200">
+                       <Trash2 size={16}/> DELETE ORDER
                     </button>
-                  )}
-               </div>
-            </Card>
-
-            <details className="xl:hidden bg-slate-900 text-white rounded-2xl p-4 border border-slate-700">
-              <summary className="list-none cursor-pointer flex items-center justify-between text-xs font-black uppercase tracking-widest text-blue-300">
-                <span>Quick Controls</span>
-                <span>Open</span>
-              </summary>
-              <div className="mt-3 space-y-3">
-                <button className="w-full py-3 bg-white/10 hover:bg-white/20 rounded-xl text-[10px] font-black transition-all flex items-center justify-center gap-3 border border-white/10">
-                  <Printer size={16}/> PRINT JOB CARD
-                </button>
-                {isOffice && (
-                  <button onClick={async () => {
-                    if(confirm("Delete Order?")) {
-                      await supabase.from('work_orders').delete().eq('id', id);
-                      void logActivity({ eventType: 'work_order', action: 'deleted', title: 'Order Deleted', body: `Deleted order #${id} from WO Details`, actor: getStoredLoggedInUser(), targetCollection: 'work_orders', targetId: id, severity: 'warning' });
-                      onBack();
-                    }
-                  }} className="w-full py-3 bg-red-500/10 hover:bg-red-500/20 text-red-300 rounded-xl text-[10px] font-black transition-all flex items-center justify-center gap-3 border border-red-500/20">
-                    <Trash2 size={16}/> DELETE ORDER
-                  </button>
-                )}
-             </div>
-           </details>
-        </div>
-      </div>
+                 )}
+              </div>
+           </Card>
+         </div>
+       </div>
     </div>
   );
 };
@@ -6707,17 +6766,13 @@ const ProductionPlanList: React.FC<{ onError: () => void; onGenerate: (ids: numb
         )}
       </div>
 
-      <div className="w-full md:w-80">
-        <select
-          value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value)}
-          className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="All">All Statuses</option>
-          {statusOptions.map(status => (
-            <option key={status} value={status}>{status}</option>
+      <div className="w-full md:w-auto">
+        <div className="flex gap-1.5 flex-wrap">
+          <button onClick={() => setStatusFilter('All')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === 'All' ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>All</button>
+          {statusOptions.map(s => (
+            <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === s ? (statusTabColors[s] || 'bg-slate-900 text-white') : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{s}</button>
           ))}
-        </select>
+        </div>
       </div>
 
       <Card className="p-0 overflow-hidden shadow-lg border-2 border-indigo-50">
@@ -8948,6 +9003,8 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
 export default function App() {
   const [view, setView] = useState<AppView>('dashboard');
   const [loggedInUser, setLoggedInUser] = useState<User | null>(null);
+  const [clientUser, setClientUser] = useState<any>(null);
+  const [liveScreenUser, setLiveScreenUser] = useState<any>(null);
   const [dbReady, setDbReady] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState<Record<string, boolean>>({});
@@ -9273,6 +9330,10 @@ export default function App() {
     }
   };
   const handleLogout = () => { logoutAuth(); setLoggedInUser(null); localStorage.removeItem('excell_erp_user'); };
+  const handleClientLogin = (user: any) => { setClientUser(user); };
+  const handleClientLogout = () => { setClientUser(null); navigateTo('client-login'); };
+  const handleLiveScreenLogin = (user: any) => { setLiveScreenUser(user); navigateTo('live-screen'); };
+  const handleLiveScreenLogout = () => { setLiveScreenUser(null); navigateTo('live-screen-login'); };
 
   const handleNavClick = (viewId: AppView) => {
     navigateTo(viewId);
@@ -9442,7 +9503,10 @@ export default function App() {
           { id: 'worker-dashboard' as AppView, label: 'My Jobs', icon: Hammer },
           { id: 'dispatch-dashboard' as AppView, label: 'Dispatch', icon: Truck },
           { id: 'work-orders' as AppView, label: 'Orders', icon: ClipboardList },
+          { id: 'daily-tasks' as AppView, label: 'Daily Tasks', icon: ListTodo },
+          { id: 'live-screen' as AppView, label: 'Live Screen', icon: Monitor },
           { id: 'notification-audit' as AppView, label: 'Alerts Log', icon: AlertCircle },
+          { id: 'client-orders' as AppView, label: 'Client Orders', icon: ShoppingCart },
         ],
       },
       {
@@ -9719,6 +9783,24 @@ export default function App() {
   }, [loggedInUser, fetchNotificationEventsPreview]);
 
   if (!dbReady) return <DatabaseSetup onRetry={() => setDbReady(true)} />;
+
+  if (view === 'client-login') return <ClientPortal clientUser={clientUser} onLogin={handleClientLogin} onLogout={handleClientLogout} />;
+  if (view === 'client-dashboard') {
+    if (!clientUser) return <ClientPortal clientUser={null} onLogin={handleClientLogin} onLogout={handleClientLogout} />;
+    return <ClientPortal clientUser={clientUser} onLogin={handleClientLogin} onLogout={handleClientLogout} />;
+  }
+
+  if (view === 'live-screen-login') return <LiveScreenLogin onLogin={handleLiveScreenLogin} />;
+  if (view === 'live-screen' && !loggedInUser && !liveScreenUser) return <LiveScreenLogin onLogin={handleLiveScreenLogin} />;
+
+  if (view === 'live-screen' && liveScreenUser) {
+    return <LiveScreen liveScreenUser={liveScreenUser} onBack={handleLiveScreenLogout} />;
+  }
+
+  if (view === 'live-screen' && loggedInUser) {
+    return <LiveScreen loggedInUser={loggedInUser} onBack={() => navigateTo('dashboard')} />;
+  }
+
   if (!loggedInUser) return <Login onLogin={handleLogin} />;
 
   const renderContent = () => {
@@ -9761,8 +9843,12 @@ export default function App() {
        case 'custom-bom-print': return <CustomBOMPrintView plan={(window as any)._customPlan} onBack={() => navigateTo('custom-bom-plan')} />;
        case 'production-reports': return <ProductionReports onError={onError} />;
        case 'reports': return <ReportsView onError={onError} />;
-       case 'notification-audit': return <NotificationAuditView onError={onError} />;
-      default: return <Dashboard user={loggedInUser} setView={navigateTo} onError={onError} />;
+        case 'notification-audit': return <NotificationAuditView onError={onError} />;
+        case 'daily-tasks': return <DailyTasks loggedInUser={loggedInUser} />;
+        case 'live-screen-login': return <LiveScreenLogin onLogin={handleLiveScreenLogin} />;
+        case 'live-screen': return <Dashboard user={loggedInUser} setView={navigateTo} onError={onError} />;
+        case 'client-orders': return <ClientOrderManager loggedInUser={loggedInUser} />;
+       default: return <Dashboard user={loggedInUser} setView={navigateTo} onError={onError} />;
     }
   };
 
@@ -9815,6 +9901,29 @@ export default function App() {
             padding: 0 !important; 
             margin: 0 !important;
             width: 100% !important;
+          }
+          .print-job-card {
+            border: 2px solid #e2e8f0 !important;
+            box-shadow: none !important;
+            padding: 12px !important;
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+          .print-job-card .print-status-label {
+            font-size: 11px !important;
+            font-weight: 600 !important;
+            padding: 2px 8px !important;
+            border-radius: 4px !important;
+            border: 1px solid !important;
+            display: inline-block !important;
+          }
+          .print-job-card .print-dept-card {
+            page-break-inside: avoid;
+            break-inside: avoid;
+            border: 1px solid #e2e8f0 !important;
+            border-radius: 4px !important;
+            padding: 8px !important;
+            margin-bottom: 6px !important;
           }
 
           .custom-bom-print,

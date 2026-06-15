@@ -1,5 +1,5 @@
-import React from 'react';
-import { Check, X, CheckCircle2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Check, X, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { DepartmentStatus, User } from './types';
 import { getAllowedStatuses, normalizeDepartment } from './utils';
 
@@ -63,12 +63,28 @@ const DepartmentStatusTracker: React.FC<DepartmentStatusTrackerProps> = ({
     }
   };
 
+  const [pendingConfirm, setPendingConfirm] = useState<{ dept: string; status: string; qcStatus?: string } | null>(null);
+
   const handleStatusChange = (dept: string, newStatus: string) => {
-    onStatusUpdate(dept, newStatus);
+    setPendingConfirm({ dept, status: newStatus });
   };
 
   const handleQCStatusChange = (dept: string, qcStatus: string) => {
-    onStatusUpdate(dept, 'Ready for QC', qcStatus);
+    setPendingConfirm({ dept, status: 'Ready for QC', qcStatus });
+  };
+
+  const confirmAction = () => {
+    if (!pendingConfirm) return;
+    onStatusUpdate(pendingConfirm.dept, pendingConfirm.status, pendingConfirm.qcStatus);
+    setPendingConfirm(null);
+  };
+
+  const cancelAction = () => {
+    setPendingConfirm(null);
+  };
+
+  const formatConfirmLabel = (status: string) => {
+    return status.replace(/_/g, ' ').replace('QC Approved', 'Approve').replace('QC Denied', 'Deny');
   };
 
   const canEditDepartment = (dept: string): boolean => {
@@ -91,7 +107,6 @@ const DepartmentStatusTracker: React.FC<DepartmentStatusTrackerProps> = ({
   return (
     <div className="space-y-2.5">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm sm:text-xl font-black text-gray-800">Department Status Tracking</h3>
         <span className="sm:hidden rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500">#{workOrderId}</span>
       </div>
 
@@ -103,29 +118,29 @@ const DepartmentStatusTracker: React.FC<DepartmentStatusTrackerProps> = ({
           const isDepartmentBusy = isBusy && busyDepartmentKey === normalizedDept;
 
           return (
-            <div key={dept} className="bg-white border border-gray-200 rounded-2xl p-3 shadow-sm">
+            <div key={dept} className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
               <div className="flex items-center justify-between gap-2 mb-2">
                 <div className="min-w-0">
                   <h4 className="font-black text-gray-800 text-sm truncate">{dept.replace(/_/g, ' ')}</h4>
-                  <div className={`mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] font-black border ${getStatusColor(deptStatus.status)}`}>
+                   <div className={`mt-1 inline-flex px-2 py-0.5 rounded-full text-[11px] font-black border print-status-label ${getStatusColor(deptStatus.status)}`}>
                     {deptStatus.status}
                   </div>
                 </div>
                 {deptStatus.qc_status && (
-                  <span className={`shrink-0 px-2 py-1 rounded-full text-[9px] font-black border ${getStatusColor(deptStatus.qc_status)}`}>
+                  <span className={`shrink-0 px-2 py-1 rounded-full text-[10px] font-black border print-status-label ${getStatusColor(deptStatus.qc_status)}`}>
                     {deptStatus.qc_status}
                   </span>
                 )}
               </div>
 
               {canEdit && !isQC && (
-                <div className="grid grid-cols-3 gap-1.5">
+                <div className="grid grid-cols-3 gap-1.5 no-print">
                   {['Not Started', 'Work Started', 'Ready for QC'].map(status => (
                     <button
                       key={status}
                       onClick={() => handleStatusChange(dept, status)}
                       disabled={deptStatus.status === status || isDepartmentBusy}
-                      className={`min-h-10 px-2 py-2 rounded-xl text-[9px] font-black transition-all ${
+                       className={`min-h-10 px-2 py-2 rounded-xl text-[11px] font-black transition-all ${
                         deptStatus.status === status
                           ? 'bg-blue-600 text-white'
                           : 'bg-gray-100 text-gray-600'
@@ -138,9 +153,9 @@ const DepartmentStatusTracker: React.FC<DepartmentStatusTrackerProps> = ({
               )}
 
               {canEdit && isQC && deptStatus.status === 'Ready for QC' && (
-                <div className="grid grid-cols-2 gap-1.5">
-                  <button onClick={() => handleQCStatusChange(dept, 'QC Approved')} disabled={isDepartmentBusy} className="min-h-10 rounded-xl bg-green-600 text-white text-[10px] font-black disabled:opacity-50">Approve</button>
-                  <button onClick={() => handleQCStatusChange(dept, 'QC Denied')} disabled={isDepartmentBusy} className="min-h-10 rounded-xl bg-red-600 text-white text-[10px] font-black disabled:opacity-50">Deny</button>
+                <div className="grid grid-cols-2 gap-1.5 no-print">
+                  <button onClick={() => handleQCStatusChange(dept, 'QC Approved')} disabled={isDepartmentBusy} className="min-h-10 rounded-xl bg-green-600 text-white text-xs font-black disabled:opacity-50">Approve</button>
+                  <button onClick={() => handleQCStatusChange(dept, 'QC Denied')} disabled={isDepartmentBusy} className="min-h-10 rounded-xl bg-red-600 text-white text-xs font-black disabled:opacity-50">Deny</button>
                 </div>
               )}
             </div>
@@ -148,15 +163,15 @@ const DepartmentStatusTracker: React.FC<DepartmentStatusTrackerProps> = ({
         })}
 
         {assignedDepartments.length > mobileVisibleDepartments.length && (
-          <details className="rounded-2xl border border-gray-200 bg-gray-50 p-3">
-            <summary className="list-none cursor-pointer text-[10px] font-black uppercase tracking-widest text-slate-500">Show all departments ({assignedDepartments.length})</summary>
+           <details className="rounded-lg border border-gray-200 bg-gray-50 p-3 no-print">
+             <summary className="list-none cursor-pointer text-xs font-black uppercase tracking-widest text-slate-500">Show all departments ({assignedDepartments.length})</summary>
             <div className="mt-2 space-y-1.5">
               {assignedDepartments.map(dept => {
                 const deptStatus = getDepartmentStatus(dept);
                 return (
                   <div key={dept} className="flex items-center justify-between gap-2 rounded-xl bg-white px-3 py-2 text-xs">
                     <span className="font-bold text-slate-700 truncate">{dept.replace(/_/g, ' ')}</span>
-                    <span className={`shrink-0 px-2 py-0.5 rounded-full text-[9px] font-black border ${getStatusColor(deptStatus.status)}`}>{deptStatus.status}</span>
+                    <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-black border ${getStatusColor(deptStatus.status)}`}>{deptStatus.status}</span>
                   </div>
                 );
               })}
@@ -173,7 +188,7 @@ const DepartmentStatusTracker: React.FC<DepartmentStatusTrackerProps> = ({
         const isDepartmentBusy = isBusy && busyDepartmentKey === normalizedDept;
         
         return (
-          <div key={dept} className="bg-white border border-gray-200 rounded-2xl sm:rounded-xl p-3 sm:p-2.5 shadow-sm">
+           <div key={dept} className="print-dept-card bg-white border border-gray-200 rounded-lg p-3 sm:p-2.5 shadow-sm">
             {/* Responsive header for the department status card */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-1.5 gap-1.5">
               <div className="flex items-center gap-2">
@@ -181,23 +196,23 @@ const DepartmentStatusTracker: React.FC<DepartmentStatusTrackerProps> = ({
                 <h4 className="font-black text-gray-800 break-words text-sm">{dept.replace(/_/g, ' ')}</h4>
               </div>
               
-              <div className={`px-2 py-0.5 rounded-full text-[10px] font-black border self-start sm:self-auto ${getStatusColor(deptStatus.status)}`}>
+              <div className={`print-status-label px-2 py-0.5 rounded-full text-[11px] font-black border self-start sm:self-auto ${getStatusColor(deptStatus.status)}`}>
                 {deptStatus.status}
               </div>
             </div>
 
             {canEdit && !isQC && (
-              <div className="grid grid-cols-3 sm:flex gap-1.5 sm:gap-1 flex-wrap mb-2 sm:mb-1.5">
+              <div className="grid grid-cols-3 sm:flex gap-1.5 sm:gap-1 flex-wrap mb-2 sm:mb-1.5 no-print">
                 {['Not Started', 'Work Started', 'Ready for QC'].map(status => (
                   <button
                     key={status}
                     onClick={() => handleStatusChange(dept, status)}
                     disabled={deptStatus.status === status || isDepartmentBusy}
-                    className={`min-h-11 sm:min-h-0 px-2 py-2 sm:py-1 rounded-xl sm:rounded-md text-[10px] font-bold transition-all flex-grow sm:flex-grow-0 ${
-                      deptStatus.status === status
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    } disabled:opacity-50`}
+                     className={`min-h-11 sm:min-h-0 px-2 py-2 sm:py-1 rounded-xl sm:rounded-md text-xs font-bold transition-all flex-grow sm:flex-grow-0 ${
+                       deptStatus.status === status
+                         ? 'bg-blue-600 text-white'
+                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                     } disabled:opacity-50`}
                   >
                     {isDepartmentBusy ? 'Updating...' : status}
                   </button>
@@ -213,17 +228,17 @@ const DepartmentStatusTracker: React.FC<DepartmentStatusTrackerProps> = ({
                 </div>
                 
                 {deptStatus.qc_status && (
-                  <div className={`mb-1.5 inline-flex px-2.5 py-1 rounded-md text-[10px] font-black border ${getStatusColor(deptStatus.qc_status)}`}>
+                  <div className={`mb-1.5 inline-flex px-2.5 py-1 rounded-md text-xs font-black border print-status-label ${getStatusColor(deptStatus.qc_status)}`}>
                     {deptStatus.qc_status}
                   </div>
                 )}
                 
                 {canEdit && isQC && (
-                  <div className="flex gap-1.5">
+                  <div className="flex gap-1.5 no-print">
                     <button
                       onClick={() => handleQCStatusChange(dept, 'QC Approved')}
                       disabled={isDepartmentBusy}
-                      className="flex-1 min-h-11 sm:min-h-0 px-2.5 py-2 sm:py-1.5 bg-green-600 text-white rounded-xl sm:rounded-md text-[10px] font-black hover:bg-green-700 transition-colors flex items-center justify-center disabled:opacity-50"
+                      className="flex-1 min-h-11 sm:min-h-0 px-2.5 py-2 sm:py-1.5 bg-green-600 text-white rounded-xl sm:rounded-md text-xs font-black hover:bg-green-700 transition-colors flex items-center justify-center disabled:opacity-50"
                     >
                       <Check size={12} className="inline mr-1" />
                       {isDepartmentBusy ? 'Updating...' : 'Approve'}
@@ -231,7 +246,7 @@ const DepartmentStatusTracker: React.FC<DepartmentStatusTrackerProps> = ({
                     <button
                       onClick={() => handleQCStatusChange(dept, 'QC Denied')}
                       disabled={isDepartmentBusy}
-                      className="flex-1 min-h-11 sm:min-h-0 px-2.5 py-2 sm:py-1.5 bg-red-600 text-white rounded-xl sm:rounded-md text-[10px] font-black hover:bg-red-700 transition-colors flex items-center justify-center disabled:opacity-50"
+                      className="flex-1 min-h-11 sm:min-h-0 px-2.5 py-2 sm:py-1.5 bg-red-600 text-white rounded-xl sm:rounded-md text-xs font-black hover:bg-red-700 transition-colors flex items-center justify-center disabled:opacity-50"
                     >
                       <X size={12} className="inline mr-1" />
                       {isDepartmentBusy ? 'Updating...' : 'Deny'}
@@ -255,6 +270,32 @@ const DepartmentStatusTracker: React.FC<DepartmentStatusTrackerProps> = ({
         );
       })}
       </div>
+
+      {pendingConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-xl shadow-2xl p-5 max-w-sm w-full animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+                <AlertTriangle size={20} className="text-amber-600" />
+              </div>
+              <div>
+                <h4 className="font-bold text-gray-900 text-sm">Confirm Status Change</h4>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {pendingConfirm.dept.replace(/_/g, ' ')} &rarr; {formatConfirmLabel(pendingConfirm.qcStatus || pendingConfirm.status)}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button onClick={cancelAction} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-sm font-bold hover:bg-gray-200 transition-colors">
+                Cancel
+              </button>
+              <button onClick={confirmAction} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 transition-colors">
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

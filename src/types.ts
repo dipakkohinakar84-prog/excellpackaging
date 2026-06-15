@@ -18,7 +18,13 @@ export type AppView =
   | 'production-reports'
   | 'notification-audit'
   | 'profile' 
-  | 'backup';
+  | 'backup'
+  | 'daily-tasks'
+  | 'live-screen'
+  | 'live-screen-login'
+  | 'client-login'
+  | 'client-dashboard'
+  | 'client-orders';
 
 export interface User {
   id: number;
@@ -134,6 +140,47 @@ export interface DepartmentStatus {
   qc_status?: QCStatus;
   updated_at?: string;
   updated_by?: string;
+}
+
+export interface DailyTask {
+  id: number;
+  title: string;
+  description: string;
+  assignee: string;
+  due_date: string;
+  priority: 'Low' | 'Medium' | 'High' | 'Urgent';
+  status: 'Pending' | 'In Progress' | 'Completed' | 'Cancelled';
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClientUser {
+  id: number;
+  customer_id: number;
+  portal_id: string;
+  portal_password: string;
+  is_active: boolean;
+}
+
+export interface ClientOrderItem {
+  item_id: number;
+  item_name: string;
+  qty: number;
+  drawing_no: string;
+}
+
+export interface ClientOrder {
+  id: number;
+  customer_id: number;
+  customer_name: string;
+  items: ClientOrderItem[];
+  status: 'Pending' | 'Accepted' | 'Rejected' | 'Completed' | 'Cancelled';
+  rejection_reason: string;
+  notes: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface WorkOrder {
