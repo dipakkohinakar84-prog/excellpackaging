@@ -143,7 +143,7 @@ export interface DepartmentStatus {
 }
 
 export interface DailyTask {
-  id: number;
+  id: number | string;
   title: string;
   description: string;
   assignee: string;
@@ -156,7 +156,7 @@ export interface DailyTask {
 }
 
 export interface ClientUser {
-  id: number;
+  id: number | string;
   customer_id: number;
   portal_id: string;
   portal_password: string;
@@ -171,7 +171,7 @@ export interface ClientOrderItem {
 }
 
 export interface ClientOrder {
-  id: number;
+  id: number | string;
   customer_id: number;
   customer_name: string;
   items: ClientOrderItem[];

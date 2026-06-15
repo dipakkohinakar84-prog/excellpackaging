@@ -42,6 +42,7 @@ const DailyTasks: React.FC<Props> = ({ loggedInUser }) => {
   const [showForm, setShowForm] = useState(false);
   const [editingTask, setEditingTask] = useState<DailyTask | null>(null);
   const [form, setForm] = useState({ title: '', description: '', assignee: '', due_date: '', priority: 'Medium' });
+  const [formError, setFormError] = useState('');
   const [filter, setFilter] = useState('All');
 
   const normUserDept = normalizeDepartment(loggedInUser.department);
@@ -57,15 +58,24 @@ const DailyTasks: React.FC<Props> = ({ loggedInUser }) => {
   useEffect(() => { fetchTasks(); }, [fetchTasks]);
 
   const handleSave = async () => {
-    if (!form.title.trim()) return;
+    if (!form.title.trim() || !form.assignee.trim()) {
+      setFormError('Title and Assignee are required.');
+      return;
+    }
+    setFormError('');
+    let res;
     if (editingTask) {
-      await supabase.from('daily_tasks').update({ ...form, updated_at: new Date().toISOString() }).eq('id', editingTask.id);
+      res = await supabase.from('daily_tasks').update({ ...form, updated_at: new Date().toISOString() }).eq('id', editingTask.id);
     } else {
-      await supabase.from('daily_tasks').insert({ ...form, status: 'Pending', created_by: loggedInUser.username });
+      res = await supabase.from('daily_tasks').insert({ ...form, status: 'Pending', created_by: loggedInUser.username });
+    }
+    if (res.error) { setFormError(res.error.message); return; }
+    if (!editingTask) {
+      // Clear assignee and due_date after creation for convenience
+      setForm({ title: '', description: '', assignee: '', due_date: '', priority: 'Medium' });
     }
     setShowForm(false);
     setEditingTask(null);
-    setForm({ title: '', description: '', assignee: '', due_date: '', priority: 'Medium' });
     fetchTasks();
   };
 
@@ -111,6 +121,7 @@ const DailyTasks: React.FC<Props> = ({ loggedInUser }) => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="bg-white rounded-xl shadow-2xl p-6 max-w-2xl w-full space-y-4">
             <h2 className="font-black text-gray-800 text-lg">{editingTask ? 'Edit Task' : 'New Task'}</h2>
+            {formError && <div className="px-3 py-2 rounded-lg bg-red-50 text-red-600 text-xs font-semibold">{formError}</div>}
             <input value={form.title} onChange={e => setForm({...form, title: e.target.value})} placeholder="Task title *" className="w-full px-3 py-2.5 border rounded-lg text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500" />
             <textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})} placeholder="Description" rows={5} className="w-full px-3 py-2.5 border rounded-lg text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500 resize-y" />
             <div className="grid grid-cols-2 gap-2">

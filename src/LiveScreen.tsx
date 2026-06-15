@@ -149,7 +149,7 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
 
       <div className="flex-1 flex items-center justify-center">
         {items.length === 0 ? (
-          <div className="text-gray-600 text-xl font-semibold">No {mode === 'orders' ? 'orders' : 'tasks'} to display.</div>
+          <div className="text-gray-400 text-xl font-semibold">No {mode === 'orders' ? 'orders' : 'tasks'} to display.</div>
         ) : mode === 'orders' && current ? (
           renderOrder(current as WorkOrder)
         ) : mode === 'tasks' && current ? (
