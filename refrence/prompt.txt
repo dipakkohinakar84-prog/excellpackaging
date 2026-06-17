@@ -1,0 +1,126 @@
+Redesign an industrial ERP/MES "Live Orders" screen for a manufacturing workflow.
+
+Current problem:
+- Rows are too large
+- Only 3 orders visible on a 1920x1080 screen
+- Too much empty dark space
+- Status badges are difficult to scan
+- Operators need fast order tracking
+
+Design Goal:
+Create a highly dense professional operations dashboard focused on LIST VIEW.
+
+Style:
+- Modern Manufacturing ERP
+- Dark theme
+- Premium navy + black gradient background
+- Minimalistic
+- High information density
+- Inspired by Linear, Stripe Dashboard, Jira, Trading Terminal UIs
+
+Layout:
+
+Top Header:
+------------------------------------------------
+LIVE ORDERS (124)
+Search Orders...
+Filter Dropdown
+Sort Dropdown
+Refresh Button
+
+KPI Cards:
+- Ready For QC
+- In Production
+- Pending
+- Blocked
+- Aging > 2h
+------------------------------------------------
+
+Status Filter Tabs:
+[All]
+[Ready For QC]
+[Production]
+[Pending]
+[Blocked]
+[Aging]
+
+Sticky while scrolling.
+
+Main Area:
+Display orders in compact table/list format.
+
+Columns:
+------------------------------------------------
+ID
+Customer
+Job Description
+Department
+Qty
+Status
+Age
+Assigned To
+Action
+------------------------------------------------
+
+Row Design:
+
+#1001
+Diam Display India Pvt Ltd
+
+C1 Gondola 1100×600×410 mm
+
+Wood Work
+
+Q1
+
+Status Chip:
+Ready For QC
+
+Age:
+01:12
+
+Assignee:
+Ravi
+
+Action:
+Open
+
+Compact row height:
+64px to 72px
+
+Visual Hierarchy:
+1. Customer Name = largest text
+2. Job Name = medium text
+3. Department + Qty = small muted text
+
+Status Colors:
+Ready For QC = Amber
+In Production = Blue
+Completed = Green
+Not Started = Gray
+Blocked = Red
+
+Row Indicators:
+Ready For QC → Left Border Amber
+Blocked → Left Border Red
+Production → Left Border Blue
+
+Hover:
+Subtle highlight
+
+Selection:
+Blue glow
+
+Requirements:
+- Show 12–15 orders per screen
+- Sticky table header
+- Responsive
+- Supports 1000+ orders
+- Virtual scrolling ready
+- Optimized for factory floor operators
+- Fast scanability
+- No large cards
+- No empty space
+- Table-first design
+
+Generate a polished enterprise-grade UI.

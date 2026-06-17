@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Live Orders</title>
+
+<style>
+
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:Inter,sans-serif;
+}
+
+body{
+    background:#050b1a;
+    color:white;
+}
+
+.container{
+    padding:20px;
+}
+
+.header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:20px;
+}
+
+.header h1{
+    font-size:24px;
+}
+
+.controls{
+    display:flex;
+    gap:10px;
+}
+
+input,select,button{
+    background:#0f172a;
+    border:1px solid #1e293b;
+    color:white;
+    padding:10px;
+    border-radius:8px;
+}
+
+.kpis{
+    display:grid;
+    grid-template-columns:repeat(5,1fr);
+    gap:12px;
+    margin-bottom:20px;
+}
+
+.card{
+    background:#0f172a;
+    padding:16px;
+    border-radius:12px;
+    border:1px solid #1e293b;
+}
+
+.card h3{
+    color:#94a3b8;
+    font-size:12px;
+}
+
+.card p{
+    font-size:22px;
+    font-weight:600;
+    margin-top:8px;
+}
+
+.filters{
+    display:flex;
+    gap:10px;
+    margin-bottom:15px;
+}
+
+.filter{
+    padding:8px 14px;
+    border-radius:999px;
+    background:#0f172a;
+    border:1px solid #1e293b;
+    cursor:pointer;
+}
+
+.table{
+    background:#0b1220;
+    border-radius:12px;
+    overflow:hidden;
+    border:1px solid #1e293b;
+}
+
+.table-header,
+.row{
+    display:grid;
+    grid-template-columns:
+    90px
+    260px
+    1fr
+    120px
+    80px
+    150px
+    90px
+    140px
+    100px;
+    align-items:center;
+}
+
+.table-header{
+    background:#111827;
+    padding:14px 16px;
+    font-size:13px;
+    color:#94a3b8;
+    position:sticky;
+    top:0;
+}
+
+.row{
+    padding:14px 16px;
+    min-height:68px;
+    border-top:1px solid #172033;
+}
+
+.row:hover{
+    background:#111827;
+}
+
+.customer{
+    font-weight:600;
+}
+
+.job{
+    color:#cbd5e1;
+}
+
+.muted{
+    color:#64748b;
+    font-size:12px;
+}
+
+.badge{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    padding:6px 12px;
+    border-radius:999px;
+    font-size:12px;
+    font-weight:600;
+}
+
+.qc{
+    background:#f59e0b20;
+    color:#fbbf24;
+}
+
+.pending{
+    background:#64748b20;
+    color:#94a3b8;
+}
+
+.production{
+    background:#2563eb20;
+    color:#60a5fa;
+}
+
+.blocked{
+    background:#dc262620;
+    color:#f87171;
+}
+
+.row.qc-border{
+    border-left:4px solid #f59e0b;
+}
+
+.row.production-border{
+    border-left:4px solid #2563eb;
+}
+
+.row.blocked-border{
+    border-left:4px solid #dc2626;
+}
+
+.open-btn{
+    background:#2563eb;
+    border:none;
+    padding:8px 12px;
+    border-radius:8px;
+    color:white;
+    cursor:pointer;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<div class="header">
+    <h1>LIVE ORDERS (124)</h1>
+
+    <div class="controls">
+        <input placeholder="Search Orders">
+        <select>
+            <option>All Lines</option>
+        </select>
+        <button>Refresh</button>
+    </div>
+</div>
+
+<div class="kpis">
+
+<div class="card">
+    <h3>READY FOR QC</h3>
+    <p>14</p>
+</div>
+
+<div class="card">
+    <h3>IN PRODUCTION</h3>
+    <p>22</p>
+</div>
+
+<div class="card">
+    <h3>PENDING</h3>
+    <p>48</p>
+</div>
+
+<div class="card">
+    <h3>BLOCKED</h3>
+    <p>3</p>
+</div>
+
+<div class="card">
+    <h3>AGING > 2H</h3>
+    <p>8</p>
+</div>
+
+</div>
+
+<div class="filters">
+    <div class="filter">All</div>
+    <div class="filter">QC</div>
+    <div class="filter">Production</div>
+    <div class="filter">Pending</div>
+    <div class="filter">Blocked</div>
+</div>
+
+<div class="table">
+
+<div class="table-header">
+    <div>ID</div>
+    <div>Customer</div>
+    <div>Job</div>
+    <div>Department</div>
+    <div>Qty</div>
+    <div>Status</div>
+    <div>Age</div>
+    <div>Assigned</div>
+    <div>Action</div>
+</div>
+
+<div class="row qc-border">
+    <div>#1001</div>
+
+    <div>
+        <div class="customer">
+            Diam Display India
+        </div>
+    </div>
+
+    <div class="job">
+        C1 Gondola 1100×600×410 mm
+    </div>
+
+    <div>Wood Work</div>
+
+    <div>Q1</div>
+
+    <div>
+        <span class="badge qc">
+            Ready For QC
+        </span>
+    </div>
+
+    <div>01:12</div>
+
+    <div>Ravi</div>
+
+    <div>
+        <button class="open-btn">
+            Open
+        </button>
+    </div>
+</div>
+
+<div class="row">
+    <div>#1003</div>
+
+    <div class="customer">
+        Morde Foods Pvt Ltd
+    </div>
+
+    <div class="job">
+        Wooden Pallet 1300×1050×130
+    </div>
+
+    <div>Wood Work</div>
+
+    <div>Q1</div>
+
+    <div>
+        <span class="badge pending">
+            Not Started
+        </span>
+    </div>
+
+    <div>00:08</div>
+
+    <div>Unassigned</div>
+
+    <div>
+        <button class="open-btn">
+            Open
+        </button>
+    </div>
+</div>
+
+</div>
+
+</div>
+
+</body>
+</html>

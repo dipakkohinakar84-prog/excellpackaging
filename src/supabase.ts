@@ -1,1 +1,1 @@
-export { pb, pocketBaseUrl, supabase, supabaseAnonKey, supabaseUrl, loginWithMobilePassword, getCurrentAuthUser, logoutAuth } from './pocketbase';
+export { pb, pocketBaseUrl, supabase, supabaseAnonKey, supabaseUrl, loginWithMobilePassword, getCurrentAuthUser, logoutAuth, mapAuthRecordToUser } from './pocketbase';

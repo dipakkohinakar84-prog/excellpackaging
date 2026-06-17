@@ -61,8 +61,9 @@ import {
   Monitor,
   ShoppingCart
 } from 'lucide-react';
-import { AppView, User, Customer, Item, WorkOrder, Department, WOStatus, ChildItem, DepartmentStatus, Metric } from './types';
-import { supabase, supabaseAnonKey, loginWithMobilePassword, getCurrentAuthUser, logoutAuth } from './supabase';
+import { AppView, User, Customer, Item, WorkOrder, Department, WOStatus, ChildItem, DepartmentStatus, Metric, FEATURE_FLAG_GROUPS } from './types';
+import { supabase, supabaseAnonKey, pb, loginWithMobilePassword, getCurrentAuthUser, logoutAuth, mapAuthRecordToUser } from './supabase';
+import Login from './LoginComponent';
 import { canAccessView, filterWorkOrdersByDepartment, getQCApprovalProgress, sendNotification, normalizeDepartment } from './utils';
 import DepartmentStatusTracker from './DepartmentStatusTracker';
 import DailyTasks from './DailyTasks';
@@ -842,162 +843,7 @@ const getStoredLoggedInUser = (): User | null => {
   }
 };
 
-// --- Login View ---
-
-const Login: React.FC<{ onLogin: (user: User) => void; onNavigate?: (v: AppView) => void }> = ({ onLogin, onNavigate }) => {
-  const [mobile, setMobile] = useState('');
-  const [passkey, setPasskey] = useState('');
-  const [showPasskey, setShowPasskey] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    try {
-      const user = await loginWithMobilePassword(mobile, passkey);
-      onLogin(user);
-    } catch (err: any) {
-      setError(err?.message || 'Invalid mobile number or passkey.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen overflow-hidden bg-[#f4f4f4] text-slate-900 lg:grid lg:grid-cols-2">
-      <style>{`
-        @keyframes loginFloat { 0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); } 50% { transform: translate3d(0, -18px, 0) rotate(4deg); } }
-        @keyframes loginDrift { 0% { transform: translateX(-8%) rotate(-4deg); } 100% { transform: translateX(8%) rotate(4deg); } }
-        @keyframes loginPulse { 0%, 100% { opacity: .35; transform: scale(.95); } 50% { opacity: .9; transform: scale(1.05); } }
-        @media (prefers-reduced-motion: reduce) { .login-animate { animation: none !important; } }
-      `}</style>
-
-      <section className="flex min-h-screen items-center justify-center px-5 py-10 lg:px-8">
-        <div className="w-full max-w-[430px] overflow-hidden rounded-lg border border-slate-300 bg-white shadow-[0_2px_10px_rgba(15,23,42,0.14)]">
-          <div className="px-8 pb-8 pt-14 sm:px-10">
-            <div className="mx-auto flex h-[72px] w-[72px] items-center justify-center rounded-[24px] bg-[#0176d3] text-white shadow-lg shadow-blue-200">
-              <Package size={38} strokeWidth={2.2} />
-            </div>
-            <h1 className="mt-8 text-center text-[28px] font-normal tracking-tight text-[#032d60]">Enter your Passkey</h1>
-            <div className="mt-8 flex items-center gap-3 text-sm font-medium text-slate-700">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#032d60] via-[#0176d3] to-emerald-400 text-white">
-                <Package size={20} />
-              </div>
-              <span>{mobile || 'Registered mobile user'}</span>
-            </div>
-
-            <form onSubmit={handleSubmit} className="mt-8 space-y-5">
-              {error && (
-                <div className="flex items-center gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-medium text-red-700 animate-in fade-in slide-in-from-top-1">
-                  <AlertCircle size={18} />
-                  {error}
-                </div>
-              )}
-
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700">Registered Mobile</label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
-                  <input
-                    required
-                    type="text"
-                    inputMode="tel"
-                    placeholder="98XXXXXXXX"
-                    value={mobile}
-                    onChange={e => setMobile(e.target.value)}
-                    className="w-full rounded-md border border-slate-400 bg-white py-2.5 pl-10 pr-3 font-mono text-sm text-slate-900 outline-none transition-all focus:border-[#0176d3] focus:ring-2 focus:ring-blue-100"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700">Passkey</label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
-                  <input
-                    required
-                    type={showPasskey ? 'text' : 'password'}
-                    placeholder="Enter passkey"
-                    value={passkey}
-                    onChange={e => setPasskey(e.target.value)}
-                    className="w-full rounded-md border border-slate-400 bg-white py-2.5 pl-10 pr-11 text-sm text-slate-900 outline-none transition-all focus:border-[#0176d3] focus:ring-2 focus:ring-blue-100"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPasskey(prev => !prev)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
-                    aria-label={showPasskey ? 'Hide passkey' : 'Show passkey'}
-                  >
-                    {showPasskey ? <EyeOff size={17} /> : <Eye size={17} />}
-                  </button>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-[#0176d3] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#0b5cab] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {loading ? <Loader2 className="animate-spin" size={18} /> : <>Log In <LogIn size={17} /></>}
-              </button>
-            </form>
-          </div>
-
-          <div className="border-t border-slate-200 bg-slate-50 px-8 py-5 text-center sm:px-10">
-            <div className="text-xs font-medium text-slate-500">Authorized Excell Packaging users only</div>
-            {onNavigate && (
-              <button onClick={() => onNavigate('client-login')} className="mt-2 text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors">
-                Client Portal →
-              </button>
-            )}
-          </div>
-        </div>
-      </section>
-
-      <section className="relative hidden min-h-screen overflow-hidden bg-gradient-to-br from-[#0b2ee8] via-[#123ec5] to-[#0622a8] px-10 py-9 text-white lg:block">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_35%_20%,rgba(255,255,255,0.22),transparent_28%),radial-gradient(circle_at_78%_55%,rgba(59,130,246,0.55),transparent_30%)]" />
-        <div className="absolute inset-0 opacity-30 [background-image:linear-gradient(rgba(255,255,255,.12)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.12)_1px,transparent_1px)] [background-size:44px_44px]" />
-
-        <div className="relative z-10 max-w-4xl">
-          <p className="text-sm font-bold tracking-wide text-blue-100">Cloud ERP | Excell Packaging</p>
-          <h2 className="mt-5 max-w-3xl text-[52px] font-black leading-[1.05] tracking-tight xl:text-[64px]">
-            Control every order from planning to dispatch.
-          </h2>
-          <p className="mt-7 max-w-3xl text-xl font-medium leading-8 text-blue-50/90">
-            Real-time production visibility, department queues, QC approvals, alerts, and dispatch tracking in one secure workspace.
-          </p>
-        </div>
-
-        <div className="relative z-10 mt-12 h-[430px] max-w-4xl overflow-hidden rounded-[34px] border border-white/20 bg-white/10 shadow-2xl shadow-blue-950/40 backdrop-blur-sm">
-          <div className="absolute left-10 top-10 h-24 w-24 rounded-[28px] border border-white/20 bg-white/15 login-animate" style={{ animation: 'loginFloat 5.5s ease-in-out infinite' }}>
-            <Package className="m-7 text-white" size={40} />
-          </div>
-          <div className="absolute right-12 top-16 h-28 w-28 rounded-full bg-cyan-300/80 blur-sm login-animate" style={{ animation: 'loginPulse 4.5s ease-in-out infinite' }} />
-          <div className="absolute left-32 top-36 h-56 w-[38rem] rounded-[999px] bg-gradient-to-r from-cyan-300 via-yellow-300 to-red-400 opacity-90 login-animate" style={{ animation: 'loginDrift 7s ease-in-out infinite alternate' }} />
-          <div className="absolute bottom-[-74px] right-[-42px] h-72 w-[42rem] rotate-[-7deg] rounded-[44px] border-[10px] border-white/30 bg-slate-950/80 shadow-2xl">
-            <div className="grid h-full grid-cols-3 gap-4 p-8">
-              {['Planning', 'QC', 'Dispatch'].map((label, index) => (
-                <div key={label} className="rounded-3xl border border-white/10 bg-white/10 p-5">
-                  <div className="h-3 w-16 rounded-full bg-blue-300" />
-                  <div className="mt-5 h-20 rounded-2xl bg-white/15" />
-                  <div className="mt-4 text-sm font-black text-white">{label}</div>
-                  <div className="mt-2 h-2 rounded-full bg-white/15">
-                    <div className="h-2 rounded-full bg-emerald-300" style={{ width: `${55 + index * 14}%` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="absolute left-[40%] top-24 text-6xl font-light text-white/80 login-animate" style={{ animation: 'loginFloat 4s ease-in-out infinite' }}>+</div>
-          <div className="absolute right-[33%] top-36 h-10 w-10 rotate-45 rounded-lg bg-cyan-200 login-animate" style={{ animation: 'loginPulse 3.8s ease-in-out infinite' }} />
-        </div>
-      </section>
-    </div>
-  );
-};
+// --- Login View --- (moved to LoginComponent.tsx)
 
 const LiveScreenLogin: React.FC<{ onLogin: (user: any) => void }> = ({ onLogin }) => {
   const [username, setUsername] = useState('');
@@ -2429,6 +2275,15 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
   
   const initialFormData = { username: '', email: '', mobile: '', vehicle_number: '', passkey: '', department: '', level: '3-Staff' };
   const [formData, setFormData] = useState(initialFormData);
+  const initialFeatureFlags: Record<string, boolean> = {
+    can_access_dashboard: true, can_access_work_orders: true, can_access_customers: true,
+    can_access_items: true, can_access_production_plan: true, can_access_reports: true,
+    can_access_daily_tasks: true, can_access_departments: true, can_access_users: true,
+    can_access_client_orders: true, can_access_live_screen: true, can_access_dispatch: true,
+    can_access_notifications: true, can_access_components: true, can_access_custom_bom: true,
+    can_access_production_entry: true,
+  };
+  const [featureFlags, setFeatureFlags] = useState<Record<string, boolean>>(initialFeatureFlags);
 
   const fetchData = async () => {
     setLoading(true);
@@ -2487,6 +2342,7 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
       vehicle_number: formData.vehicle_number.trim(),
       department: formData.department,
       level: formData.level,
+      ...Object.fromEntries(Object.entries(featureFlags).map(([k, v]) => [k, !!v])),
     };
 
     if (formData.passkey.trim()) {
@@ -2518,6 +2374,7 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
       });
       setIsModalOpen(false); 
       setFormData(initialFormData); 
+      setFeatureFlags(initialFeatureFlags);
       setEditingUser(null);
       fetchData(); 
     }
@@ -2559,6 +2416,24 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
       department: user.department || '',
       level: user.level || '3-Staff',
     });
+    setFeatureFlags({
+      can_access_dashboard: user.can_access_dashboard !== false,
+      can_access_work_orders: user.can_access_work_orders !== false,
+      can_access_customers: user.can_access_customers !== false,
+      can_access_items: user.can_access_items !== false,
+      can_access_production_plan: user.can_access_production_plan !== false,
+      can_access_reports: user.can_access_reports !== false,
+      can_access_daily_tasks: user.can_access_daily_tasks !== false,
+      can_access_departments: user.can_access_departments !== false,
+      can_access_users: user.can_access_users !== false,
+      can_access_client_orders: user.can_access_client_orders !== false,
+      can_access_live_screen: user.can_access_live_screen !== false,
+      can_access_dispatch: user.can_access_dispatch !== false,
+      can_access_notifications: user.can_access_notifications !== false,
+      can_access_components: user.can_access_components !== false,
+      can_access_custom_bom: user.can_access_custom_bom !== false,
+      can_access_production_entry: user.can_access_production_entry !== false,
+    });
     setIsModalOpen(true);
   };
 
@@ -2574,7 +2449,7 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-black">User Access Control</h2>
         <button
-          onClick={() => { setEditingUser(null); setFormData(initialFormData); setIsModalOpen(true); }}
+          onClick={() => { setEditingUser(null); setFormData(initialFormData); setFeatureFlags(initialFeatureFlags); setIsModalOpen(true); }}
           aria-label="Add User"
           title="Add User"
           className="w-10 h-10 sm:w-auto sm:h-auto bg-blue-600 text-white sm:px-4 sm:py-2 rounded-lg font-bold flex items-center justify-center gap-2 shadow-lg hover:bg-blue-700 transition-colors"
@@ -2589,7 +2464,7 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
         <input placeholder="Search users by name..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-white border rounded-xl outline-none" />
       </div>
 
-      <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingUser(null); setFormData(initialFormData); }} title={editingUser ? "Edit User" : "New User"}>
+      <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingUser(null); setFormData(initialFormData); setFeatureFlags(initialFeatureFlags); }} title={editingUser ? "Edit User" : "New User"}>
         <form onSubmit={handleSaveUser} className="space-y-5">
           <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-3 text-xs font-semibold text-blue-800">
             Users log in with mobile number + passkey. Email is used internally for PocketBase authentication.
@@ -2677,6 +2552,28 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
                 <option value="4-Quality">Quality Control</option>
               </select>
             </div>
+          </div>
+
+          <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4">
+            <label className="mb-3 block text-[10px] font-black uppercase tracking-widest text-indigo-500">Feature Permissions</label>
+            {FEATURE_FLAG_GROUPS.map(group => (
+              <div key={group.label} className="mb-3 last:mb-0">
+                <p className="text-[11px] font-black uppercase tracking-wider text-indigo-400 mb-1.5">{group.label}</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                  {group.flags.map(f => (
+                    <label key={f.key} className="flex items-center gap-2 cursor-pointer select-none py-0.5">
+                      <input
+                        type="checkbox"
+                        checked={!!featureFlags[f.key]}
+                        onChange={e => setFeatureFlags(prev => ({ ...prev, [f.key]: e.target.checked }))}
+                        className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span className="text-xs font-semibold text-gray-700">{f.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
 
           <button type="submit" disabled={isSubmitting} className="w-full py-4 bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-xl font-black">
@@ -9279,15 +9176,46 @@ export default function App() {
   }, [loggedInUser]);
 
   useEffect(() => {
-    const authUser = getCurrentAuthUser();
-    if (authUser) {
+    const loadUser = async () => {
+      const authUser = getCurrentAuthUser();
+      if (!authUser) { localStorage.removeItem('excell_erp_user'); return; }
+      try {
+        const recordId = pb.authStore.record?.id;
+        if (recordId) {
+          const record = await pb.collection('erp_users').getOne(recordId, { requestKey: null });
+          const fresh = mapAuthRecordToUser(record);
+          if (fresh) {
+            setLoggedInUser(fresh);
+            localStorage.setItem('excell_erp_user', JSON.stringify(fresh));
+            return;
+          }
+        }
+      } catch {}
       setLoggedInUser(authUser);
       localStorage.setItem('excell_erp_user', JSON.stringify(authUser));
-      return;
-    }
-
-    localStorage.removeItem('excell_erp_user');
+    };
+    loadUser();
   }, []);
+
+  // Poll for feature flag / profile changes every 30 seconds
+  useEffect(() => {
+    if (!loggedInUser) return;
+    const interval = setInterval(async () => {
+      try {
+        const recordId = pb.authStore.record?.id;
+        if (!recordId) return;
+        const record = await pb.collection('erp_users').getOne(recordId, { requestKey: null });
+        const updated = mapAuthRecordToUser(record);
+        if (updated && JSON.stringify(updated) !== JSON.stringify(loggedInUser)) {
+          setLoggedInUser(updated);
+          localStorage.setItem('excell_erp_user', JSON.stringify(updated));
+        }
+      } catch (e) {
+        console.warn('User profile poll failed:', e);
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [loggedInUser?.id]);
 
   const applyNavigationPayload = useCallback((payload?: AppHistoryState['payload']) => {
     if (!payload) return;

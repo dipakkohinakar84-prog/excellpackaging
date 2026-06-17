@@ -122,10 +122,19 @@ const normalizeRecord = <T = any>(record: RecordModel | Record<string, any>): T 
 
 const normalizeMobileIdentity = (mobile: string) => mobile.replace(/\D/g, '').slice(-10);
 
+const FEATURE_FLAG_FIELDS: (keyof User)[] = [
+  'can_access_dashboard', 'can_access_work_orders', 'can_access_customers',
+  'can_access_items', 'can_access_production_plan', 'can_access_reports',
+  'can_access_daily_tasks', 'can_access_departments', 'can_access_users',
+  'can_access_client_orders', 'can_access_live_screen', 'can_access_dispatch',
+  'can_access_notifications', 'can_access_components', 'can_access_custom_bom',
+  'can_access_production_entry',
+];
+
 export const mapAuthRecordToUser = (record: RecordModel | Record<string, any> | null | undefined): User | null => {
   if (!record) return null;
   const normalized = normalizeRecord<User>(record);
-  return {
+  const user: User = {
     id: Number(normalized.id || (normalized as any).legacy_id || 0),
     username: String((record as any).display_name || normalized.username || ''),
     email: String(normalized.email || ''),
@@ -134,6 +143,13 @@ export const mapAuthRecordToUser = (record: RecordModel | Record<string, any> | 
     department: String(normalized.department || ''),
     level: String(normalized.level || ''),
   };
+  for (const field of FEATURE_FLAG_FIELDS) {
+    const val = (normalized as any)[field];
+    if (val !== undefined) {
+      (user as any)[field] = val === true;
+    }
+  }
+  return user;
 };
 
 export const loginWithMobilePassword = async (mobile: string, password: string) => {

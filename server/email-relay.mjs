@@ -25,19 +25,21 @@ function getTransporter() {
   return transporter;
 }
 
+app.get('/api/health', (_req, res) => res.json({ status: 'ok', smtp: SMTP_HOST, port: SMTP_PORT }));
+
 app.post('/api/send-email', async (req, res) => {
   try {
-    const { to, subject, body } = req.body;
-    if (!to || !subject || !body) {
-      return res.status(400).json({ error: 'Missing required fields: to, subject, body' });
+    const { to, subject, text, html } = req.body;
+    if (!to || !subject || (!text && !html)) {
+      return res.status(400).json({ error: 'Missing required fields: to, subject, text or html' });
     }
     const t = getTransporter();
     const info = await t.sendMail({
       from: FROM_EMAIL,
       to,
       subject,
-      text: body,
-      html: body.replace(/\n/g, '<br/>'),
+      text: text || html?.replace(/<[^>]*>/g, '') || '',
+      html: html || text?.replace(/\n/g, '<br/>') || '',
     });
     res.json({ success: true, messageId: info.messageId });
   } catch (err) {

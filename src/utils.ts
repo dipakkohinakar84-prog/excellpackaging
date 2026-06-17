@@ -1,4 +1,4 @@
-import { User, WorkOrder } from './types';
+import { User, WorkOrder, FEATURE_FLAG_MAP } from './types';
 
 export type QCApprovalProgress = 'none' | 'partial' | 'full';
 
@@ -101,53 +101,40 @@ export const requestNotificationPermission = () => {
 
 export const canAccessView = (user: User | null, view: string): boolean => {
   if (!user) return false;
-  
-  const { department, level } = user;
-  const normDept = normalizeDepartment(department);
-  
-  if (normDept === 'Office' && level === '1-Manager') {
+
+  if (view === 'worker-dashboard') return true;
+
+  const normDept = normalizeDepartment(user.department);
+
+  if (normDept === 'Office' && user.level === '1-Manager') {
     return true;
   }
-  
-  if (normDept === 'Quality_Control') {
-    return ['worker-dashboard', 'wo-details', 'daily-tasks', 'live-screen', 'live-screen-login'].includes(view);
+
+  // Feature flag check first — explicit true overrides department restrictions
+  const flag = FEATURE_FLAG_MAP[view];
+  if (flag) {
+    const val = (user as any)[flag];
+    if (val === true) return true;
+    if (val === false) return false;
   }
 
-  // Dispatch Department
+  if (normDept === 'Quality_Control') {
+    return ['wo-details', 'daily-tasks', 'live-screen', 'live-screen-login'].includes(view);
+  }
+
   if (normDept === 'Dispatch') {
     return ['dispatch-dashboard', 'wo-details', 'daily-tasks', 'live-screen', 'live-screen-login'].includes(view);
   }
-  
-  if (normDept === 'Office' && (level === '3-Staff' || level === '2-Supervisor')) {
-    const allowedViews = [
-      'dashboard',
-      'customers',
-      'items',
-      'work-orders',
-      'wo-details',
-      'child-items',
-      'production-plan',
-      'plan-generator',
-       'custom-bom-plan',
-       'custom-bom-print',
-        'reports',
-        'production-reports',
-        'notification-audit',
-        'departments',
-        'daily-tasks',
-        'live-screen',
-        'live-screen-login',
-        'client-orders'
-      ];
-    return allowedViews.includes(view);
+
+  if (normDept === 'Office' && (user.level === '3-Staff' || user.level === '2-Supervisor')) {
+    return ['dashboard', 'customers', 'items', 'work-orders', 'wo-details', 'child-items', 'production-plan', 'plan-generator', 'custom-bom-plan', 'custom-bom-print', 'reports', 'production-reports', 'notification-audit', 'departments', 'daily-tasks', 'live-screen', 'live-screen-login', 'client-orders'].includes(view);
   }
-  
-  // Production Departments
+
   const productionDepts = ['Wood_Work', 'Plywood', 'Corrugation', 'Trading_Consumables', 'Foam_Plastic_bags'];
   if (productionDepts.includes(normDept)) {
-    return ['worker-dashboard', 'wo-details', 'plan-generator', 'daily-tasks', 'live-screen', 'live-screen-login'].includes(view);
+    return ['wo-details', 'plan-generator', 'daily-tasks', 'live-screen', 'live-screen-login'].includes(view);
   }
-  
+
   return false;
 };
 

@@ -35,7 +35,81 @@ export interface User {
   passkey?: string;
   department: string;
   level: string;
+  can_access_dashboard?: boolean;
+  can_access_work_orders?: boolean;
+  can_access_customers?: boolean;
+  can_access_items?: boolean;
+  can_access_production_plan?: boolean;
+  can_access_reports?: boolean;
+  can_access_daily_tasks?: boolean;
+  can_access_departments?: boolean;
+  can_access_users?: boolean;
+  can_access_client_orders?: boolean;
+  can_access_live_screen?: boolean;
+  can_access_dispatch?: boolean;
+  can_access_notifications?: boolean;
+  can_access_components?: boolean;
+  can_access_custom_bom?: boolean;
+  can_access_production_entry?: boolean;
 }
+
+export const FEATURE_FLAG_MAP: Record<string, keyof User> = {
+  dashboard: 'can_access_dashboard',
+  'dispatch-dashboard': 'can_access_dispatch',
+  users: 'can_access_users',
+  departments: 'can_access_departments',
+  customers: 'can_access_customers',
+  items: 'can_access_items',
+  'item-details': 'can_access_items',
+  'work-orders': 'can_access_work_orders',
+  'wo-details': 'can_access_work_orders',
+  'child-items': 'can_access_components',
+  'production-plan': 'can_access_production_plan',
+  'plan-generator': 'can_access_work_orders',
+  'custom-bom-plan': 'can_access_custom_bom',
+  'custom-bom-print': 'can_access_custom_bom',
+  reports: 'can_access_reports',
+  'production-reports': 'can_access_production_entry',
+  'notification-audit': 'can_access_notifications',
+  'daily-tasks': 'can_access_daily_tasks',
+  'live-screen': 'can_access_live_screen',
+  'live-screen-login': 'can_access_live_screen',
+  'client-orders': 'can_access_client_orders',
+};
+
+export const FEATURE_FLAG_GROUPS = [
+  {
+    label: 'Operations',
+    flags: [
+      { key: 'can_access_dashboard', label: 'Dashboard' },
+      { key: 'can_access_dispatch', label: 'Dispatch' },
+      { key: 'can_access_work_orders', label: 'Orders' },
+      { key: 'can_access_daily_tasks', label: 'Daily Tasks' },
+      { key: 'can_access_live_screen', label: 'Live Screen' },
+      { key: 'can_access_notifications', label: 'Alerts Log' },
+      { key: 'can_access_client_orders', label: 'Client Orders' },
+    ],
+  },
+  {
+    label: 'Masters',
+    flags: [
+      { key: 'can_access_users', label: 'Users' },
+      { key: 'can_access_departments', label: 'Depts' },
+      { key: 'can_access_customers', label: 'Clients' },
+      { key: 'can_access_items', label: 'Items' },
+      { key: 'can_access_components', label: 'Components' },
+    ],
+  },
+  {
+    label: 'Planning',
+    flags: [
+      { key: 'can_access_production_plan', label: 'Prod Plan' },
+      { key: 'can_access_custom_bom', label: 'Custom BOM' },
+      { key: 'can_access_production_entry', label: 'Production Entry' },
+      { key: 'can_access_reports', label: 'Reports' },
+    ],
+  },
+];
 
 export interface Metric {
   type: string;
