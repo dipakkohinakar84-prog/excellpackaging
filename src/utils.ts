@@ -151,7 +151,7 @@ export const getAllowedStatuses = (department: string): string[] => {
   }
   
   if (normDept === 'Office') {
-    return ['Not Started', 'Work Started', 'Ready for QC', 'QC Approved', 'Ready for despatch', 'Dispatched', 'Delivered', 'Cancelled'];
+    return ['Not Started', 'Work Started', 'Ready for QC', 'Ready for despatch', 'Dispatched', 'Delivered', 'Cancelled'];
   }
   
   return [];

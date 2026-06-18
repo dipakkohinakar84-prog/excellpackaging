@@ -44,7 +44,6 @@ const ClientOrderManager: React.FC<Props> = ({ loggedInUser }) => {
 
     if (!woError) {
       await supabase.from('client_orders').update({ status: 'Accepted', updated_at: new Date().toISOString() }).eq('id', order.id);
-      fetch('http://localhost:8092/api/send-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to: '', subject: `Order #${order.id} Accepted`, body: `Your order has been accepted and a work order has been created.` }) }).catch(() => {});
     }
     setActionLoading(null);
     fetchOrders();
@@ -54,9 +53,6 @@ const ClientOrderManager: React.FC<Props> = ({ loggedInUser }) => {
     if (!rejectModal) return;
     setActionLoading(rejectModal.id);
     const { error } = await supabase.from('client_orders').update({ status: 'Rejected', rejection_reason: rejectModal.reason, updated_at: new Date().toISOString() }).eq('id', rejectModal.id);
-    if (!error) {
-      try { await fetch('http://localhost:8092/api/send-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to: '', subject: `Order #${rejectModal.id} Rejected`, body: `Your order has been rejected. Reason: ${rejectModal.reason}` }) }); } catch {}
-    }
     setRejectModal(null);
     setActionLoading(null);
     fetchOrders();

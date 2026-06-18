@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue, Fragment } from 'react';
 import { 
   Users, 
   Building2, 
@@ -59,7 +59,8 @@ import {
   Pencil,
   ListTodo,
   Monitor,
-  ShoppingCart
+  ShoppingCart,
+  CalendarDays
 } from 'lucide-react';
 import { AppView, User, Customer, Item, WorkOrder, Department, WOStatus, ChildItem, DepartmentStatus, Metric, FEATURE_FLAG_GROUPS } from './types';
 import { supabase, supabaseAnonKey, pb, loginWithMobilePassword, getCurrentAuthUser, logoutAuth, mapAuthRecordToUser } from './supabase';
@@ -108,10 +109,9 @@ const Badge: React.FC<{ children: React.ReactNode; color?: string; className?: s
 
 const StatusBadge: React.FC<{ status: WOStatus }> = ({ status }) => {
   const styles: Record<WOStatus, { bg: string; text: string; label: string }> = {
-    'Not Started': { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Not Started' },
-    'Work Started': { bg: 'bg-blue-100', text: 'text-blue-600', label: 'Work Started' },
+    'Not Started': { bg: 'bg-gray-100', text: 'text-gray-600', label: 'In Queue' },
+    'Work Started': { bg: 'bg-blue-100', text: 'text-blue-600', label: 'Work In Progress' },
     'Ready for QC': { bg: 'bg-yellow-100', text: 'text-yellow-600', label: 'Ready for QC' },
-    'QC Approved': { bg: 'bg-green-100', text: 'text-green-600', label: 'QC Approved' },
     'Ready for despatch': { bg: 'bg-purple-100', text: 'text-purple-600', label: 'Ready for Despatch' },
     'Dispatched': { bg: 'bg-indigo-100', text: 'text-indigo-600', label: 'Dispatched' },
     'Delivered': { bg: 'bg-emerald-100', text: 'text-emerald-600', label: 'Delivered' },
@@ -130,11 +130,20 @@ const statusTabColors: Record<string, string> = {
   'Not Started': 'bg-gray-100 text-gray-700 border-gray-200',
   'Work Started': 'bg-blue-100 text-blue-700 border-blue-200',
   'Ready for QC': 'bg-yellow-100 text-yellow-700 border-yellow-200',
-  'QC Approved': 'bg-green-100 text-green-700 border-green-200',
   'Ready for despatch': 'bg-purple-100 text-purple-700 border-purple-200',
   'Dispatched': 'bg-indigo-100 text-indigo-700 border-indigo-200',
   'Delivered': 'bg-emerald-100 text-emerald-700 border-emerald-200',
   'Cancelled': 'bg-red-100 text-red-700 border-red-200',
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  'Not Started': 'In Queue',
+  'Work Started': 'Work In Progress',
+  'Ready for QC': 'Ready for QC',
+  'Ready for despatch': 'Ready for Despatch',
+  'Dispatched': 'Dispatched',
+  'Delivered': 'Delivered',
+  'Cancelled': 'Cancelled',
 };
 
 const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = "" }) => (
@@ -157,14 +166,14 @@ const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: string; chi
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative bg-white rounded-2xl shadow-2xl w-full ${maxWidthClassName} overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[92vh] sm:max-h-[90vh]`}>
+      <div className={`relative bg-white rounded-2xl shadow-2xl w-full ${maxWidthClassName} overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[92vh] sm:max-h-[90vh] max-h-[85svh] sm:max-h-[90svh]`}>
         <div className="px-4 sm:px-6 py-4 border-b flex justify-between items-center gap-3 bg-gray-50/50 flex-shrink-0">
           <h3 className="text-base sm:text-lg font-bold text-gray-800 break-words">{title}</h3>
           <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-lg transition-colors text-gray-500">
             <X size={20} />
           </button>
         </div>
-        <div className="p-4 sm:p-6 overflow-y-auto">
+        <div className="p-4 sm:p-6 flex-1 min-h-0 overflow-y-auto">
           {children}
         </div>
       </div>
@@ -382,7 +391,12 @@ const getItemForWorkOrder = (items: Item[], wo: WorkOrder) => {
 
 const getEditableDepartmentForUser = (wo: WorkOrder, user: User) => {
   const userDept = normalizeDepartment(user.department);
-  if (userDept === 'Office') return '';
+  if (userDept === 'Office') {
+    return (wo.assigned_departments || []).find(dept => {
+      const deptStatus = (wo.department_statuses || []).find(status => normalizeDepartment(status.department) === normalizeDepartment(dept));
+      return deptStatus?.status === 'Ready for QC' && deptStatus.qc_status !== 'QC Approved';
+    }) || '';
+  }
 
   const departments = wo.assigned_departments || [];
   if (userDept === 'Quality_Control') {
@@ -397,14 +411,24 @@ const getEditableDepartmentForUser = (wo: WorkOrder, user: User) => {
 
 const getCardStatusOptions = (wo: WorkOrder, user: User): string[] => {
   const userDept = normalizeDepartment(user.department);
-  if (userDept === 'Office') return ['Not Started', 'Work Started', 'Ready for QC', 'Ready for despatch', 'Cancelled'];
+  if (userDept === 'Office') {
+    if (getEditableDepartmentForUser(wo, user)) return ['QC Approved', 'QC Denied'];
+    return ['Not Started', 'Work Started', 'Ready for QC', 'Ready for despatch', 'Cancelled'];
+  }
   if (userDept === 'Quality_Control') return getEditableDepartmentForUser(wo, user) ? ['QC Approved', 'QC Denied'] : [];
   return getEditableDepartmentForUser(wo, user) ? ['Not Started', 'Work Started', 'Ready for QC'] : [];
 };
 
 const isCardStatusCurrent = (wo: WorkOrder, user: User, status: string) => {
   const userDept = normalizeDepartment(user.department);
-  if (userDept === 'Office') return wo.status === status;
+  if (userDept === 'Office') {
+    const targetDepartment = getEditableDepartmentForUser(wo, user);
+    if (targetDepartment) {
+      const departmentStatus = (wo.department_statuses || []).find(row => normalizeDepartment(row.department) === normalizeDepartment(targetDepartment));
+      return departmentStatus?.qc_status === status;
+    }
+    return wo.status === status;
+  }
 
   const targetDepartment = getEditableDepartmentForUser(wo, user);
   if (!targetDepartment) return false;
@@ -464,7 +488,7 @@ const deriveOverallStatusFromDepartmentStatuses = (wo: WorkOrder, departmentStat
     return status?.qc_status === 'QC Approved';
   });
 
-  if (allApproved) return 'QC Approved';
+  if (allApproved) return 'Ready for despatch';
 
   const allReadyForQC = assignedDepartments.every(dept => {
     const status = departmentStatuses.find(row => normalizeDepartment(row.department) === normalizeDepartment(dept));
@@ -537,7 +561,6 @@ const STATUS_FILTER_ORDER: WOStatus[] = [
   'Not Started',
   'Work Started',
   'Ready for QC',
-  'QC Approved',
   'Ready for despatch',
   'Dispatched',
   'Delivered',
@@ -620,53 +643,113 @@ const WorkOrderCardActions: React.FC<{
 }> = ({ wo, loggedInUser, onViewPlan, onViewDrawing, onChangeStatus, busy = false }) => {
   const statusOptions = getCardStatusOptions(wo, loggedInUser);
   const drawingUrl = wo.itemInfo?.drawing_image_url;
+  const [showOptions, setShowOptions] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+
+  const getRadioColor = (status: string) => {
+    const colors: Record<string, string> = {
+      'Not Started': 'bg-gray-100 text-gray-600 hover:bg-indigo-50 hover:text-indigo-700',
+      'Work Started': 'bg-blue-50 text-blue-600 hover:bg-blue-100',
+      'Ready for QC': 'bg-yellow-50 text-yellow-600 hover:bg-yellow-100',
+      'QC Approved': 'bg-green-50 text-green-600 hover:bg-green-100',
+      'QC Denied': 'bg-red-50 text-red-600 hover:bg-red-100',
+      'Ready for despatch': 'bg-purple-50 text-purple-600 hover:bg-purple-100',
+      'Dispatched': 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100',
+      'Delivered': 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100',
+      'Cancelled': 'bg-red-50 text-red-600 hover:bg-red-100',
+    };
+    return colors[status] || 'bg-gray-100 text-gray-600 hover:bg-indigo-50 hover:text-indigo-700';
+  };
+
+  const closeAll = () => {
+    setShowOptions(false);
+    setPendingStatus(null);
+  };
 
   return (
-    <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-gray-100">
-      <button
-        type="button"
-        onClick={e => { e.stopPropagation(); onViewPlan(wo.id); }}
-        className="rounded-lg bg-blue-50 px-2 py-2 text-[9px] font-black text-blue-700 transition-colors hover:bg-blue-100"
-      >
-        View Plan
-      </button>
-      <button
-        type="button"
-        onClick={e => {
-          e.stopPropagation();
-          if (drawingUrl) onViewDrawing(drawingUrl);
-        }}
-        disabled={!drawingUrl}
-        className="rounded-lg bg-slate-50 px-2 py-2 text-[9px] font-black text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        Drawing PDF
-      </button>
-      {statusOptions.length > 0 ? (
-        <details className="relative" onClick={e => e.stopPropagation()}>
-          <summary className="list-none rounded-lg bg-indigo-600 px-2 py-2 text-center text-[9px] font-black text-white transition-colors hover:bg-indigo-700 cursor-pointer">
-            {busy ? 'Updating' : 'Status'}
-          </summary>
-          <div className="absolute right-0 top-full z-30 mt-1 min-w-36 rounded-xl border border-gray-200 bg-white p-1.5 shadow-xl">
-            {statusOptions.map(status => (
+    <div className="pt-2 border-t border-gray-100 space-y-1.5" onClick={e => e.stopPropagation()}>
+      <div className="flex gap-1.5">
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); onViewPlan(wo.id); }}
+          className="flex-1 rounded-lg bg-blue-50 px-2 py-2 text-[9px] font-black text-blue-700 transition-colors hover:bg-blue-100"
+        >
+          View Plan
+        </button>
+        <button
+          type="button"
+          onClick={e => {
+            e.stopPropagation();
+            if (drawingUrl) onViewDrawing(drawingUrl);
+          }}
+          disabled={!drawingUrl}
+          className="flex-1 rounded-lg bg-slate-50 px-2 py-2 text-[9px] font-black text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Drawing PDF
+        </button>
+        {statusOptions.length > 0 && !pendingStatus && (
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); setShowOptions(v => !v); }}
+            className={`rounded-lg px-3 py-2 text-[9px] font-black transition-all shrink-0 ${showOptions ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+          >
+            Status
+          </button>
+        )}
+      </div>
+
+      {pendingStatus ? (
+        <div className="flex items-center justify-between gap-2 rounded-lg bg-indigo-50/70 border border-indigo-200/60 px-3 py-2">
+          <span className="text-[10px] font-bold text-indigo-700">
+            Set to <span className="font-black">{STATUS_LABELS[pendingStatus] || pendingStatus}</span>?
+          </span>
+          <div className="flex gap-1.5">
+            <button
+              onClick={e => { e.stopPropagation(); closeAll(); }}
+              className="px-2.5 py-1 rounded-md bg-white text-gray-600 text-[9px] font-black border border-gray-200 hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={e => {
+                e.stopPropagation();
+                closeAll();
+                onChangeStatus(wo, pendingStatus);
+              }}
+              disabled={busy}
+              className="px-2.5 py-1 rounded-md bg-indigo-600 text-white text-[9px] font-black hover:bg-indigo-700 transition-colors disabled:opacity-50"
+            >
+              {busy ? '...' : 'Confirm'}
+            </button>
+          </div>
+        </div>
+      ) : showOptions && statusOptions.length > 0 ? (
+        <div className="flex gap-1 flex-wrap">
+          {statusOptions.map(status => {
+            const isCurrent = isCardStatusCurrent(wo, loggedInUser, status);
+            return (
               <button
                 key={status}
                 type="button"
-                disabled={busy || isCardStatusCurrent(wo, loggedInUser, status)}
+                disabled={isCurrent || busy}
                 onClick={e => {
                   e.stopPropagation();
-                  e.currentTarget.closest('details')?.removeAttribute('open');
-                  onChangeStatus(wo, status);
+                  setShowOptions(false);
+                  setPendingStatus(status);
                 }}
-                className="block w-full rounded-lg px-3 py-2 text-left text-[10px] font-black text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 disabled:cursor-not-allowed disabled:bg-blue-50 disabled:text-blue-700 disabled:opacity-70"
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[9px] font-black transition-all ${
+                  isCurrent
+                    ? 'bg-indigo-600 text-white cursor-default shadow-sm'
+                    : `${getRadioColor(status)} border border-transparent hover:border-current`
+                } disabled:opacity-60`}
               >
-                {status}
+                <span className={`text-[7px] ${isCurrent ? '' : 'opacity-40'}`}>{isCurrent ? '●' : '○'}</span>
+                {STATUS_LABELS[status] || status}
               </button>
-            ))}
-          </div>
-        </details>
-      ) : (
-        <button type="button" disabled className="rounded-lg bg-gray-100 px-2 py-2 text-[9px] font-black text-gray-400">Status</button>
-      )}
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 };
@@ -931,7 +1014,6 @@ ALTER TABLE work_orders ADD CONSTRAINT work_orders_status_check CHECK (status IN
   'Not Started',
   'Work Started', 
   'Ready for QC',
-  'QC Approved',
   'Ready for despatch',
   'Dispatched',
   'Delivered',
@@ -1290,7 +1372,7 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
     return [
       makeBucket('work-started', 'Work Started', 'Currently moving in production', 'blue', Hammer, orders.filter(wo => wo.status === 'Work Started')),
       makeBucket('ready-qc', 'Ready for QC', 'Waiting for quality approval', 'amber', ShieldCheck, orders.filter(wo => wo.status === 'Ready for QC')),
-      makeBucket('ready-dispatch', 'Ready for Dispatch', 'QC approved and waiting dispatch', 'purple', Truck, orders.filter(wo => wo.status === 'QC Approved' || wo.status === 'Ready for despatch')),
+      makeBucket('ready-dispatch', 'Ready for Dispatch', 'QC approved and waiting dispatch', 'purple', Truck, orders.filter(wo => wo.status === 'Ready for despatch')),
       makeBucket('dispatched', 'Dispatched', 'Partially or fully sent out', 'indigo', Package, orders.filter(wo => wo.status === 'Dispatched')),
     ];
   }, [orders]);
@@ -1299,7 +1381,7 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
     const rows = [
       { label: 'Started', count: analyticsOrders.filter(wo => wo.status === 'Work Started').length, tone: 'bg-slate-700' },
       { label: 'Ready QC', count: analyticsOrders.filter(wo => wo.status === 'Ready for QC').length, tone: 'bg-amber-500' },
-      { label: 'Ready Dispatch', count: analyticsOrders.filter(wo => wo.status === 'QC Approved' || wo.status === 'Ready for despatch').length, tone: 'bg-violet-500' },
+      { label: 'Ready Dispatch', count: analyticsOrders.filter(wo => wo.status === 'Ready for despatch').length, tone: 'bg-violet-500' },
       { label: 'Dispatched', count: analyticsOrders.filter(wo => wo.status === 'Dispatched').length, tone: 'bg-sky-500' },
       { label: 'Delivered', count: analyticsOrders.filter(wo => wo.status === 'Delivered').length, tone: 'bg-slate-400' },
     ];
@@ -1668,9 +1750,8 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
           qty_dispatched: wo.qty_dispatched ?? 0,
         }));
 
-        // Show orders that are QC Approved, Ready for despatch, or already in dispatch process
+        // Show orders that are Ready for despatch or already in dispatch process
         const dispatchOrders = enriched.filter(wo => 
-          wo.status === 'QC Approved' || // Added this condition
           wo.status === 'Ready for despatch' || 
           wo.status === 'Dispatched' || 
           wo.status === 'Delivered'
@@ -1848,7 +1929,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
   };
 
   const filteredOrders = useMemo(() => {
-    const statusFiltered = statusFilter === 'All' ? data : data.filter(wo => wo.status === statusFilter);
+    const statusFiltered = statusFilter === 'All' ? data.filter(wo => wo.status !== 'Delivered') : data.filter(wo => wo.status === statusFilter);
     if (!deferredSearchQuery) return statusFiltered;
     const lowerQuery = deferredSearchQuery.toLowerCase();
     return statusFiltered.filter(wo =>
@@ -1859,7 +1940,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
   }, [data, deferredSearchQuery, statusFilter]);
 
   const statusOptions = useMemo(() => {
-    const uniqueStatuses = Array.from(new Set(data.map(wo => wo.status)));
+    const uniqueStatuses = Array.from(new Set(data.map(wo => wo.status))).filter(s => s !== 'QC Approved');
     return sortStatuses(uniqueStatuses);
   }, [data]);
 
@@ -1930,7 +2011,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
         <div className="flex gap-1.5 flex-wrap items-center">
           <button onClick={() => setStatusFilter('All')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === 'All' ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>All</button>
           {statusOptions.map(s => (
-            <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === s ? (statusTabColors[s] || 'bg-slate-900 text-white') : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{s}</button>
+            <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === s ? (statusTabColors[s] || 'bg-slate-900 text-white') : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS[s] || s}</button>
           ))}
         </div>
       </div>
@@ -4305,7 +4386,7 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
   }, [loggedInUser]);
 
   const filteredOrders = useMemo(() => {
-    const statusFiltered = statusFilter === 'All' ? data : data.filter(wo => wo.status === statusFilter);
+    const statusFiltered = statusFilter === 'All' ? data.filter(wo => wo.status !== 'Delivered') : data.filter(wo => wo.status === statusFilter);
     if (!deferredSearchQuery) return statusFiltered;
     const lowerCaseQuery = deferredSearchQuery.toLowerCase();
     return statusFiltered.filter(wo =>
@@ -4316,7 +4397,7 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
   }, [data, deferredSearchQuery, statusFilter]);
 
   const statusOptions = useMemo(() => {
-    const uniqueStatuses = Array.from(new Set(data.map(wo => wo.status)));
+    const uniqueStatuses = Array.from(new Set(data.map(wo => wo.status))).filter(s => s !== 'QC Approved');
     return sortStatuses(uniqueStatuses);
   }, [data]);
 
@@ -4415,7 +4496,7 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
         <div className="flex gap-1.5 flex-wrap items-center">
           <button onClick={() => setStatusFilter('All')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === 'All' ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>All</button>
           {statusOptions.map(s => (
-            <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === s ? (statusTabColors[s] || 'bg-slate-900 text-white') : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{s}</button>
+            <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === s ? (statusTabColors[s] || 'bg-slate-900 text-white') : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS[s] || s}</button>
           ))}
         </div>
       </div>
@@ -4542,15 +4623,38 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
     [departments]
   );
   
-  const [formData, setFormData] = useState({ 
-    customer: '', 
-    job_details: '', 
-    qty: 1, 
-    etd: '', 
-    drawing: '', 
-    status: 'Not Started' as WOStatus,
-    assigned_departments: [] as string[] 
-  });
+  interface OrderLineItem {
+    key: string;
+    itemName: string;
+    qty: number | '';
+    etd: string;
+    drawing: string;
+    departments: string[];
+  }
+  
+  function createBlankLineItem(): OrderLineItem {
+    return {
+      key: crypto.randomUUID?.() || Math.random().toString(36).substr(2, 9),
+      itemName: '',
+      qty: 1,
+      etd: '',
+      drawing: '',
+      departments: [],
+    };
+  }
+  
+  const [customer, setCustomer] = useState('');
+  const [lineItems, setLineItems] = useState<OrderLineItem[]>([createBlankLineItem()]);
+  const [itemSearchQueries, setItemSearchQueries] = useState<Record<string, string>>({});
+  const [openDropdownKey, setOpenDropdownKey] = useState<string | null>(null);
+
+  const unionDepartments = useMemo(() => {
+    const depts = new Set<string>();
+    lineItems.forEach(item => {
+      item.departments.forEach(d => depts.add(normalizeDepartment(d)));
+    });
+    return [...depts];
+  }, [lineItems]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -4678,104 +4782,136 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
 
-    try {
-      const selectedOrderItem = items.find(item => (
-        item.name === formData.job_details &&
-        item.customer_name?.trim().toLowerCase() === formData.customer.trim().toLowerCase()
-      ));
-      const directOrderDepartments = collectDirectWorkDepartments(selectedOrderItem);
-      const autoAssignedDepartments = directOrderDepartments.length > 0 ? directOrderDepartments : collectItemBomDepartments(items, selectedOrderItem);
-      const sanitizedAssignedDepartments: string[] = [
-        ...new Set(
-          ([...formData.assigned_departments, ...autoAssignedDepartments] as string[])
-            .map((d: string) => normalizeDepartment(d))
-            .filter((d: string) => isInvolvingDepartment(d))
-        )
-      ];
-
-      if (sanitizedAssignedDepartments.length === 0) {
-        alert('Please select at least one involving department.');
-        setLoading(false);
-        return;
-      }
-
-      const initialStatuses = makeDepartmentStatuses(sanitizedAssignedDepartments, loggedInUser.username);
-
-      const woData = {
-        ...formData,
-        order_type: 'parent',
-        parent_work_order_id: null,
-        parent_item_name: '',
-        source_item_id: selectedOrderItem?.id,
-        source_child_qty: 1,
-        assigned_departments: sanitizedAssignedDepartments,
-        department_statuses: initialStatuses
-      };
-
-      const { data: insertedOrder, error } = await supabase
-        .from('work_orders')
-        .insert([woData])
-        .select('id, job_details, assigned_departments')
-        .single();
-      
-      if (error) {
-        alert(error.message);
-      } else {
-        invalidateCollectionCache('work_orders');
-        if (insertedOrder && sanitizedAssignedDepartments.length > 0) {
-            void logActivity({
-              eventType: 'work_order',
-              action: 'created',
-              title: 'Order Created',
-              body: `Order #${insertedOrder.id} created: ${formData.job_details}`,
-              actor: loggedInUser,
-              targetCollection: 'work_orders',
-              targetId: insertedOrder.id,
-              targetLabel: formData.job_details,
-              workOrderId: insertedOrder.id,
-              customerName: formData.customer,
-              itemName: formData.job_details,
-              newValue: 'Not Started',
-              metadata: { qty: formData.qty, etd: formData.etd, assigned_departments: sanitizedAssignedDepartments },
-              severity: 'success',
-            });
-            sendNotification('New Work Order', `Work Order: ${formData.job_details}`, sanitizedAssignedDepartments);
-            void Promise.all(sanitizedAssignedDepartments.map(dept => sendBackgroundPushEvent({
-                title: 'New Work Assigned',
-                body: `Order #${insertedOrder.id} | ${dept.replace(/_/g, ' ')}\n${formData.job_details}`.trim(),
-                departments: [dept],
-                workOrderId: insertedOrder.id,
-                actor: loggedInUser.username,
-              }))).catch(error => console.error('Work order notification failed:', error));
-
-            if (selectedOrderItem) {
-              await createSubordersForItem({
-                parentWorkOrderId: insertedOrder.id,
-                currentItem: selectedOrderItem,
-                currentQty: Number(formData.qty) || 1,
-                rootItemName: selectedOrderItem.name,
-                customer: formData.customer,
-                etd: formData.etd,
-              });
-            }
-        }
-        setIsModalOpen(false); 
-        setFormData({ 
-          customer: '', job_details: '', qty: 1, etd: '', drawing: '', status: 'Not Started' as WOStatus, assigned_departments: [] 
-        }); 
-        fetchData(); 
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-        setLoading(false);
+    const validItems = lineItems.filter(item => item.itemName && item.qty && item.etd);
+    if (validItems.length === 0) {
+      alert('Please add at least one item with qty and ETD.');
+      return;
     }
+
+    setLoading(true);
+    let createdCount = 0;
+    let errorCount = 0;
+
+    for (const lineItem of validItems) {
+      try {
+        const selectedOrderItem = items.find(item => (
+          item.name === lineItem.itemName &&
+          item.customer_name?.trim().toLowerCase() === customer.trim().toLowerCase()
+        ));
+        if (!selectedOrderItem) {
+          alert(`Item "${lineItem.itemName}" not found.`);
+          errorCount++;
+          continue;
+        }
+
+        const directOrderDepartments = collectDirectWorkDepartments(selectedOrderItem);
+        const autoAssignedDepartments = directOrderDepartments.length > 0 ? directOrderDepartments : collectItemBomDepartments(items, selectedOrderItem);
+        const sanitizedAssignedDepartments: string[] = [
+          ...new Set(
+            ([...lineItem.departments, ...autoAssignedDepartments] as string[])
+              .map((d: string) => normalizeDepartment(d))
+              .filter((d: string) => isInvolvingDepartment(d))
+          )
+        ];
+
+        if (sanitizedAssignedDepartments.length === 0) {
+          alert(`No involving departments for "${lineItem.itemName}". Skipping.`);
+          errorCount++;
+          continue;
+        }
+
+        const initialStatuses = makeDepartmentStatuses(sanitizedAssignedDepartments, loggedInUser.username);
+
+        const woData = {
+          customer,
+          job_details: lineItem.itemName,
+          qty: Number(lineItem.qty) || 1,
+          etd: lineItem.etd,
+          drawing: lineItem.drawing,
+          status: 'Not Started',
+          order_type: 'parent',
+          parent_work_order_id: null,
+          parent_item_name: '',
+          source_item_id: selectedOrderItem?.id,
+          source_child_qty: 1,
+          assigned_departments: sanitizedAssignedDepartments,
+          department_statuses: initialStatuses,
+        };
+
+        const { data: insertedOrder, error } = await supabase
+          .from('work_orders')
+          .insert([woData])
+          .select('id, job_details, assigned_departments')
+          .single();
+
+        if (error) {
+          alert(`Failed to create order for "${lineItem.itemName}": ${error.message}`);
+          errorCount++;
+          continue;
+        }
+
+        createdCount++;
+        invalidateCollectionCache('work_orders');
+
+        if (insertedOrder && sanitizedAssignedDepartments.length > 0) {
+          void logActivity({
+            eventType: 'work_order',
+            action: 'created',
+            title: 'Order Created',
+            body: `Order #${insertedOrder.id} created: ${lineItem.itemName}`,
+            actor: loggedInUser,
+            targetCollection: 'work_orders',
+            targetId: insertedOrder.id,
+            targetLabel: lineItem.itemName,
+            workOrderId: insertedOrder.id,
+            customerName: customer,
+            itemName: lineItem.itemName,
+            newValue: 'Not Started',
+            metadata: { qty: lineItem.qty, etd: lineItem.etd, assigned_departments: sanitizedAssignedDepartments },
+            severity: 'success',
+          });
+          sendNotification('New Work Order', `Work Order: ${lineItem.itemName}`, sanitizedAssignedDepartments);
+          void Promise.all(sanitizedAssignedDepartments.map(dept => sendBackgroundPushEvent({
+            title: 'New Work Assigned',
+            body: `Order #${insertedOrder.id} | ${dept.replace(/_/g, ' ')}\n${lineItem.itemName}`.trim(),
+            departments: [dept],
+            workOrderId: insertedOrder.id,
+            actor: loggedInUser.username,
+          }))).catch(error => console.error('Work order notification failed:', error));
+
+          if (selectedOrderItem) {
+            await createSubordersForItem({
+              parentWorkOrderId: insertedOrder.id,
+              currentItem: selectedOrderItem,
+              currentQty: Number(lineItem.qty) || 1,
+              rootItemName: selectedOrderItem.name,
+              customer,
+              etd: lineItem.etd,
+            });
+          }
+        }
+      } catch (err) {
+        console.error(`Error creating order for "${lineItem.itemName}":`, err);
+        errorCount++;
+      }
+    }
+
+    setIsModalOpen(false);
+    setCustomer('');
+    setLineItems([createBlankLineItem()]);
+    setItemSearchQueries({});
+    setOpenDropdownKey(null);
+    fetchData();
+
+    if (createdCount > 0) {
+      alert(`Successfully created ${createdCount} work order(s).${errorCount > 0 ? ` ${errorCount} failed.` : ''}`);
+    }
+    setLoading(false);
   };
 
   const filteredOrders = useMemo(() => {
-    const statusFiltered = statusFilter === 'All' ? data : data.filter(wo => wo.status === statusFilter);
+    const statusFiltered = statusFilter === 'All' ? data.filter(wo => wo.status !== 'Delivered') : data.filter(wo => wo.status === statusFilter);
 
     const departmentFiltered = canFilterByDepartment && departmentFilter !== 'All'
       ? statusFiltered.filter(wo => (wo.assigned_departments || []).some(dept => normalizeDepartment(dept) === normalizeDepartment(departmentFilter)))
@@ -4868,7 +5004,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
       return STATUS_FILTER_ORDER;
     }
 
-    const uniqueStatuses = Array.from(new Set(data.map(wo => wo.status)));
+    const uniqueStatuses = Array.from(new Set(data.map(wo => wo.status))).filter(s => s !== 'QC Approved');
     return sortStatuses(uniqueStatuses);
   }, [data, isOfficeUser]);
 
@@ -4878,25 +5014,11 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
   }, [data]);
 
   const customerFilteredItems = useMemo(() => {
-    const selectedCustomer = formData.customer.trim().toLowerCase();
+    const selectedCustomer = customer.trim().toLowerCase();
     if (!selectedCustomer) return [] as Item[];
 
     return items.filter(item => item.customer_name?.trim().toLowerCase() === selectedCustomer);
-  }, [items, formData.customer]);
-
-  useEffect(() => {
-    if (!formData.job_details) return;
-
-    const selectedStillValid = customerFilteredItems.some(item => item.name === formData.job_details);
-    if (selectedStillValid) return;
-
-    setFormData(prev => ({
-      ...prev,
-      job_details: '',
-      drawing: '',
-      assigned_departments: [],
-    }));
-  }, [customerFilteredItems, formData.job_details]);
+  }, [items, customer]);
 
   if (loading) return <LoadingState />;
 
@@ -4965,7 +5087,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
             <div className="flex gap-1.5 flex-wrap">
               <button onClick={() => setStatusFilter('All')} className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${statusFilter === 'All' ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>All</button>
               {statusOptions.map(s => (
-                <button key={s} onClick={() => setStatusFilter(s)} className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${statusFilter === s ? (statusTabColors[s] || 'bg-slate-900 text-white') : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{s}</button>
+                <button key={s} onClick={() => setStatusFilter(s)} className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${statusFilter === s ? (statusTabColors[s] || 'bg-slate-900 text-white') : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS[s] || s}</button>
               ))}
             </div>
 
@@ -4988,7 +5110,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
           <div className="flex gap-1.5 flex-wrap items-center">
             <button onClick={() => setStatusFilter('All')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === 'All' ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>All</button>
             {statusOptions.map(s => (
-              <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === s ? (statusTabColors[s] || 'bg-slate-900 text-white') : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{s}</button>
+              <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === s ? (statusTabColors[s] || 'bg-slate-900 text-white') : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS[s] || s}</button>
             ))}
           </div>
 
@@ -5007,57 +5129,169 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
         </div>
       </div>
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Create New Work Order">
+      <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setCustomer(''); setLineItems([createBlankLineItem()]); setItemSearchQueries({}); setOpenDropdownKey(null); }} title="Create Work Orders">
         <form onSubmit={handleSave} className="space-y-4">
-           <div>
-             <label className="text-[10px] font-black uppercase text-gray-400 mb-1 block tracking-widest">Customer</label>
-             <select required value={formData.customer} onChange={e => setFormData({...formData, customer: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-2xl focus:ring-2 focus:ring-blue-500 transition-all">
-                <option value="">Select Customer</option>
-                {customers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-             </select>
-           </div>
-           <div>
-              <label className="text-[10px] font-black uppercase text-gray-400 mb-1 block tracking-widest">Item Master</label>
-              <select required value={formData.job_details} onChange={e => {
-                const itm = customerFilteredItems.find(i => i.name === e.target.value);
-                setFormData({
-                  ...formData, 
-                  job_details: e.target.value, 
-                  drawing: itm?.drawing_no || '', 
-                  assigned_departments: collectDirectWorkDepartments(itm).length > 0 ? collectDirectWorkDepartments(itm) : collectItemBomDepartments(items, itm)
-                });
-              }} disabled={!formData.customer} className="w-full px-4 py-3 bg-gray-50 border rounded-2xl focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-60 disabled:cursor-not-allowed">
-                 <option value="">{formData.customer ? 'Select Item Master' : 'Select Customer First'}</option>
-                 {customerFilteredItems.map(i => <option key={i.id} value={i.name}>{i.name}</option>)}
-              </select>
+          {/* Customer */}
+          <div>
+            <label className="text-[10px] font-black uppercase text-gray-400 mb-1 block tracking-widest">Customer</label>
+            <select required value={customer} onChange={e => setCustomer(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border rounded-2xl focus:ring-2 focus:ring-blue-500 transition-all">
+              <option value="">Select Customer</option>
+              {customers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+            </select>
+          </div>
+
+          {/* Desktop Table */}
+          <div className="hidden sm:block">
+            <div className="grid grid-cols-[1fr_100px_140px_40px] gap-2 items-center mb-2 px-1">
+              <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Item Master</span>
+              <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Qty</span>
+              <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">ETD</span>
+              <span></span>
             </div>
-           
-     <div>
-        <label className="text-[10px] font-black uppercase text-gray-400 mb-2 block tracking-widest">Involved Departments</label>
-        {formData.assigned_departments.length > 0 ? (
-          <div className="flex flex-wrap gap-2">
-            {formData.assigned_departments.map(dept => (
-              <span key={dept} className="px-3 py-1.5 rounded-xl text-[10px] font-bold bg-blue-600 text-white border border-blue-600">
-                {dept.replace(/_/g, ' ')}
-              </span>
+            {lineItems.map((item, idx) => (
+              <div key={item.key} className="grid grid-cols-[1fr_100px_140px_40px] gap-2 items-center mb-2">
+                <div className="relative">
+                  <input
+                    value={itemSearchQueries[item.key] ?? item.itemName}
+                    onChange={e => { setItemSearchQueries(q => ({...q, [item.key]: e.target.value})); setOpenDropdownKey(item.key); }}
+                    onFocus={() => setOpenDropdownKey(item.key)}
+                    placeholder="Search items..."
+                    disabled={!customer}
+                    className="w-full px-3 py-2.5 bg-gray-50 border rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-60"
+                  />
+                  {openDropdownKey === item.key && customer && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setOpenDropdownKey(null)} />
+                      <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                        {customerFilteredItems.filter(i => i.name.toLowerCase().includes((itemSearchQueries[item.key] ?? '').toLowerCase())).map(i => (
+                          <button key={i.id} type="button"
+                            onClick={() => {
+                              const newItems = lineItems.map((li, liIdx) => liIdx === idx ? { ...li, itemName: i.name, drawing: i.drawing_no || '', departments: (collectDirectWorkDepartments(i).length > 0 ? collectDirectWorkDepartments(i) : collectItemBomDepartments(items, i)) } : li);
+                              setLineItems(newItems);
+                              setItemSearchQueries(q => ({...q, [item.key]: i.name}));
+                              setOpenDropdownKey(null);
+                            }}
+                            className="w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 border-b last:border-0"
+                          >{i.name}</button>
+                        ))}
+                        {customerFilteredItems.filter(i => i.name.toLowerCase().includes((itemSearchQueries[item.key] ?? '').toLowerCase())).length === 0 && (
+                          <div className="px-3 py-4 text-center text-xs text-gray-400">No items found</div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+                <input type="number" min="1" placeholder="Qty"
+                  value={item.qty}
+                  onChange={e => { const newItems = [...lineItems]; newItems[idx] = {...newItems[idx], qty: e.target.value === '' ? '' as const : parseInt(e.target.value) || 1}; setLineItems(newItems); }}
+                  onBlur={e => { if (e.target.value === '') { const newItems = [...lineItems]; newItems[idx] = {...newItems[idx], qty: 1}; setLineItems(newItems); }}}
+                  className="w-full px-3 py-2.5 bg-gray-50 border rounded-xl text-sm text-center focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+                <input type="date" value={item.etd}
+                  onChange={e => { const newItems = [...lineItems]; newItems[idx] = {...newItems[idx], etd: e.target.value}; setLineItems(newItems); }}
+                  className="w-full px-3 py-2.5 bg-gray-50 border rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+                <button type="button"
+                  onClick={() => { if (lineItems.length > 1) setLineItems(lineItems.filter((_, i) => i !== idx)); }}
+                  disabled={lineItems.length === 1}
+                  className="w-8 h-8 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                >✕</button>
+              </div>
             ))}
           </div>
-        ) : (
-          <div className="text-[10px] font-semibold text-gray-400 italic">Select an Item Master to auto-populate departments.</div>
-        )}
-     </div>
 
-           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-             <div>
-               <label className="text-[10px] font-black uppercase text-gray-400 mb-1 block tracking-widest">Quantity</label>
-               <input required type="number" placeholder="Qty" value={formData.qty} onChange={e => setFormData({...formData, qty: parseInt(e.target.value) || 1})} className="w-full px-4 py-3 bg-gray-50 border rounded-2xl focus:ring-2 focus:ring-blue-500 transition-all" />
-             </div>
-             <div>
-               <label className="text-[10px] font-black uppercase text-gray-400 mb-1 block tracking-widest">Estimated Date</label>
-               <input required type="date" value={formData.etd} onChange={e => setFormData({...formData, etd: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-2xl focus:ring-2 focus:ring-blue-500 transition-all" />
-             </div>
-           </div>
-           <button type="submit" className="w-full py-4 mt-2 bg-blue-600 text-white rounded-2xl font-black shadow-lg uppercase tracking-widest text-xs transition-all hover:bg-blue-700 active:scale-95">SUBMIT ORDER</button>
+          {/* Mobile Cards */}
+          <div className="sm:hidden space-y-3">
+            {lineItems.map((item, idx) => (
+              <div key={item.key} className="bg-gray-50 rounded-2xl p-3 border space-y-3">
+                <div className="relative">
+                  <label className="text-[9px] font-black uppercase text-gray-400 mb-1 block tracking-widest">Item Master</label>
+                  <input
+                    value={itemSearchQueries[item.key] ?? item.itemName}
+                    onChange={e => { setItemSearchQueries(q => ({...q, [item.key]: e.target.value})); setOpenDropdownKey(item.key); }}
+                    onFocus={() => setOpenDropdownKey(item.key)}
+                    placeholder="Search items..."
+                    disabled={!customer}
+                    className="w-full px-3 py-2.5 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-60"
+                  />
+                  {openDropdownKey === item.key && customer && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setOpenDropdownKey(null)} />
+                      <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                        {customerFilteredItems.filter(i => i.name.toLowerCase().includes((itemSearchQueries[item.key] ?? '').toLowerCase())).map(i => (
+                          <button key={i.id} type="button"
+                            onClick={() => {
+                              const newItems = lineItems.map((li, liIdx) => liIdx === idx ? { ...li, itemName: i.name, drawing: i.drawing_no || '', departments: (collectDirectWorkDepartments(i).length > 0 ? collectDirectWorkDepartments(i) : collectItemBomDepartments(items, i)) } : li);
+                              setLineItems(newItems);
+                              setItemSearchQueries(q => ({...q, [item.key]: i.name}));
+                              setOpenDropdownKey(null);
+                            }}
+                            className="w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 border-b last:border-0"
+                          >{i.name}</button>
+                        ))}
+                        {customerFilteredItems.filter(i => i.name.toLowerCase().includes((itemSearchQueries[item.key] ?? '').toLowerCase())).length === 0 && (
+                          <div className="px-3 py-4 text-center text-xs text-gray-400">No items found</div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[9px] font-black uppercase text-gray-400 mb-1 block tracking-widest">Qty</label>
+                    <input type="number" min="1" placeholder="Qty"
+                      value={item.qty}
+                      onChange={e => { const newItems = [...lineItems]; newItems[idx] = {...newItems[idx], qty: e.target.value === '' ? '' as const : parseInt(e.target.value) || 1}; setLineItems(newItems); }}
+                      onBlur={e => { if (e.target.value === '') { const newItems = [...lineItems]; newItems[idx] = {...newItems[idx], qty: 1}; setLineItems(newItems); }}}
+                      className="w-full px-3 py-2.5 bg-white border rounded-xl text-sm text-center focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black uppercase text-gray-400 mb-1 block tracking-widest">ETD</label>
+                    <input type="date" value={item.etd}
+                      onChange={e => { const newItems = [...lineItems]; newItems[idx] = {...newItems[idx], etd: e.target.value}; setLineItems(newItems); }}
+                      className="w-full px-3 py-2.5 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                  </div>
+                </div>
+                <button type="button"
+                  onClick={() => { if (lineItems.length > 1) setLineItems(lineItems.filter((_, i) => i !== idx)); }}
+                  disabled={lineItems.length === 1}
+                  className="w-full py-2 text-sm font-bold text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                >Remove Item</button>
+              </div>
+            ))}
+          </div>
+
+          {/* Add Item */}
+          <button type="button"
+            onClick={() => setLineItems([...lineItems, createBlankLineItem()])}
+            className="w-full py-3 border-2 border-dashed border-gray-300 rounded-2xl text-sm font-bold text-gray-500 hover:text-blue-600 hover:border-blue-400 transition-all"
+          >+ Add Another Item</button>
+
+          {/* Department Chips */}
+          {unionDepartments.length > 0 ? (
+            <div>
+              <label className="text-[10px] font-black uppercase text-gray-400 mb-1 block tracking-widest">Involved Departments</label>
+              <div className="flex flex-wrap gap-2">
+                {unionDepartments.map(dept => (
+                  <span key={dept} className="px-3 py-1.5 rounded-xl text-[10px] font-bold bg-blue-600 text-white">{dept.replace(/_/g, ' ')}</span>
+                ))}
+              </div>
+            </div>
+          ) : customer && (
+            <div className="text-[10px] font-semibold text-gray-400 italic">Select items to auto-populate departments.</div>
+          )}
+
+          {/* Sticky Submit */}
+          <div className="sticky bottom-0 bg-white pt-4 pb-[max(3rem,env(safe-area-inset-bottom,8px))] border-t border-gray-100">
+            <button type="submit"
+              disabled={loading || !customer || lineItems.every(item => !item.itemName)}
+              className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black shadow-lg uppercase tracking-widest text-xs transition-all hover:bg-blue-700 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Creating...' : `Submit ${lineItems.filter(i => i.itemName).length || 0} Order${lineItems.filter(i => i.itemName).length !== 1 ? 's' : ''}`}
+            </button>
+          </div>
         </form>
       </Modal>
 
@@ -5424,7 +5658,7 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                         }));
                       }
 
-                      if (!wasAllApproved && allApproved && newOverallStatus === 'QC Approved') {
+                      if (!wasAllApproved && allApproved && newOverallStatus === 'Ready for despatch') {
                         notificationTasks.push(sendBackgroundPushEvent({
                           title: 'Dispatch Ready',
                           body: `Order #${wo.id}\nQC approved. Ready for dispatch`,
@@ -6619,7 +6853,7 @@ const ProductionPlanList: React.FC<{ onError: () => void; onGenerate: (ids: numb
   };
 
   const filteredPlanOrders = useMemo(() => {
-    if (statusFilter === 'All') return data;
+    if (statusFilter === 'All') return data.filter(wo => wo.status === 'Not Started' || wo.status === 'Work Started');
     return data.filter(wo => wo.status === statusFilter);
   }, [data, statusFilter]);
 
@@ -6633,7 +6867,7 @@ const ProductionPlanList: React.FC<{ onError: () => void; onGenerate: (ids: numb
   );
 
   const statusOptions = useMemo(() => {
-    const uniqueStatuses = Array.from(new Set(data.map(wo => wo.status)));
+    const uniqueStatuses = Array.from(new Set(data.map(wo => wo.status))).filter(s => s !== 'QC Approved');
     return sortStatuses(uniqueStatuses);
   }, [data]);
 
@@ -6672,7 +6906,7 @@ const ProductionPlanList: React.FC<{ onError: () => void; onGenerate: (ids: numb
         <div className="flex gap-1.5 flex-wrap">
           <button onClick={() => setStatusFilter('All')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === 'All' ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>All</button>
           {statusOptions.map(s => (
-            <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === s ? (statusTabColors[s] || 'bg-slate-900 text-white') : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{s}</button>
+            <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === s ? (statusTabColors[s] || 'bg-slate-900 text-white') : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS[s] || s}</button>
           ))}
         </div>
       </div>
@@ -7193,6 +7427,10 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
   const [companySearch, setCompanySearch] = useState('');
   const [activePreset, setActivePreset] = useState<'today' | '7d' | '30d' | '90d' | 'all' | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
+  const [expandedComponent, setExpandedComponent] = useState<string | null>(null);
+  const [exportMode, setExportMode] = useState<'compact' | 'detailed'>('compact');
+  const [showExportDropdown, setShowExportDropdown] = useState(false);
+  const [showDateDropdown, setShowDateDropdown] = useState(false);
 
   const toIsoDate = (date: Date) => date.toISOString().slice(0, 10);
 
@@ -7263,17 +7501,15 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
     return true;
   };
 
-  const readyStatuses = ['Ready for despatch', 'Dispatched', 'Delivered'];
-
   const delayDays = (dispatchDate: Date, etd: Date) => Math.max(0, Math.ceil((dispatchDate.getTime() - etd.getTime()) / 86400000));
 
   const componentUsageRows = useMemo(() => {
     const q = companySearch.trim().toLowerCase();
     const result: { component: string; parentItem: string; qtyUsed: number; company: string; orderId: number }[] = [];
     for (const order of orders) {
-      if (!readyStatuses.includes(order.status)) continue;
-      const d = parseDate(order.created_at) || parseDate(order.etd, true);
-      if (!inRange(d)) continue;
+      if (order.status !== 'Dispatched' && order.status !== 'Delivered') continue;
+      const d = order.etd ? parseDate(order.etd, true) : null;
+      if (d && !inRange(d)) continue;
       const c = String(order.customer || 'Unknown');
       if (q && !c.toLowerCase().includes(q)) continue;
       const item = itemsById.get(Number(order.source_item_id || order.itemId));
@@ -7286,13 +7522,35 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
     return result;
   }, [orders, itemsById, fromDate, toDate, companySearch]);
 
+  const componentUsageCompact = useMemo(() => {
+    const map = new Map<string, { component: string; totalQty: number; parentItems: Set<string>; companies: Set<string>; orderCount: number }>();
+    for (const row of componentUsageRows) {
+      const existing = map.get(row.component);
+      if (existing) {
+        existing.totalQty += row.qtyUsed;
+        existing.parentItems.add(row.parentItem);
+        existing.companies.add(row.company);
+        existing.orderCount++;
+      } else {
+        map.set(row.component, {
+          component: row.component,
+          totalQty: row.qtyUsed,
+          parentItems: new Set([row.parentItem]),
+          companies: new Set([row.company]),
+          orderCount: 1,
+        });
+      }
+    }
+    return Array.from(map.values()).map(r => ({ ...r, parentItemsList: Array.from(r.parentItems).join(', '), companyCount: r.companies.size }));
+  }, [componentUsageRows]);
+
   const itemUsageRows = useMemo(() => {
     const q = companySearch.trim().toLowerCase();
     const grouped = new Map<string, { item: string; orders: number; totalQty: number; companies: Set<string> }>();
     for (const order of orders) {
-      if (!readyStatuses.includes(order.status)) continue;
-      const d = parseDate(order.created_at) || parseDate(order.etd, true);
-      if (!inRange(d)) continue;
+      if (order.status !== 'Dispatched' && order.status !== 'Delivered') continue;
+      const d = order.etd ? parseDate(order.etd, true) : null;
+      if (d && !inRange(d)) continue;
       const c = String(order.customer || 'Unknown');
       if (q && !c.toLowerCase().includes(q)) continue;
       const name = String(order.job_details || 'Unknown');
@@ -7357,9 +7615,9 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
     const q = companySearch.trim().toLowerCase();
     const grouped = new Map<string, { company: string; totalWOs: number; totalQty: number; onTime: number; delayed: number }>();
     for (const order of orders) {
-      if (!readyStatuses.includes(order.status)) continue;
-      const d = parseDate(order.created_at) || parseDate(order.etd, true);
-      if (!inRange(d)) continue;
+      if (order.status !== 'Dispatched' && order.status !== 'Delivered') continue;
+      const d = order.etd ? parseDate(order.etd, true) : null;
+      if (d && !inRange(d)) continue;
       const c = String(order.customer || 'Unknown');
       if (q && !c.toLowerCase().includes(q)) continue;
       const row = grouped.get(c) || { company: c, totalWOs: 0, totalQty: 0, onTime: 0, delayed: 0 };
@@ -7380,14 +7638,19 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
 
   const reportRows = useMemo(() => {
     switch (reportType) {
-      case 'component-usage': return componentUsageRows;
+      case 'component-usage': return componentUsageCompact;
       case 'item-usage': return itemUsageRows;
       case 'on-time': return onTimeRows;
       case 'delayed': return delayedRows;
       case 'dept-wise': return deptWiseRows;
       case 'company-performance': return companyPerfRows;
     }
-  }, [reportType, componentUsageRows, itemUsageRows, onTimeRows, delayedRows, deptWiseRows, companyPerfRows]);
+  }, [reportType, componentUsageCompact, itemUsageRows, onTimeRows, delayedRows, deptWiseRows, companyPerfRows]);
+
+  const componentDetailRows = useMemo(() => {
+    if (!expandedComponent) return [];
+    return componentUsageRows.filter(r => r.component === expandedComponent);
+  }, [componentUsageRows, expandedComponent]);
 
   const reportRowsCount = reportRows.length;
 
@@ -7425,31 +7688,63 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
   }))), [reportRows, sortConfig]);
 
   const exportPdfReport = () => {
-    const rows = sortedRows as any[];
+    const isCompact = reportType === 'component-usage' && exportMode === 'compact';
+    const rows: any[] = isCompact
+      ? applySortGeneric(componentUsageCompact.map(r => ({ ...r, _parentItems: r.parentItemsList })))
+      : sortedRows;
     if (rows.length === 0) { alert('No rows available for export.'); return; }
 
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const marginX = 12;
+    const contentW = pageW - marginX * 2;
 
     const tabLabel = tabMeta.find(t => t.key === reportType)?.label || reportType;
+    const modeLabel = isCompact ? ' (Compact)' : ' (Detailed)';
     const dateLabel = fromDate || toDate
       ? `${fromDate || '…'} to ${toDate || '…'}`
       : 'All dates';
+    const now = new Date().toLocaleString();
 
-    // Title
-    doc.setFontSize(18);
+    // Gray background fill
+    doc.setFillColor(245, 245, 245);
+    doc.rect(0, 0, pageW, pageH, 'F');
+
+    // White card
+    const cardTop = 14;
+    const cardH = pageH - cardTop - 14;
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(220, 220, 220);
+    doc.roundedRect(marginX - 2, cardTop, contentW + 4, cardH, 4, 4, 'FD');
+
+    // Header bar inside card
+    const headerY = cardTop + 8;
+    doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
-    doc.text('Excell Packaging - Report', pageW / 2, 20, { align: 'center' });
-    doc.setFontSize(13);
+    doc.setTextColor(20, 30, 50);
+    doc.text('Excell Packaging', marginX, headerY);
+    doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
-    doc.text(tabLabel, pageW / 2, 28, { align: 'center' });
+    doc.setTextColor(100, 100, 100);
+    doc.text(tabLabel + modeLabel, pageW / 2, headerY, { align: 'center' });
+    doc.setFontSize(7);
+    doc.text(now, pageW - marginX, headerY, { align: 'right' });
+
+    // Separator line
+    const sepY = headerY + 4;
+    doc.setDrawColor(220, 220, 220);
+    doc.line(marginX, sepY, pageW - marginX, sepY);
 
     // Info line
-    doc.setFontSize(8);
-    doc.setTextColor(100);
-    doc.text(`Date range: ${dateLabel}  |  Generated: ${new Date().toLocaleString()}`, pageW / 2, 34, { align: 'center' });
+    doc.setFontSize(7);
+    doc.setTextColor(140, 140, 140);
+    doc.text(`Date range: ${dateLabel}`, marginX, sepY + 5);
 
     const mapRow = (r: any) => {
+      if (isCompact) {
+        return [String(r.component || ''), String(r.totalQty ?? 0), String(r.parentItemsList || ''), String(r.companyCount ?? 0), String(r.orderCount ?? 0)];
+      }
       switch (reportType) {
         case 'component-usage':
           return [String(r.component || ''), String(r.parentItem || ''), String(r.qtyUsed ?? 0), String(r.company || ''), `#${r.orderId || ''}`];
@@ -7468,7 +7763,9 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
     };
 
     const columns: Record<string, string[]> = {
-      'component-usage': ['Component', 'Parent Item', 'Qty Used', 'Company', 'Order #'],
+      'component-usage': isCompact
+        ? ['Component', 'Total Qty', 'Parent Items', 'Companies', 'Orders']
+        : ['Component', 'Parent Item', 'Qty Used', 'Company', 'Order #'],
       'item-usage': ['Item Name', 'Orders', 'Total Qty', 'Companies'],
       'on-time': ['Date', 'WO #', 'Company', 'Item', 'Qty', 'Invoice'],
       'delayed': ['Date', 'WO #', 'Company', 'Item', 'Days Late', 'Qty'],
@@ -7476,22 +7773,36 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
       'company-performance': ['Company', 'Total WOs', 'Total Qty', 'On-Time', 'Delayed', 'On-Time %'],
     };
 
+    const cols = columns[reportType] || [];
+    // Determine which columns are numeric (right-aligned)
+    const numericIndices = cols.map((c, i) =>
+      ['Total Qty', 'Qty', 'Orders', 'Companies', 'Reports', 'Shift Hrs', 'OT Hrs', 'Total Hrs', 'Qty Produced', 'Total WOs', 'On-Time', 'Delayed', 'On-Time %', 'Days Late', 'Qty Used', 'Order #']
+        .some(k => c.includes(k)) ? i : -1
+    ).filter(i => i >= 0);
+
+    const colStyles: Record<number, any> = {};
+    numericIndices.forEach(i => { colStyles[i] = { halign: 'right', fontStyle: 'bold' }; });
+
     autoTable(doc, {
-      head: [columns[reportType] || []],
+      head: [cols],
       body: rows.map(mapRow),
-      startY: 38,
-      margin: { top: 38, horizontal: 10 },
+      startY: sepY + 9,
+      margin: { left: marginX, right: marginX },
       tableWidth: 'auto',
-      styles: { fontSize: 7, cellPadding: 2.5, lineColor: [200, 200, 200], lineWidth: 0.3 },
-      headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7 },
-      bodyStyles: { textColor: [50, 50, 50] },
-      alternateRowStyles: { fillColor: [245, 247, 250] },
-      columnStyles: { 0: { cellWidth: 'auto' } },
+      styles: { fontSize: 7, cellPadding: 2.5, lineColor: [230, 230, 230], lineWidth: 0.3, font: 'helvetica', textColor: [60, 60, 60] },
+      headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7, halign: 'center' },
+      bodyStyles: { textColor: [60, 60, 60] },
+      alternateRowStyles: { fillColor: [248, 249, 252] },
+      columnStyles: colStyles,
       didDrawPage: (data: any) => {
+        // Footer line
+        const fy = doc.internal.pageSize.getHeight() - 10;
+        doc.setDrawColor(220, 220, 220);
+        doc.line(marginX, fy - 2, pageW - marginX, fy - 2);
         doc.setFontSize(6);
-        doc.setTextColor(150);
-        doc.text(`Page ${data.pageNumber}`, pageW - 10, doc.internal.pageSize.getHeight() - 5, { align: 'right' });
-        doc.text('Excell Packaging ERP', 10, doc.internal.pageSize.getHeight() - 5);
+        doc.setTextColor(160, 160, 160);
+        doc.text(`Page ${data.pageNumber}`, pageW - marginX, fy, { align: 'right' });
+        doc.text('Excell Packaging ERP', marginX, fy);
       },
     });
 
@@ -7521,6 +7832,12 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
     setFromDate(toIsoDate(from));
     setToDate(toIsoDate(now));
   };
+
+  useEffect(() => {
+    const close = () => { setShowExportDropdown(false); setShowDateDropdown(false); };
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, []);
 
   if (loading) return <LoadingState message="Loading reports..." />;
 
@@ -7553,57 +7870,93 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
 
   return (
     <div className="space-y-4">
-      <div className="sticky top-16 md:top-0 z-20 bg-gray-50/95 backdrop-blur p-2 rounded-xl border border-gray-100 flex flex-col md:flex-row gap-2 md:items-center justify-between">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-black text-gray-800 tracking-tight">Reports</h2>
-          <p className="text-xs text-gray-500 font-semibold">
-            {tabMeta.find(t => t.key === reportType)?.label || ''}
-          </p>
+      <div className="sticky top-16 md:top-0 z-20 bg-white/95 backdrop-blur px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-3">
+        <h2 className="text-xl font-black text-gray-800 tracking-tight">Reports</h2>
+        <div className="flex items-center gap-2">
+          {/* Date range pill */}
+          <div className="relative" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setShowDateDropdown(!showDateDropdown)} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:border-gray-300 transition-colors whitespace-nowrap">
+              <CalendarDays size={13} />
+              {activePreset
+                ? presetButtons.find(p => p.key === activePreset)?.label || 'Custom'
+                : (fromDate || toDate ? `${fromDate || '…'}–${toDate || '…'}` : 'All Dates')}
+            </button>
+            {showDateDropdown && (
+              <div className="absolute right-0 top-full mt-1.5 w-44 bg-white rounded-xl shadow-lg border border-gray-200 py-1 z-50">
+                {presetButtons.map(btn => (
+                  <button key={btn.key} onClick={() => { applyQuickRange(btn.key); setShowDateDropdown(false); }} className={`w-full text-left px-4 py-2 text-xs font-semibold transition-colors ${activePreset === btn.key ? 'text-indigo-600 bg-indigo-50' : 'text-gray-600 hover:bg-gray-50'}`}>
+                    {btn.label}
+                  </button>
+                ))}
+                <div className="border-t border-gray-100 my-1" />
+                <div className="px-4 py-2 space-y-1.5">
+                  <input type="date" value={fromDate} onChange={e => { setFromDate(e.target.value); setActivePreset(null); }} className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded text-xs" />
+                  <input type="date" value={toDate} onChange={e => { setToDate(e.target.value); setActivePreset(null); }} className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded text-xs" />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Company search */}
+          {showCompanySearch && (
+            <input
+              placeholder="Search company..."
+              value={companySearch}
+              onChange={e => setCompanySearch(e.target.value)}
+              className="hidden md:block w-40 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600 placeholder-gray-400 focus:outline-none focus:border-indigo-300 transition-colors"
+            />
+          )}
+
+          {/* Export dropdown */}
+          <div className="relative" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setShowExportDropdown(!showExportDropdown)} className="p-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors">
+              <FileText size={14} />
+            </button>
+            {showExportDropdown && (
+              <div className="absolute right-0 top-full mt-1.5 w-52 bg-white rounded-xl shadow-lg border border-gray-200 py-1 z-50">
+                {reportType === 'component-usage' && (
+                  <>
+                    <button onClick={() => { setExportMode('compact'); setTimeout(() => { exportPdfReport(); }, 0); setShowExportDropdown(false); }} className="w-full text-left px-4 py-2.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors">Export PDF – Compact</button>
+                    <button onClick={() => { setExportMode('detailed'); setTimeout(() => { exportPdfReport(); }, 0); setShowExportDropdown(false); }} className="w-full text-left px-4 py-2.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors">Export PDF – Detailed</button>
+                  </>
+                )}
+                {reportType !== 'component-usage' && (
+                  <button onClick={() => { setTimeout(() => { exportPdfReport(); }, 10); setShowExportDropdown(false); }} className="w-full text-left px-4 py-2.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors">Export PDF</button>
+                )}
+                <div className="border-t border-gray-100 my-1" />
+                <button onClick={() => { setShowExportDropdown(false); }} className="w-full text-left px-4 py-2.5 text-xs font-semibold text-gray-500 hover:bg-gray-50 transition-colors">Export CSV</button>
+              </div>
+            )}
+          </div>
         </div>
-        <button onClick={exportPdfReport} className="w-full md:w-auto px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2">
-          <FileText size={13} />
-          Export PDF
-        </button>
       </div>
 
       <Card className="space-y-3">
-        {/* Quick presets */}
-        <div className="flex flex-wrap gap-1.5">
-          {presetButtons.map(btn => (
-            <button
-              key={btn.key}
-              onClick={() => applyQuickRange(btn.key)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
-                activePreset === btn.key
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {btn.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Date range */}
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="text-[10px] font-black text-gray-400 uppercase ml-1">From</label>
-            <input
-              type="date"
-              value={fromDate}
-              onChange={e => { setFromDate(e.target.value); setActivePreset(null); }}
-              className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm mt-0.5"
-            />
+        {/* Quick presets + mobile company search */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap gap-1">
+            {presetButtons.map(btn => (
+              <button
+                key={btn.key}
+                onClick={() => applyQuickRange(btn.key)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
+                  activePreset === btn.key
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {btn.label}
+              </button>
+            ))}
           </div>
-          <div>
-            <label className="text-[10px] font-black text-gray-400 uppercase ml-1">To</label>
+          {showCompanySearch && (
             <input
-              type="date"
-              value={toDate}
-              onChange={e => { setToDate(e.target.value); setActivePreset(null); }}
-              className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm mt-0.5"
+              placeholder="Search company..."
+              value={companySearch}
+              onChange={e => setCompanySearch(e.target.value)}
+              className="md:hidden flex-1 min-w-[120px] px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs text-gray-600 placeholder-gray-400 focus:outline-none focus:border-indigo-300"
             />
-          </div>
+          )}
         </div>
 
         {/* Report type tabs */}
@@ -7622,51 +7975,41 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
             </button>
           ))}
         </div>
-
-        {/* Company search filter */}
-        {showCompanySearch && (
-          <input
-            placeholder="Filter by company/customer..."
-            value={companySearch}
-            onChange={e => setCompanySearch(e.target.value)}
-            className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm"
-          />
-        )}
       </Card>
 
       {/* Stats cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
         <Card className="p-3">
           <div className="text-[10px] uppercase font-black text-gray-400">Records</div>
-          <div className="text-xl font-black text-gray-800 mt-1">{reportRowsCount}</div>
+          <div className="text-xl font-black text-gray-800 mt-1 tabular-nums">{reportRowsCount}</div>
         </Card>
         {reportType === 'component-usage' && (
           <Card className="p-3">
             <div className="text-[10px] uppercase font-black text-gray-400">Total Qty Used</div>
-            <div className="text-xl font-black text-indigo-700 mt-1">{componentUsageRows.reduce((s, r) => s + r.qtyUsed, 0)}</div>
+            <div className="text-xl font-black text-indigo-700 mt-1 tabular-nums">{componentUsageRows.reduce((s, r) => s + r.qtyUsed, 0)}</div>
           </Card>
         )}
         {reportType === 'item-usage' && (
           <Card className="p-3">
             <div className="text-[10px] uppercase font-black text-gray-400">Total Qty</div>
-            <div className="text-xl font-black text-indigo-700 mt-1">{itemUsageRows.reduce((s, r) => s + r.totalQty, 0)}</div>
+            <div className="text-xl font-black text-indigo-700 mt-1 tabular-nums">{itemUsageRows.reduce((s, r) => s + r.totalQty, 0)}</div>
           </Card>
         )}
         {reportType === 'on-time' && (
           <Card className="p-3">
             <div className="text-[10px] uppercase font-black text-gray-400">Total Qty Dispatched</div>
-            <div className="text-xl font-black text-green-700 mt-1">{onTimeRows.reduce((s: number, r: any) => s + (Number(r.dispatch_qty) || 0), 0)}</div>
+            <div className="text-xl font-black text-green-700 mt-1 tabular-nums">{onTimeRows.reduce((s: number, r: any) => s + (Number(r.dispatch_qty) || 0), 0)}</div>
           </Card>
         )}
         {reportType === 'delayed' && (
           <>
             <Card className="p-3">
               <div className="text-[10px] uppercase font-black text-gray-400">Total Qty Dispatched</div>
-              <div className="text-xl font-black text-orange-700 mt-1">{delayedRows.reduce((s: number, r: any) => s + (Number(r.dispatch_qty) || 0), 0)}</div>
+              <div className="text-xl font-black text-orange-700 mt-1 tabular-nums">{delayedRows.reduce((s: number, r: any) => s + (Number(r.dispatch_qty) || 0), 0)}</div>
             </Card>
             <Card className="p-3">
               <div className="text-[10px] uppercase font-black text-gray-400">Avg Delay (Days)</div>
-              <div className="text-xl font-black text-red-700 mt-1">
+              <div className="text-xl font-black text-red-700 mt-1 tabular-nums">
                 {delayedRows.length > 0 ? (delayedRows.reduce((s: number, r: any) => s + (r.daysDelay || 0), 0) / delayedRows.length).toFixed(1) : 0}
               </div>
             </Card>
@@ -7676,11 +8019,11 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
           <>
             <Card className="p-3">
               <div className="text-[10px] uppercase font-black text-gray-400">Departments</div>
-              <div className="text-xl font-black text-gray-800 mt-1">{deptWiseRows.length}</div>
+              <div className="text-xl font-black text-gray-800 mt-1 tabular-nums">{deptWiseRows.length}</div>
             </Card>
             <Card className="p-3">
               <div className="text-[10px] uppercase font-black text-gray-400">Total Hrs</div>
-              <div className="text-xl font-black text-indigo-700 mt-1">{deptWiseRows.reduce((s, r) => s + r.totalHrs, 0)}</div>
+              <div className="text-xl font-black text-indigo-700 mt-1 tabular-nums">{deptWiseRows.reduce((s, r) => s + r.totalHrs, 0)}</div>
             </Card>
           </>
         )}
@@ -7688,11 +8031,11 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
           <>
             <Card className="p-3">
               <div className="text-[10px] uppercase font-black text-gray-400">Total Qty</div>
-              <div className="text-xl font-black text-indigo-700 mt-1">{companyPerfRows.reduce((s, r) => s + r.totalQty, 0)}</div>
+              <div className="text-xl font-black text-indigo-700 mt-1 tabular-nums">{companyPerfRows.reduce((s, r) => s + r.totalQty, 0)}</div>
             </Card>
             <Card className="p-3">
               <div className="text-[10px] uppercase font-black text-gray-400">On-Time %</div>
-              <div className="text-xl font-black text-green-700 mt-1">
+              <div className="text-xl font-black text-green-700 mt-1 tabular-nums">
                 {companyPerfRows.reduce((s, r) => s + r.totalWOs, 0) > 0
                   ? Math.round(companyPerfRows.reduce((s, r) => s + r.onTime, 0) / companyPerfRows.reduce((s, r) => s + r.totalWOs, 0) * 100) + '%'
                   : '0%'}
@@ -7704,37 +8047,84 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
 
       {/* Component Usage table */}
       {reportType === 'component-usage' && (
-        <Card className="p-0 overflow-hidden shadow-sm">
+        <Card className="p-0 overflow-hidden shadow-sm border border-gray-200/60 rounded-xl">
           <div className="hidden md:block overflow-x-auto">
-            <table className="w-full min-w-[700px] text-sm">
-              <thead className="bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b">
+            <table className="w-full min-w-[750px] text-sm">
+              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b-2 border-indigo-200">
                 <tr>
+                  <th className="px-4 py-3 w-8"></th>
                   <th className={thClass} onClick={() => handleSort('component')}>Component <SortIcon col="component" /></th>
-                  <th className={thClass} onClick={() => handleSort('parentItem')}>Parent Item <SortIcon col="parentItem" /></th>
-                  <th className={thClass} onClick={() => handleSort('qtyUsed')}>Qty Used <SortIcon col="qtyUsed" /></th>
-                  <th className={thClass} onClick={() => handleSort('company')}>Company <SortIcon col="company" /></th>
-                  <th className={thClass} onClick={() => handleSort('orderId')}>Order # <SortIcon col="orderId" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('totalQty')}>Total Qty <SortIcon col="totalQty" /></th>
+                  <th className={thClass} onClick={() => handleSort('parentItemsList')}>Parent Items <SortIcon col="parentItemsList" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('companyCount')}>Companies <SortIcon col="companyCount" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('orderCount')}>Orders <SortIcon col="orderCount" /></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {sortedRows.map((row: any, i: number) => (
-                  <tr key={i} className="hover:bg-blue-50/30 transition-colors">
-                    <td className="px-4 py-3 font-semibold text-gray-800">{row.component}</td>
-                    <td className="px-4 py-3 text-gray-600">{row.parentItem}</td>
-                    <td className="px-4 py-3 font-black text-gray-800">{row.qtyUsed}</td>
-                    <td className="px-4 py-3 text-gray-600">{row.company}</td>
-                    <td className="px-4 py-3 font-semibold text-indigo-600">#{row.orderId}</td>
-                  </tr>
-                ))}
+                {sortedRows.map((row: any, i: number) => {
+                  const isExpanded = expandedComponent === row.component;
+                  const detailRows = componentUsageRows.filter(r => r.component === row.component);
+                  return (
+                    <Fragment key={row.component}>
+                      <tr className={`hover:bg-indigo-50/40 transition-colors cursor-pointer ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`} onClick={() => setExpandedComponent(isExpanded ? null : row.component)}>
+                        <td className="px-4 py-3 text-gray-400 text-xs">{isExpanded ? '▼' : '▶'}</td>
+                        <td className="px-4 py-3 font-semibold text-gray-800">{row.component}</td>
+                        <td className="px-4 py-3 font-black text-gray-800 text-right tabular-nums">{row.totalQty}</td>
+                        <td className="px-4 py-3 text-gray-600 max-w-[200px] truncate" title={row.parentItemsList}>{row.parentItemsList}</td>
+                        <td className="px-4 py-3 font-semibold text-gray-800 text-right tabular-nums">{row.companyCount}</td>
+                        <td className="px-4 py-3 font-semibold text-indigo-600 text-right tabular-nums">{row.orderCount}</td>
+                      </tr>
+                      {isExpanded && (
+                        <tr key={`detail-${row.component}`}>
+                          <td colSpan={6} className="p-0 bg-indigo-50/20">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="text-[9px] uppercase text-gray-400 font-black border-b border-indigo-200">
+                                  <th className="px-4 py-2 text-left pl-8">Parent Item</th>
+                                  <th className="px-4 py-2 text-right">Qty Used</th>
+                                  <th className="px-4 py-2 text-left">Company</th>
+                                  <th className="px-4 py-2 text-right">Order #</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-200/50">
+                                {applySortGeneric(detailRows.map((r: any) => ({ ...r }))).map((detail: any, di: number) => (
+                                  <tr key={di} className={`hover:bg-indigo-50/20 ${di % 2 === 1 ? 'bg-gray-50/30' : ''}`}>
+                                    <td className="px-4 py-2 font-medium text-gray-700 pl-8">{detail.parentItem}</td>
+                                    <td className="px-4 py-2 font-bold text-gray-800 text-right tabular-nums">{detail.qtyUsed}</td>
+                                    <td className="px-4 py-2 text-gray-600">{detail.company}</td>
+                                    <td className="px-4 py-2 font-semibold text-indigo-600 text-right tabular-nums">#{detail.orderId}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
           <div className="md:hidden p-2 space-y-2">
             {sortedRows.map((row: any, i: number) => (
-              <div key={i} className="rounded-lg border border-gray-200 p-2.5">
-                <div className="font-black text-sm text-gray-800">{row.component}</div>
-                <div className="text-xs text-gray-600 mt-0.5">Item: {row.parentItem} · Qty: {row.qtyUsed}</div>
-                <div className="text-xs text-gray-500">Company: {row.company} · WO #{row.orderId}</div>
+              <div key={row.component} className={`rounded-lg border border-gray-200 p-2.5 ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
+                <div className="flex items-center justify-between cursor-pointer" onClick={() => setExpandedComponent(expandedComponent === row.component ? null : row.component)}>
+                  <div className="font-black text-sm text-gray-800">{row.component}</div>
+                  <span className="text-gray-400 text-xs">{expandedComponent === row.component ? '▼' : '▶'}</span>
+                </div>
+                <div className="text-xs text-gray-600 mt-0.5">Total Qty: <span className="font-bold text-gray-800 tabular-nums">{row.totalQty}</span></div>
+                <div className="text-xs text-gray-500 mt-0.5">{row.orderCount} orders · {row.companyCount} companies</div>
+                {expandedComponent === row.component && (
+                  <div className="mt-2 pt-2 border-t border-gray-100 space-y-1.5">
+                    {componentUsageRows.filter(r => r.component === row.component).map((detail: any, di: number) => (
+                      <div key={di} className="rounded-md bg-indigo-50/30 p-2 text-xs">
+                        <div className="font-bold text-gray-800">{detail.parentItem}</div>
+                        <div className="text-gray-600 mt-0.5 tabular-nums">Qty: {detail.qtyUsed} · {detail.company} · WO #{detail.orderId}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -7744,24 +8134,24 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
 
       {/* Item Usage table */}
       {reportType === 'item-usage' && (
-        <Card className="p-0 overflow-hidden shadow-sm">
+        <Card className="p-0 overflow-hidden shadow-sm border border-gray-200/60 rounded-xl">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[600px] text-sm">
-              <thead className="bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b">
+              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b-2 border-indigo-200">
                 <tr>
                   <th className={thClass} onClick={() => handleSort('item')}>Item Name <SortIcon col="item" /></th>
-                  <th className={thClass} onClick={() => handleSort('orders')}>Orders <SortIcon col="orders" /></th>
-                  <th className={thClass} onClick={() => handleSort('totalQty')}>Total Qty <SortIcon col="totalQty" /></th>
-                  <th className={thClass} onClick={() => handleSort('companyCount')}>Companies <SortIcon col="companyCount" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('orders')}>Orders <SortIcon col="orders" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('totalQty')}>Total Qty <SortIcon col="totalQty" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('companyCount')}>Companies <SortIcon col="companyCount" /></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {sortedRows.map((row: any) => (
-                  <tr key={row.item} className="hover:bg-blue-50/30 transition-colors">
+                {sortedRows.map((row: any, i: number) => (
+                  <tr key={row.item} className={`hover:bg-indigo-50/40 transition-colors ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
                     <td className="px-4 py-3 font-black text-gray-800">{row.item}</td>
-                    <td className="px-4 py-3 font-semibold text-gray-700">{row.orders}</td>
-                    <td className="px-4 py-3 font-semibold text-indigo-700">{row.totalQty}</td>
-                    <td className="px-4 py-3 text-gray-600">{row.companyCount}</td>
+                    <td className="px-4 py-3 font-semibold text-gray-700 text-right tabular-nums">{row.orders}</td>
+                    <td className="px-4 py-3 font-semibold text-indigo-700 text-right tabular-nums">{row.totalQty}</td>
+                    <td className="px-4 py-3 text-gray-600 text-right tabular-nums">{row.companyCount}</td>
                   </tr>
                 ))}
               </tbody>
@@ -7773,27 +8163,27 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
 
       {/* On-Time Delivery table */}
       {reportType === 'on-time' && (
-        <Card className="p-0 overflow-hidden shadow-sm">
+        <Card className="p-0 overflow-hidden shadow-sm border border-gray-200/60 rounded-xl">
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full min-w-[800px] text-sm">
-              <thead className="bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b">
+              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b-2 border-green-300">
                 <tr>
                   <th className={thClass} onClick={() => handleSort('_date')}>Date <SortIcon col="_date" /></th>
-                  <th className={thClass} onClick={() => handleSort('work_order_id')}>WO <SortIcon col="work_order_id" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('work_order_id')}>WO <SortIcon col="work_order_id" /></th>
                   <th className={thClass} onClick={() => handleSort('_customer')}>Company <SortIcon col="_customer" /></th>
                   <th className={thClass} onClick={() => handleSort('_item')}>Item <SortIcon col="_item" /></th>
-                  <th className={thClass} onClick={() => handleSort('dispatch_qty')}>Qty <SortIcon col="dispatch_qty" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('dispatch_qty')}>Qty <SortIcon col="dispatch_qty" /></th>
                   <th className={thClass} onClick={() => handleSort('invoice_no')}>Invoice <SortIcon col="invoice_no" /></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {sortedRows.map((row: any) => (
-                  <tr key={row.id} className="hover:bg-green-50/30 transition-colors">
+                {sortedRows.map((row: any, i: number) => (
+                  <tr key={row.id} className={`hover:bg-green-50/40 transition-colors border-l-2 border-l-green-400 ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
                     <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{row.when ? new Date(row.when).toLocaleString() : '-'}</td>
-                    <td className="px-4 py-3 font-black text-indigo-600">#{row.work_order_id}</td>
+                    <td className="px-4 py-3 font-black text-indigo-600 text-right tabular-nums">#{row.work_order_id}</td>
                     <td className="px-4 py-3 font-semibold text-gray-700">{row.order?.customer || '-'}</td>
                     <td className="px-4 py-3 text-gray-600">{row.order?.job_details || '-'}</td>
-                    <td className="px-4 py-3 font-black text-green-700">{row.dispatch_qty}</td>
+                    <td className="px-4 py-3 font-black text-green-700 text-right tabular-nums">{row.dispatch_qty}</td>
                     <td className="px-4 py-3 text-gray-600">{row.invoice_no || '-'}</td>
                   </tr>
                 ))}
@@ -7801,11 +8191,11 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
             </table>
           </div>
           <div className="md:hidden p-2 space-y-2">
-            {sortedRows.map((row: any) => (
-              <div key={row.id} className="rounded-lg border border-green-200 p-2.5">
+            {sortedRows.map((row: any, i: number) => (
+              <div key={row.id} className={`rounded-lg border border-green-200 p-2.5 border-l-4 border-l-green-400 ${i % 2 === 1 ? 'bg-gray-50/30' : ''}`}>
                 <div className="flex items-center justify-between gap-2">
                   <div className="font-black text-indigo-700 text-sm">WO #{row.work_order_id}</div>
-                  <div className="text-[11px] font-semibold text-green-700">Qty: {row.dispatch_qty} ✓</div>
+                  <div className="text-[11px] font-semibold text-green-700 tabular-nums">Qty: {row.dispatch_qty} ✓</div>
                 </div>
                 <div className="text-xs text-gray-700 font-semibold mt-1">{row.order?.customer || '-'} • {row.order?.job_details || '-'}</div>
                 <div className="text-[11px] text-gray-500 mt-1">Invoice: {row.invoice_no || '-'}</div>
@@ -7818,42 +8208,42 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
 
       {/* Delayed Delivery table */}
       {reportType === 'delayed' && (
-        <Card className="p-0 overflow-hidden shadow-sm">
+        <Card className="p-0 overflow-hidden shadow-sm border border-gray-200/60 rounded-xl">
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full min-w-[900px] text-sm">
-              <thead className="bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b">
+              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b-2 border-red-300">
                 <tr>
                   <th className={thClass} onClick={() => handleSort('_date')}>Date <SortIcon col="_date" /></th>
-                  <th className={thClass} onClick={() => handleSort('work_order_id')}>WO <SortIcon col="work_order_id" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('work_order_id')}>WO <SortIcon col="work_order_id" /></th>
                   <th className={thClass} onClick={() => handleSort('_customer')}>Company <SortIcon col="_customer" /></th>
                   <th className={thClass} onClick={() => handleSort('_item')}>Item <SortIcon col="_item" /></th>
-                  <th className={thClass} onClick={() => handleSort('daysDelay')}>Days Late <SortIcon col="daysDelay" /></th>
-                  <th className={thClass} onClick={() => handleSort('dispatch_qty')}>Qty <SortIcon col="dispatch_qty" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('daysDelay')}>Days Late <SortIcon col="daysDelay" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('dispatch_qty')}>Qty <SortIcon col="dispatch_qty" /></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {sortedRows.map((row: any) => (
-                  <tr key={row.id} className="hover:bg-red-50/30 transition-colors">
+                {sortedRows.map((row: any, i: number) => (
+                  <tr key={row.id} className={`hover:bg-red-50/40 transition-colors border-l-2 border-l-red-400 ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
                     <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{row.when ? new Date(row.when).toLocaleString() : '-'}</td>
-                    <td className="px-4 py-3 font-black text-indigo-600">#{row.work_order_id}</td>
+                    <td className="px-4 py-3 font-black text-indigo-600 text-right tabular-nums">#{row.work_order_id}</td>
                     <td className="px-4 py-3 font-semibold text-gray-700">{row.order?.customer || '-'}</td>
                     <td className="px-4 py-3 text-gray-600">{row.order?.job_details || '-'}</td>
-                    <td className="px-4 py-3"><span className="px-2 py-0.5 rounded-lg bg-red-100 text-red-700 font-black text-xs">{row.daysDelay}d</span></td>
-                    <td className="px-4 py-3 font-black text-gray-800">{row.dispatch_qty}</td>
+                    <td className="px-4 py-3 text-right tabular-nums"><span className={`px-2 py-0.5 rounded-lg font-black text-xs inline-block ${row.daysDelay <= 1 ? 'bg-amber-100 text-amber-700' : row.daysDelay <= 3 ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}`}>{row.daysDelay}d</span></td>
+                    <td className="px-4 py-3 font-black text-gray-800 text-right tabular-nums">{row.dispatch_qty}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
           <div className="md:hidden p-2 space-y-2">
-            {sortedRows.map((row: any) => (
-              <div key={row.id} className="rounded-lg border border-red-200 p-2.5">
+            {sortedRows.map((row: any, i: number) => (
+              <div key={row.id} className={`rounded-lg border border-red-200 p-2.5 border-l-4 border-l-red-400 ${i % 2 === 1 ? 'bg-gray-50/30' : ''}`}>
                 <div className="flex items-center justify-between gap-2">
                   <div className="font-black text-indigo-700 text-sm">WO #{row.work_order_id}</div>
-                  <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-black text-xs">{row.daysDelay}d late</span>
+                  <span className={`px-1.5 py-0.5 rounded font-black text-xs ${row.daysDelay <= 1 ? 'bg-amber-100 text-amber-700' : row.daysDelay <= 3 ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}`}>{row.daysDelay}d late</span>
                 </div>
                 <div className="text-xs text-gray-700 font-semibold mt-1">{row.order?.customer || '-'} • {row.order?.job_details || '-'}</div>
-                <div className="text-[11px] text-gray-500 mt-1">Qty: {row.dispatch_qty}</div>
+                <div className="text-[11px] text-gray-500 mt-1 tabular-nums">Qty: {row.dispatch_qty}</div>
               </div>
             ))}
           </div>
@@ -7863,28 +8253,28 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
 
       {/* Department-Wise table */}
       {reportType === 'dept-wise' && (
-        <Card className="p-0 overflow-hidden shadow-sm">
+        <Card className="p-0 overflow-hidden shadow-sm border border-gray-200/60 rounded-xl">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[700px] text-sm">
-              <thead className="bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b">
+              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b-2 border-indigo-200">
                 <tr>
                   <th className={thClass} onClick={() => handleSort('dept')}>Department <SortIcon col="dept" /></th>
-                  <th className={thClass} onClick={() => handleSort('reports')}>Reports <SortIcon col="reports" /></th>
-                  <th className={thClass} onClick={() => handleSort('shiftHrs')}>Shift Hrs <SortIcon col="shiftHrs" /></th>
-                  <th className={thClass} onClick={() => handleSort('otHrs')}>OT Hrs <SortIcon col="otHrs" /></th>
-                  <th className={thClass} onClick={() => handleSort('totalHrs')}>Total Hrs <SortIcon col="totalHrs" /></th>
-                  <th className={thClass} onClick={() => handleSort('qtyProduced')}>Qty Produced <SortIcon col="qtyProduced" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('reports')}>Reports <SortIcon col="reports" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('shiftHrs')}>Shift Hrs <SortIcon col="shiftHrs" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('otHrs')}>OT Hrs <SortIcon col="otHrs" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('totalHrs')}>Total Hrs <SortIcon col="totalHrs" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('qtyProduced')}>Qty Produced <SortIcon col="qtyProduced" /></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {sortedRows.map((row: any) => (
-                  <tr key={row.dept} className="hover:bg-blue-50/30 transition-colors">
+                {sortedRows.map((row: any, i: number) => (
+                  <tr key={row.dept} className={`hover:bg-indigo-50/40 transition-colors ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
                     <td className="px-4 py-3 font-black text-gray-800">{row.dept}</td>
-                    <td className="px-4 py-3 font-semibold text-gray-700">{row.reports}</td>
-                    <td className="px-4 py-3 text-gray-600">{row.shiftHrs}</td>
-                    <td className="px-4 py-3 text-gray-600">{row.otHrs}</td>
-                    <td className="px-4 py-3 font-semibold text-indigo-700">{row.totalHrs}</td>
-                    <td className="px-4 py-3 font-black text-gray-800">{row.qtyProduced}</td>
+                    <td className="px-4 py-3 font-semibold text-gray-700 text-right tabular-nums">{row.reports}</td>
+                    <td className="px-4 py-3 text-gray-600 text-right tabular-nums">{row.shiftHrs}</td>
+                    <td className="px-4 py-3 text-gray-600 text-right tabular-nums">{row.otHrs}</td>
+                    <td className="px-4 py-3 font-semibold text-indigo-700 text-right tabular-nums">{row.totalHrs}</td>
+                    <td className="px-4 py-3 font-black text-gray-800 text-right tabular-nums">{row.qtyProduced}</td>
                   </tr>
                 ))}
               </tbody>
@@ -7896,32 +8286,41 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
 
       {/* Company Performance table */}
       {reportType === 'company-performance' && (
-        <Card className="p-0 overflow-hidden shadow-sm">
+        <Card className="p-0 overflow-hidden shadow-sm border border-gray-200/60 rounded-xl">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[700px] text-sm">
-              <thead className="bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b">
+              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b-2 border-indigo-200">
                 <tr>
                   <th className={thClass} onClick={() => handleSort('company')}>Company <SortIcon col="company" /></th>
-                  <th className={thClass} onClick={() => handleSort('totalWOs')}>Total WOs <SortIcon col="totalWOs" /></th>
-                  <th className={thClass} onClick={() => handleSort('totalQty')}>Total Qty <SortIcon col="totalQty" /></th>
-                  <th className={thClass} onClick={() => handleSort('onTime')}>On-Time <SortIcon col="onTime" /></th>
-                  <th className={thClass} onClick={() => handleSort('delayed')}>Delayed <SortIcon col="delayed" /></th>
-                  <th className="px-4 py-3 text-left whitespace-nowrap">On-Time %</th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('totalWOs')}>Total WOs <SortIcon col="totalWOs" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('totalQty')}>Total Qty <SortIcon col="totalQty" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('onTime')}>On-Time <SortIcon col="onTime" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('delayed')}>Delayed <SortIcon col="delayed" /></th>
+                  <th className="px-4 py-3 text-right whitespace-nowrap">On-Time %</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {sortedRows.map((row: any) => (
-                  <tr key={row.company} className="hover:bg-blue-50/30 transition-colors">
-                    <td className="px-4 py-3 font-black text-gray-800">{row.company}</td>
-                    <td className="px-4 py-3 font-semibold text-gray-700">{row.totalWOs}</td>
-                    <td className="px-4 py-3 font-semibold text-indigo-700">{row.totalQty}</td>
-                    <td className="px-4 py-3 font-semibold text-green-700">{row.onTime}</td>
-                    <td className="px-4 py-3 font-semibold text-red-700">{row.delayed}</td>
-                    <td className="px-4 py-3 font-black text-gray-800">
-                      {row.totalWOs > 0 ? Math.round(row.onTime / row.totalWOs * 100) + '%' : '0%'}
-                    </td>
-                  </tr>
-                ))}
+                {sortedRows.map((row: any, i: number) => {
+                  const pct = row.totalWOs > 0 ? Math.round(row.onTime / row.totalWOs * 100) : 0;
+                  const barColor = pct >= 80 ? 'bg-green-400' : pct >= 50 ? 'bg-amber-400' : 'bg-red-400';
+                  return (
+                    <tr key={row.company} className={`hover:bg-indigo-50/40 transition-colors ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
+                      <td className="px-4 py-3 font-black text-gray-800">{row.company}</td>
+                      <td className="px-4 py-3 font-semibold text-gray-700 text-right tabular-nums">{row.totalWOs}</td>
+                      <td className="px-4 py-3 font-semibold text-indigo-700 text-right tabular-nums">{row.totalQty}</td>
+                      <td className="px-4 py-3 font-semibold text-green-700 text-right tabular-nums">{row.onTime}</td>
+                      <td className="px-4 py-3 font-semibold text-red-700 text-right tabular-nums">{row.delayed}</td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                            <div className={`h-full ${barColor} rounded-full`} style={{ width: `${pct}%` }}></div>
+                          </div>
+                          <span className="font-black text-gray-800 text-xs tabular-nums">{pct}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -8901,11 +9300,73 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
   );
 };
 
+// --- Verify Page ---
+const VerifyPage: React.FC = () => {
+  const [status, setStatus] = useState<'verifying' | 'success' | 'error'>('verifying');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    const match = hash.match(/[?&]token=([^&]+)/);
+    const token = match ? decodeURIComponent(match[1]) : null;
+
+    if (!token) {
+      setStatus('error');
+      setErrorMsg('Invalid verification link.');
+      return;
+    }
+
+    pb.collection('erp_users').confirmVerification(token)
+      .then(() => setStatus('success'))
+      .catch((err: any) => {
+        setStatus('error');
+        setErrorMsg(err?.message || 'Verification failed. The link may have expired.');
+      });
+  }, []);
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#f4f4f4] px-4">
+      <div className="w-full max-w-md rounded-lg border border-slate-300 bg-white p-8 text-center shadow-[0_2px_10px_rgba(15,23,42,0.14)]">
+        {status === 'verifying' && (
+          <>
+            <Loader2 className="mx-auto mb-4 animate-spin text-[#0176d3]" size={40} />
+            <h1 className="text-xl font-bold text-slate-900">Verifying...</h1>
+            <p className="mt-2 text-sm text-slate-500">Please wait while we verify your email.</p>
+          </>
+        )}
+        {status === 'success' && (
+          <>
+            <ShieldCheck className="mx-auto mb-4 text-green-500" size={40} />
+            <h1 className="text-xl font-bold text-slate-900">Email Verified</h1>
+            <p className="mt-2 text-sm text-slate-500">
+              Your email has been verified. You can now close this tab and return to the login page.
+            </p>
+          </>
+        )}
+        {status === 'error' && (
+          <>
+            <AlertCircle className="mx-auto mb-4 text-red-500" size={40} />
+            <h1 className="text-xl font-bold text-slate-900">Verification Failed</h1>
+            <p className="mt-2 text-sm text-red-600">{errorMsg}</p>
+            <a
+              href="/"
+              className="mt-4 inline-block rounded-md bg-[#0176d3] px-4 py-2 text-sm font-semibold text-white"
+            >
+              Back to Login
+            </a>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // --- App Root ---
 export default function App() {
   const initialView = (): AppView => {
     const host = window.location.hostname.toLowerCase();
     if (host === 'portal.excellpackaging.in' || host.startsWith('portal.')) return 'client-login';
+    if (window.location.hash.startsWith('#/verify')) return 'verify';
     return 'dashboard';
   };
   const [view, setView] = useState<AppView>(initialView);
@@ -9155,7 +9616,7 @@ export default function App() {
             }
           }
 
-          if (userDept === 'Dispatch' && (wo.status === 'QC Approved' || wo.status === 'Ready for despatch')) {
+          if (userDept === 'Dispatch' && wo.status === 'Ready for despatch') {
             notifyOnce(
               `dispatch-${wo.id}-${wo.status}`,
               'Dispatch Queue Updated',
@@ -9267,7 +9728,7 @@ export default function App() {
       navigateTo('worker-dashboard', { replace: true });
     }
   };
-  const handleLogout = () => { logoutAuth(); setLoggedInUser(null); localStorage.removeItem('excell_erp_user'); };
+  const handleLogout = () => { logoutAuth(); setLoggedInUser(null); localStorage.removeItem('excell_erp_user'); localStorage.removeItem('pocketbase_auth'); };
   const handleClientLogin = (user: any) => { setClientUser(user); };
   const handleClientLogout = () => { setClientUser(null); navigateTo('client-login'); };
   const handleLiveScreenLogin = (user: any) => { setLiveScreenUser(user); navigateTo('live-screen'); };
@@ -9737,6 +10198,14 @@ export default function App() {
 
   if (view === 'live-screen' && loggedInUser) {
     return <LiveScreen loggedInUser={loggedInUser} onBack={() => navigateTo('dashboard')} />;
+  }
+
+  if (view === 'verify' || window.location.hash.startsWith('#/verify')) {
+    return (
+      <div className="min-h-screen bg-[#f4f4f4] flex items-center justify-center px-4">
+        <VerifyPage />
+      </div>
+    );
   }
 
   if (!loggedInUser) return <Login onLogin={handleLogin} onNavigate={(v) => navigateTo(v)} />;

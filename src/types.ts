@@ -24,7 +24,8 @@ export type AppView =
   | 'live-screen-login'
   | 'client-login'
   | 'client-dashboard'
-  | 'client-orders';
+  | 'client-orders'
+  | 'verify';
 
 export interface User {
   id: number;
@@ -206,7 +207,7 @@ export interface ProductionReport {
 
 export type DepartmentWOStatus = 'Not Started' | 'Work Started' | 'Ready for QC';
 export type QCStatus = 'Pending QC' | 'QC Denied' | 'QC Approved';
-export type WOStatus = 'Not Started' | 'Work Started' | 'Ready for QC' | 'QC Approved' | 'Ready for despatch' | 'Dispatched' | 'Delivered' | 'Cancelled';
+export type WOStatus = 'Not Started' | 'Work Started' | 'Ready for QC' | 'Ready for despatch' | 'Dispatched' | 'Delivered' | 'Cancelled';
 
 export interface DepartmentStatus {
   department: string;

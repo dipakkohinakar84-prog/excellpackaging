@@ -25,6 +25,7 @@ const DepartmentStatusTracker: React.FC<DepartmentStatusTrackerProps> = ({
   const userDept = normalizeDepartment(loggedInUser.department);
   const isQC = userDept === 'Quality_Control';
   const isOffice = userDept === 'Office';
+  const canQC = isQC || isOffice;
 
   const getDepartmentStatus = (dept: string): DepartmentStatus => {
     return departmentStatuses?.find(ds =>
@@ -94,8 +95,7 @@ const DepartmentStatusTracker: React.FC<DepartmentStatusTrackerProps> = ({
       return true;
     }
     
-    if (isQC) {
-      // QC can only edit if status is Ready for QC and not already approved
+    if (isQC || isOffice) {
       const s = getDepartmentStatus(dept);
       return s.status === 'Ready for QC' && s.qc_status !== 'QC Approved';
     }
@@ -146,13 +146,13 @@ const DepartmentStatusTracker: React.FC<DepartmentStatusTrackerProps> = ({
                           : 'bg-gray-100 text-gray-600'
                       } disabled:opacity-50`}
                     >
-                      {isDepartmentBusy ? 'Updating' : status.replace('Not Started', 'Not').replace('Work Started', 'Start').replace('Ready for QC', 'Ready QC')}
+                      {isDepartmentBusy ? 'Updating' : status === 'Not Started' ? 'Queue' : status === 'Work Started' ? 'Progress' : 'Ready QC'}
                     </button>
                   ))}
                 </div>
               )}
 
-              {canEdit && isQC && deptStatus.status === 'Ready for QC' && (
+              {canEdit && canQC && deptStatus.status === 'Ready for QC' && (
                 <div className="grid grid-cols-2 gap-1.5 no-print">
                   <button onClick={() => handleQCStatusChange(dept, 'QC Approved')} disabled={isDepartmentBusy} className="min-h-10 rounded-xl bg-green-600 text-white text-xs font-black disabled:opacity-50">Approve</button>
                   <button onClick={() => handleQCStatusChange(dept, 'QC Denied')} disabled={isDepartmentBusy} className="min-h-10 rounded-xl bg-red-600 text-white text-xs font-black disabled:opacity-50">Deny</button>
@@ -214,7 +214,7 @@ const DepartmentStatusTracker: React.FC<DepartmentStatusTrackerProps> = ({
                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                      } disabled:opacity-50`}
                   >
-                    {isDepartmentBusy ? 'Updating...' : status}
+                    {isDepartmentBusy ? 'Updating...' : status === 'Not Started' ? 'In Queue' : status === 'Work Started' ? 'Work In Progress' : status}
                   </button>
                 ))}
               </div>
@@ -233,7 +233,7 @@ const DepartmentStatusTracker: React.FC<DepartmentStatusTrackerProps> = ({
                   </div>
                 )}
                 
-                {canEdit && isQC && (
+                {canEdit && canQC && (
                   <div className="flex gap-1.5 no-print">
                     <button
                       onClick={() => handleQCStatusChange(dept, 'QC Approved')}
