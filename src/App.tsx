@@ -389,6 +389,10 @@ const getItemForWorkOrder = (items: Item[], wo: WorkOrder) => {
   ) || items.find(item => normalizeDuplicateKey(item.name || '') === itemNameKey);
 };
 
+const STATUS_ORDER: WOStatus[] = ['Not Started', 'Work Started', 'Ready for QC', 'Ready for despatch', 'Dispatched', 'Delivered'];
+const isSequentialOnly = (current: WOStatus, next: WOStatus) =>
+  STATUS_ORDER.indexOf(next) === STATUS_ORDER.indexOf(current) + 1;
+
 const getEditableDepartmentForUser = (wo: WorkOrder, user: User) => {
   const userDept = normalizeDepartment(user.department);
   if (userDept === 'Office') {
@@ -411,12 +415,16 @@ const getEditableDepartmentForUser = (wo: WorkOrder, user: User) => {
 
 const getCardStatusOptions = (wo: WorkOrder, user: User): string[] => {
   const userDept = normalizeDepartment(user.department);
+  let options: string[] = [];
   if (userDept === 'Office') {
-    if (getEditableDepartmentForUser(wo, user)) return ['QC Approved', 'QC Denied'];
-    return ['Not Started', 'Work Started', 'Ready for QC', 'Ready for despatch', 'Cancelled'];
+    if (getEditableDepartmentForUser(wo, user)) { options = ['QC Approved', 'QC Denied']; }
+    else { options = ['Not Started', 'Work Started', 'Ready for QC', 'Ready for despatch', 'Cancelled']; }
+  } else if (userDept === 'Quality_Control') {
+    options = getEditableDepartmentForUser(wo, user) ? ['QC Approved', 'QC Denied'] : [];
+  } else {
+    options = getEditableDepartmentForUser(wo, user) ? ['Not Started', 'Work Started', 'Ready for QC'] : [];
   }
-  if (userDept === 'Quality_Control') return getEditableDepartmentForUser(wo, user) ? ['QC Approved', 'QC Denied'] : [];
-  return getEditableDepartmentForUser(wo, user) ? ['Not Started', 'Work Started', 'Ready for QC'] : [];
+  return options.filter(s => s === 'Cancelled' || isSequentialOnly(wo.status, s as WOStatus));
 };
 
 const isCardStatusCurrent = (wo: WorkOrder, user: User, status: string) => {
@@ -1723,7 +1731,8 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [vehicleOptions, setVehicleOptions] = useState<string[]>([]);
   const [isDispatchMetaModalOpen, setIsDispatchMetaModalOpen] = useState(false);
-  const [dispatchMeta, setDispatchMeta] = useState({ invoiceNo: '', vehicleNo: '' });
+  const todayDateStr = new Date().toISOString().slice(0, 10);
+  const [dispatchMeta, setDispatchMeta] = useState({ invoiceNo: '', vehicleNo: '', dispatchDate: todayDateStr });
   const [isSubmittingDispatch, setIsSubmittingDispatch] = useState(false);
   
   // Track selected orders and their dispatch quantities using Record to be TS friendly
@@ -1800,6 +1809,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
 
     const invoiceNo = dispatchMeta.invoiceNo.trim();
     const vehicleNo = dispatchMeta.vehicleNo.trim();
+    const dispatchDate = dispatchMeta.dispatchDate || todayDateStr;
 
     if (!invoiceNo) {
       alert('Invoice number is required');
@@ -1865,6 +1875,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
           invoice_no: invoiceNo,
           vehicle_no: vehicleNo,
           dispatched_by: loggedInUser.username,
+          dispatch_date: dispatchDate,
         }]);
 
         if (logError) {
@@ -1894,7 +1905,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
 
       setSelectedOrders({});
       setDispatchMode(false);
-      setDispatchMeta({ invoiceNo: '', vehicleNo: '' });
+      setDispatchMeta({ invoiceNo: '', vehicleNo: '', dispatchDate: todayDateStr });
 
       if (failedIds.length > 0) {
         alert(`Some orders failed to dispatch: ${failedIds.map(id => `#${id}`).join(', ')}. Others were dispatched successfully.`);
@@ -1924,7 +1935,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
       return;
     }
 
-    setDispatchMeta({ invoiceNo: '', vehicleNo: vehicleOptions[0] || '' });
+    setDispatchMeta({ invoiceNo: '', vehicleNo: vehicleOptions[0] || '', dispatchDate: todayDateStr });
     setIsDispatchMetaModalOpen(true);
   };
 
@@ -2049,6 +2060,15 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                 className="w-full px-4 py-3 bg-gray-50 border rounded-xl"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-black uppercase text-gray-400 block mb-1 tracking-widest">Dispatch Date</label>
+            <input type="date" value={dispatchMeta.dispatchDate} max={todayDateStr}
+              onChange={e => setDispatchMeta(prev => ({ ...prev, dispatchDate: e.target.value }))}
+              disabled={isSubmittingDispatch}
+              className="w-full px-4 py-3 bg-gray-50 border rounded-xl"
+            />
           </div>
 
           <button
@@ -4415,6 +4435,19 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
     const userDept = normalizeDepartment(loggedInUser.department);
     setBusyCardStatusId(wo.id);
 
+    // Sequential-only guard
+    if (status !== 'Cancelled' && status !== 'QC Approved' && status !== 'QC Denied') {
+      const dept = getEditableDepartmentForUser(wo, loggedInUser);
+      const currentStatus: WOStatus = dept
+        ? ((wo.department_statuses || []).find(s => normalizeDepartment(s.department) === normalizeDepartment(dept))?.status || 'Not Started') as WOStatus
+        : wo.status;
+      if (!isSequentialOnly(currentStatus, status as WOStatus)) {
+        alert('Status can only move forward one step at a time. Skipping is not allowed.');
+        setBusyCardStatusId(null);
+        return;
+      }
+    }
+
     const previousData = data;
     try {
       if (userDept === 'Office') {
@@ -4940,6 +4973,19 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
     if (busyCardStatusId) return;
     const userDept = normalizeDepartment(loggedInUser.department);
     setBusyCardStatusId(wo.id);
+
+    // Forward-only guard
+    if (status !== 'Cancelled' && status !== 'QC Approved' && status !== 'QC Denied') {
+      const dept = getEditableDepartmentForUser(wo, loggedInUser);
+      const currentStatus: WOStatus = dept
+        ? ((wo.department_statuses || []).find(s => normalizeDepartment(s.department) === normalizeDepartment(dept))?.status || 'Not Started') as WOStatus
+        : wo.status;
+      if (!isSequentialOnly(currentStatus, status as WOStatus)) {
+        alert('Status can only move forward. Reverting is not allowed.');
+        setBusyCardStatusId(null);
+        return;
+      }
+    }
 
     const previousData = data;
     try {
@@ -5513,197 +5559,269 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
   const normUserDept = normalizeDepartment(loggedInUser.department);
   const isOffice = normUserDept === 'Office';
 
+  const STATUS_FLOW = ['Not Started', 'Work Started', 'Ready for QC', 'Ready for despatch', 'Dispatched', 'Delivered'];
+  const currentStepIdx = STATUS_FLOW.indexOf(wo.status);
+
+  const getStepState = (idx: number) => {
+    if (idx < currentStepIdx) return 'completed';
+    if (idx === currentStepIdx) return 'current';
+    return 'upcoming';
+  };
+
   return (
-    <div className="space-y-3 sm:space-y-4 max-[375px]:space-y-3 animate-in fade-in slide-in-from-right-4 duration-300">
+    <div className="space-y-3 sm:space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
       <div className="no-print">
-        <button onClick={onBack} className="flex items-center gap-2 max-[375px]:gap-1.5 text-[10px] max-[375px]:text-[9px] font-black text-slate-300 md:text-gray-400 hover:text-indigo-600 transition-colors uppercase tracking-widest">
+        <button onClick={onBack} className="flex items-center gap-2 text-[10px] font-black text-slate-300 md:text-gray-400 hover:text-indigo-600 transition-colors uppercase tracking-widest">
           <ChevronLeft size={16}/> Back
         </button>
       </div>
-       
-       <div className="flex flex-col xl:flex-row gap-4 max-[375px]:gap-3">
-         <div className="flex-1 space-y-4">
-            <Card className="p-3 md:p-5 border-t-[3px] border-t-indigo-600 rounded-xl overflow-hidden print-job-card">
-              <div className="flex flex-col md:flex-row justify-between items-start mb-5 gap-3">
-                  <div className="space-y-1">
-                     <div className="flex flex-wrap items-center gap-2">
-                       <span className="bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full text-xs font-bold tracking-widest border border-indigo-100">ORDER-#{wo.id}</span>
-                       {wo.order_type === 'suborder' && <Badge color="purple">Suborder Of #{wo.parent_work_order_id || '-'}</Badge>}
-                     </div>
-                     <h1 className="text-lg md:text-2xl font-bold text-gray-800 mt-1.5 mb-0.5 break-words leading-tight line-clamp-2">{wo.job_details}</h1>
-                     {wo.parent_work_order_id && <p className="text-xs font-semibold text-purple-500 uppercase tracking-wider">Parent Item: {wo.parent_item_name || 'Parent Item'}</p>}
-                     <p className="text-xs md:text-sm font-medium text-gray-400 uppercase tracking-tight">{wo.customer}</p>
-                  </div>
-                  <StatusBadge status={wo.status} />
-               </div>
-                
-               <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-3 py-4 border-y border-gray-100">
-                  <div>
-                     <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest block mb-0.5">Batch Size</label>
-                     <p className="text-base md:text-lg font-bold text-indigo-600">{wo.qty} <span className="text-xs text-gray-400 font-medium">PCS</span></p>
-                  </div>
-                  <div>
-                     <label className="text-xs font-semibold uppercase text-gray-400 tracking-widest block mb-0.5">Delivery ETD</label>
-                     <p className="text-sm font-semibold text-orange-600 flex items-center gap-1"><Clock size={14}/> {wo.etd || 'N/A'}</p>
-                  </div>
-                  <div className="hidden md:block">
-                     <label className="text-xs font-semibold uppercase text-gray-400 tracking-widest block mb-0.5">Blueprint Ref</label>
-                     <p className="text-xs font-mono font-medium text-gray-700 px-2 py-1 bg-gray-50 rounded inline-block break-all">{wo.drawing || 'NO DRAWING'}</p>
-                  </div>
-                  <div className="hidden md:block">
-                     <label className="text-xs font-semibold uppercase text-gray-400 tracking-widest block mb-0.5">QC/Ready Date</label>
-                     <p className="text-sm font-semibold text-green-600">{wo.ready_date || 'IN PROGRESS'}</p>
-                 </div>
+
+      <div className="flex flex-col xl:flex-row gap-4">
+        {/* Left Column */}
+        <div className="flex-1 space-y-4">
+          {/* Header Card */}
+          <Card className="p-3 md:p-5 border-t-[3px] border-t-indigo-600 rounded-xl overflow-hidden print-job-card">
+            <div className="flex flex-col md:flex-row justify-between items-start gap-3">
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full text-xs font-bold tracking-widest border border-indigo-100">ORDER-#{wo.id}</span>
+                  {wo.order_type === 'suborder' && <Badge color="purple">Suborder Of #{wo.parent_work_order_id || '-'}</Badge>}
+                </div>
+                <h1 className="text-lg md:text-2xl font-bold text-gray-800 mt-1.5 mb-0.5 break-words leading-tight line-clamp-2">{wo.job_details}</h1>
+                {wo.parent_work_order_id && <p className="text-xs font-semibold text-purple-500 uppercase tracking-wider">Parent Item: {wo.parent_item_name || 'Parent Item'}</p>}
+                <p className="text-xs md:text-sm font-medium text-gray-400 uppercase tracking-tight">{wo.customer}</p>
               </div>
+              <StatusBadge status={wo.status} />
+            </div>
+          </Card>
 
-             <div className="mt-4 max-[375px]:mt-3">
-                 <DepartmentStatusTracker
-                   workOrderId={wo.id}
-                   assignedDepartments={wo.assigned_departments || []}
-                   departmentStatuses={wo.department_statuses || []}
-                   loggedInUser={loggedInUser}
-                   isBusy={isUpdatingStatus}
-                   busyDepartmentKey={statusActionKey?.startsWith('dept-') ? statusActionKey.replace('dept-', '') : null}
-                   onStatusUpdate={async (department, status, qcStatus) => {
-                     if (isUpdatingStatus) return;
-                     try {
-                       setIsUpdatingStatus(true);
-                       setStatusActionKey(`dept-${normalizeDepartment(department)}`);
-                       const existingStatuses = wo.department_statuses || [];
-                      const previousDeptStatus = existingStatuses.find(ds => normalizeDepartment(ds.department) === normalizeDepartment(department));
-                      const previousStatus = previousDeptStatus?.status;
-                      const previousQCStatus = previousDeptStatus?.qc_status;
-                      const updatedStatuses = existingStatuses.map(ds => 
-                        normalizeDepartment(ds.department) === normalizeDepartment(department)
-                          ? { ...ds, status: status as any, qc_status: qcStatus as any, updated_at: new Date().toISOString(), updated_by: loggedInUser.username }
-                          : ds
-                      );
-                      
-                      // If not present, add it
-                      if (!updatedStatuses.find(ds => normalizeDepartment(ds.department) === normalizeDepartment(department))) {
-                        updatedStatuses.push({
-                          department: department,
-                          status: status as any,
-                          qc_status: qcStatus as any,
-                          updated_at: new Date().toISOString(),
-                          updated_by: loggedInUser.username
-                        });
-                      }
-                      
-                      const allDepartments = wo.assigned_departments || [];
-                      const wasAllApproved = allDepartments.length > 0 && allDepartments.every(dept => {
-                          const ds = existingStatuses.find(s => normalizeDepartment(s.department) === normalizeDepartment(dept));
-                          return ds?.qc_status === 'QC Approved';
-                      });
-                      const allApproved = allDepartments.length > 0 && allDepartments.every(dept => {
-                          const ds = updatedStatuses.find(s => normalizeDepartment(s.department) === normalizeDepartment(dept));
-                          return ds?.qc_status === 'QC Approved';
-                      });
+          {/* Progress Timeline */}
+          <Card className="p-3 md:p-5 rounded-xl overflow-hidden">
+            <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-4">Order Progress</h3>
+            <div className="relative">
+              {STATUS_FLOW.map((step, idx) => {
+                const state = getStepState(idx);
+                return (
+                  <div key={step} className="flex items-start gap-3 pb-6 last:pb-0 relative">
+                    {/* Vertical connector line */}
+                    {idx < STATUS_FLOW.length - 1 && (
+                      <div className={`absolute left-[11px] top-5 w-0.5 h-full -z-0 ${
+                        state === 'completed' ? 'bg-emerald-400' : 'bg-gray-200'
+                      }`} />
+                    )}
+                    {/* Circle */}
+                    <div className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center z-10 ${
+                      state === 'completed'
+                        ? 'bg-emerald-100 text-emerald-600'
+                        : state === 'current'
+                        ? 'bg-blue-100 text-blue-600 ring-4 ring-blue-50'
+                        : 'bg-gray-100 text-gray-300'
+                    }`}>
+                      {state === 'completed' ? (
+                        <Check size={14} strokeWidth={3} />
+                      ) : state === 'current' ? (
+                        <div className="w-2.5 h-2.5 rounded-full bg-blue-600" />
+                      ) : (
+                        <div className="w-2.5 h-2.5 rounded-full bg-gray-300" />
+                      )}
+                    </div>
+                    {/* Label */}
+                    <div className="pt-0.5">
+                      <p className={`text-sm font-bold ${
+                        state === 'completed' ? 'text-emerald-700' :
+                        state === 'current' ? 'text-blue-700' :
+                        'text-gray-400'
+                      }`}>
+                        {step === 'Ready for despatch' ? 'Ready for Dispatch' : step}
+                      </p>
+                      {state === 'current' && (
+                        <p className="text-[10px] font-semibold text-blue-500 uppercase tracking-wider mt-0.5">Current</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
 
-                      const newOverallStatus = deriveOverallStatusFromDepartmentStatuses(wo, updatedStatuses);
-                      const optimisticWo = { ...wo, department_statuses: updatedStatuses, status: newOverallStatus };
-                      setWo(optimisticWo);
-                      
-                      const { error } = await supabase.from('work_orders').update({ department_statuses: updatedStatuses, status: newOverallStatus }).eq('id', wo.id);
-                      if (error) throw error;
-                      invalidateCollectionCache('work_orders');
+          {/* Department Statuses */}
+          <Card className="p-3 md:p-5 rounded-xl overflow-hidden">
+            <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-4">Department Status</h3>
+            <DepartmentStatusTracker
+              workOrderId={wo.id}
+              assignedDepartments={wo.assigned_departments || []}
+              departmentStatuses={wo.department_statuses || []}
+              loggedInUser={loggedInUser}
+              isBusy={isUpdatingStatus}
+              busyDepartmentKey={statusActionKey?.startsWith('dept-') ? statusActionKey.replace('dept-', '') : null}
+              onStatusUpdate={async (department, status, qcStatus) => {
+                if (isUpdatingStatus) return;
+                try {
+                  setIsUpdatingStatus(true);
+                  setStatusActionKey(`dept-${normalizeDepartment(department)}`);
+                  const existingStatuses = wo.department_statuses || [];
+                  const previousDeptStatus = existingStatuses.find(ds => normalizeDepartment(ds.department) === normalizeDepartment(department));
+                  const previousStatus = previousDeptStatus?.status;
+                  const previousQCStatus = previousDeptStatus?.qc_status;
+                  const updatedStatuses = existingStatuses.map(ds =>
+                    normalizeDepartment(ds.department) === normalizeDepartment(department)
+                      ? { ...ds, status: status as any, qc_status: qcStatus as any, updated_at: new Date().toISOString(), updated_by: loggedInUser.username }
+                      : ds
+                  );
 
-                      void logActivity({
-                        eventType: 'work_order',
-                        action: qcStatus ? 'qc_status_changed' : 'department_status_changed',
-                        title: qcStatus ? 'QC Status Changed' : 'Department Status Changed',
-                        body: `Order #${wo.id} | ${department.replace(/_/g, ' ')}: ${qcStatus ? (previousQCStatus || 'Pending QC') : (previousStatus || 'Not Started')} -> ${qcStatus || status}`,
-                        actor: loggedInUser,
-                        targetCollection: 'work_orders',
-                        targetId: wo.id,
-                        targetLabel: wo.job_details,
-                        workOrderId: wo.id,
-                        customerName: wo.customer,
-                        itemName: wo.job_details,
-                        department,
-                        oldValue: qcStatus ? (previousQCStatus || 'Pending QC') : (previousStatus || 'Not Started'),
-                        newValue: qcStatus || status,
-                        severity: qcStatus === 'QC Denied' ? 'warning' : 'success',
-                      });
+                  if (!updatedStatuses.find(ds => normalizeDepartment(ds.department) === normalizeDepartment(department))) {
+                    updatedStatuses.push({
+                      department: department,
+                      status: status as any,
+                      qc_status: qcStatus as any,
+                      updated_at: new Date().toISOString(),
+                      updated_by: loggedInUser.username
+                    });
+                  }
 
-                      const notificationTasks: Promise<any>[] = [];
+                  const allDepartments = wo.assigned_departments || [];
+                  const wasAllApproved = allDepartments.length > 0 && allDepartments.every(dept => {
+                    const ds = existingStatuses.find(s => normalizeDepartment(s.department) === normalizeDepartment(dept));
+                    return ds?.qc_status === 'QC Approved';
+                  });
+                  const allApproved = allDepartments.length > 0 && allDepartments.every(dept => {
+                    const ds = updatedStatuses.find(s => normalizeDepartment(s.department) === normalizeDepartment(dept));
+                    return ds?.qc_status === 'QC Approved';
+                  });
 
-                      if (status === 'Work Started' && previousStatus !== 'Work Started') {
-                        notificationTasks.push(sendBackgroundPushEvent({
-                          title: 'Work Started',
-                          body: `Order #${wo.id} | ${department.replace(/_/g, ' ')}\nProduction has started`,
-                          departments: ['Office'],
-                          workOrderId: wo.id,
-                          actor: loggedInUser.username,
-                        }));
-                      }
+                  const newOverallStatus = deriveOverallStatusFromDepartmentStatuses(wo, updatedStatuses);
+                  const optimisticWo = { ...wo, department_statuses: updatedStatuses, status: newOverallStatus };
+                  setWo(optimisticWo);
 
-                      if (status === 'Ready for QC' && previousStatus !== 'Ready for QC') {
-                        notificationTasks.push(sendBackgroundPushEvent({
-                          title: 'QC Check Required',
-                          body: `Order #${wo.id} | ${department.replace(/_/g, ' ')}\nReady for quality approval`,
-                          departments: ['Quality_Control'],
-                          workOrderId: wo.id,
-                          actor: loggedInUser.username,
-                        }));
-                      }
+                  const { error } = await supabase.from('work_orders').update({ department_statuses: updatedStatuses, status: newOverallStatus }).eq('id', wo.id);
+                  if (error) throw error;
+                  invalidateCollectionCache('work_orders');
 
-                      if ((qcStatus === 'QC Approved' || qcStatus === 'QC Denied') && previousQCStatus !== qcStatus) {
-                        notificationTasks.push(sendBackgroundPushEvent({
-                          title: qcStatus,
-                          body: `Order #${wo.id} | ${department.replace(/_/g, ' ')}\n${qcStatus}`,
-                          departments: [department],
-                          workOrderId: wo.id,
-                          actor: loggedInUser.username,
-                        }));
-                      }
+                  void logActivity({
+                    eventType: 'work_order',
+                    action: qcStatus ? 'qc_status_changed' : 'department_status_changed',
+                    title: qcStatus ? 'QC Status Changed' : 'Department Status Changed',
+                    body: `Order #${wo.id} | ${department.replace(/_/g, ' ')}: ${qcStatus ? (previousQCStatus || 'Pending QC') : (previousStatus || 'Not Started')} -> ${qcStatus || status}`,
+                    actor: loggedInUser,
+                    targetCollection: 'work_orders',
+                    targetId: wo.id,
+                    targetLabel: wo.job_details,
+                    workOrderId: wo.id,
+                    customerName: wo.customer,
+                    itemName: wo.job_details,
+                    department,
+                    oldValue: qcStatus ? (previousQCStatus || 'Pending QC') : (previousStatus || 'Not Started'),
+                    newValue: qcStatus || status,
+                    severity: qcStatus === 'QC Denied' ? 'warning' : 'success',
+                  });
 
-                      if (!wasAllApproved && allApproved && newOverallStatus === 'Ready for despatch') {
-                        notificationTasks.push(sendBackgroundPushEvent({
-                          title: 'Dispatch Ready',
-                          body: `Order #${wo.id}\nQC approved. Ready for dispatch`,
-                          departments: ['Dispatch'],
-                          workOrderId: wo.id,
-                          actor: loggedInUser.username,
-                        }));
-                      }
+                  const notificationTasks: Promise<any>[] = [];
 
-                      if (notificationTasks.length > 0) {
-                        void Promise.all(notificationTasks).catch(error => {
-                          console.error('Status notification failed:', error);
-                        });
-                      }
-                     } catch (err) {
-                       console.error('Status update failed:', err);
-                       setWo(wo);
-                       alert('Failed to update status');
-                     } finally {
-                       setIsUpdatingStatus(false);
-                       setStatusActionKey(null);
-                     }
-                   }}
-                  />
+                  if (status === 'Work Started' && previousStatus !== 'Work Started') {
+                    notificationTasks.push(sendBackgroundPushEvent({
+                      title: 'Work Started',
+                      body: `Order #${wo.id} | ${department.replace(/_/g, ' ')}\nProduction has started`,
+                      departments: ['Office'],
+                      workOrderId: wo.id,
+                      actor: loggedInUser.username,
+                    }));
+                  }
+
+                  if (status === 'Ready for QC' && previousStatus !== 'Ready for QC') {
+                    notificationTasks.push(sendBackgroundPushEvent({
+                      title: 'QC Check Required',
+                      body: `Order #${wo.id} | ${department.replace(/_/g, ' ')}\nReady for quality approval`,
+                      departments: ['Quality_Control'],
+                      workOrderId: wo.id,
+                      actor: loggedInUser.username,
+                    }));
+                  }
+
+                  if ((qcStatus === 'QC Approved' || qcStatus === 'QC Denied') && previousQCStatus !== qcStatus) {
+                    notificationTasks.push(sendBackgroundPushEvent({
+                      title: qcStatus,
+                      body: `Order #${wo.id} | ${department.replace(/_/g, ' ')}\n${qcStatus}`,
+                      departments: [department],
+                      workOrderId: wo.id,
+                      actor: loggedInUser.username,
+                    }));
+                  }
+
+                  if (!wasAllApproved && allApproved && newOverallStatus === 'Ready for despatch') {
+                    notificationTasks.push(sendBackgroundPushEvent({
+                      title: 'Dispatch Ready',
+                      body: `Order #${wo.id}\nQC approved. Ready for dispatch`,
+                      departments: ['Dispatch'],
+                      workOrderId: wo.id,
+                      actor: loggedInUser.username,
+                    }));
+                  }
+
+                  if (notificationTasks.length > 0) {
+                    void Promise.all(notificationTasks).catch(error => {
+                      console.error('Status notification failed:', error);
+                    });
+                  }
+                } catch (err) {
+                  console.error('Status update failed:', err);
+                  setWo(wo);
+                  alert('Failed to update status');
+                } finally {
+                  setIsUpdatingStatus(false);
+                  setStatusActionKey(null);
+                }
+              }}
+            />
+          </Card>
+        </div>
+
+        {/* Right Sidebar */}
+        <div className="w-full xl:w-80 space-y-4">
+          {/* Order Info Card */}
+          <Card className="p-4 md:p-5 rounded-xl overflow-hidden">
+            <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-4">Order Info</h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Batch Size</span>
+                <span className="text-base font-bold text-indigo-600">{wo.qty} <span className="text-[10px] text-gray-400 font-medium">PCS</span></span>
               </div>
-
-               <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col sm:flex-row gap-2 no-print">
-                 <button onClick={() => window.print()} className="flex-1 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2">
-                    <Printer size={16}/> PRINT JOB CARD
-                 </button>
-                 {isOffice && (
-                    <button onClick={async () => {
-                      if(confirm("Delete Order?")) {
-                        await supabase.from('work_orders').delete().eq('id', id);
-                        void logActivity({ eventType: 'work_order', action: 'deleted', title: 'Order Deleted', body: `Deleted order #${id} from WO Details`, actor: getStoredLoggedInUser(), targetCollection: 'work_orders', targetId: id, severity: 'warning' });
-                        onBack();
-                      }
-                    }} className="flex-1 py-2.5 px-4 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 border border-red-200">
-                       <Trash2 size={16}/> DELETE ORDER
-                    </button>
-                 )}
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Delivery ETD</span>
+                <span className="text-sm font-semibold text-orange-600 flex items-center gap-1"><Clock size={14}/> {wo.etd || 'N/A'}</span>
               </div>
-           </Card>
-         </div>
-       </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Blueprint Ref</span>
+                <span className="text-[11px] font-mono font-medium text-gray-700 px-2 py-1 bg-gray-50 rounded break-all max-w-[140px] text-right">{wo.drawing || '—'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">QC/Ready Date</span>
+                <span className="text-sm font-semibold text-green-600">{wo.ready_date || 'In Progress'}</span>
+              </div>
+            </div>
+          </Card>
+
+          {/* Actions Card */}
+          <Card className="p-4 md:p-5 rounded-xl overflow-hidden no-print">
+            <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-4">Actions</h3>
+            <div className="space-y-2">
+              <button onClick={() => window.print()} className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2">
+                <Printer size={16}/> Print Job Card
+              </button>
+              {isOffice && (
+                <button onClick={async () => {
+                  if(confirm("Delete Order?")) {
+                    await supabase.from('work_orders').delete().eq('id', id);
+                    void logActivity({ eventType: 'work_order', action: 'deleted', title: 'Order Deleted', body: `Deleted order #${id} from WO Details`, actor: getStoredLoggedInUser(), targetCollection: 'work_orders', targetId: id, severity: 'warning' });
+                    onBack();
+                  }
+                }} className="w-full py-2.5 px-4 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 border border-red-200">
+                  <Trash2 size={16}/> Delete Order
+                </button>
+              )}
+            </div>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 };
@@ -7315,7 +7433,7 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
           const departments = getEventDepartments(ev);
 
           return (
-            <div key={ev.id} className={`rounded-2xl bg-white border border-gray-100 border-l-4 ${tone} p-3.5 shadow-sm`}>
+            <div key={`${ev._source}-${ev.id}`} className={`rounded-2xl bg-white border border-gray-100 border-l-4 ${tone} p-3.5 shadow-sm`}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="text-[10px] font-black uppercase tracking-widest text-gray-400">{formatEventTime(ev)}</div>
@@ -7369,7 +7487,7 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
               {filteredEvents.map((ev: any) => {
                 const departments = getEventDepartments(ev);
                 return (
-                  <tr key={ev.id}>
+                  <tr key={`${ev._source}-${ev.id}`}>
                     <td className="px-4 py-2 text-xs text-gray-500 whitespace-nowrap">{formatEventTime(ev)}</td>
                     <td className="px-4 py-2"><Badge color="gray">{getEventType(ev)}</Badge></td>
                     <td className="px-4 py-2 text-xs font-black text-slate-700 whitespace-nowrap">{getEventAction(ev)}</td>
@@ -8745,7 +8863,9 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
   if (mode === 'detail' && selectedReport) {
     const r = selectedReport;
     return (
-      <div className="space-y-2">
+      <div className="space-y-1.5">
+
+        {/* Header */}
         <div className="flex justify-between items-center">
           <h2 className="text-xl font-black text-gray-800">Production Report</h2>
           <div className="flex items-center gap-2">
@@ -8755,9 +8875,10 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
           </div>
         </div>
 
+        {/* Summary Banner — tighter */}
         {r.results && r.results.length > 0 && (
-          <div className="bg-indigo-50 border border-indigo-200 rounded-2xl px-6 py-4 text-center">
-            <span className="text-lg font-black text-indigo-800">
+          <div className="bg-indigo-50 border border-indigo-200 rounded-2xl px-4 py-2.5 text-center">
+            <span className="text-base font-black text-indigo-800">
               In {r.grand_total_hours} Hrs Total {r.results.map((res, i) => (
                 <span key={i}>
                   {i > 0 && (i === r.results.length - 1 ? <span> and </span> : <span>, </span>)}
@@ -8768,58 +8889,56 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
           </div>
         )}
 
-        {/* ── Production Report Info ── */}
-        <Card>
-          <h3 className="font-black text-gray-700 mb-4 text-sm uppercase tracking-wider">Production Report</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-2 text-sm">
-            <div><span className="text-gray-400 font-semibold">Date:</span> <span className="font-bold text-gray-800 ml-1">{formatDateDMY(r.date)}</span></div>
-            <div><span className="text-gray-400 font-semibold">Department:</span> <span className="font-bold text-gray-800 ml-1">{r.department}</span></div>
-            <div><span className="text-gray-400 font-semibold">Report #:</span> <span className="font-bold text-gray-800 ml-1">{r.id}</span></div>
-            <div><span className="text-gray-400 font-semibold">Created by:</span> <span className="font-bold text-gray-800 ml-1">{r.created_by || '-'}</span></div>
+        {/* Card 1: Report Info + Work Breakdown — merged, 2-col */}
+        <Card className="p-3.5">
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4">
+            {/* LEFT: Report Info — compact inline */}
+            <div className="flex flex-wrap gap-x-6 gap-y-0.5 text-sm">
+              <span><span className="text-gray-400 font-semibold">Date:</span><strong className="text-gray-800 ml-1">{formatDateDMY(r.date)}</strong></span>
+              <span><span className="text-gray-400 font-semibold">Dept:</span><strong className="text-gray-800 ml-1">{r.department}</strong></span>
+              <span><span className="text-gray-400 font-semibold">Report #:</span><strong className="text-gray-800 ml-1">{r.id}</strong></span>
+              <span><span className="text-gray-400 font-semibold">By:</span><strong className="text-gray-800 ml-1">{r.created_by || '-'}</strong></span>
+            </div>
+
+            {/* RIGHT: Work Breakdown — compact table */}
+            <div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-[10px] font-black uppercase text-gray-400 border-b">
+                    <th className="text-left py-1 pr-4"></th>
+                    <th className="text-center py-1 pr-3">Workers</th>
+                    <th className="text-center py-1 pr-3">Hrs/Each</th>
+                    <th className="text-center py-1">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="py-1.5 pr-4 font-bold text-gray-800">Shift</td>
+                    <td className="py-1.5 pr-3 text-center font-semibold text-gray-700">{r.shift_workers}</td>
+                    <td className="py-1.5 pr-3 text-center font-semibold text-gray-700">{r.shift_hours}h</td>
+                    <td className="py-1.5 text-center font-bold text-blue-700">{r.total_shift_hours}h</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 pr-4 font-bold text-gray-800">Overtime</td>
+                    <td className="py-1.5 pr-3 text-center font-semibold text-gray-700">{r.ot_workers}</td>
+                    <td className="py-1.5 pr-3 text-center font-semibold text-gray-700">{r.ot_hours}h</td>
+                    <td className="py-1.5 text-center font-bold text-orange-700">{r.total_ot_hours}h</td>
+                  </tr>
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-gray-200">
+                    <td className="py-1.5 pr-4"></td>
+                    <td className="py-1.5 pr-3 text-center font-black text-gray-800 text-[10px] tracking-wider" colSpan={2}>GRAND TOTAL</td>
+                    <td className="py-1.5 text-center font-black text-green-700">{r.grand_total_hours}h</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
           </div>
         </Card>
 
-        {/* ── Work Breakdown ── */}
-        <Card>
-          <h3 className="font-black text-gray-700 mb-4 text-sm uppercase tracking-wider">Work Breakdown</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-[10px] font-black uppercase text-gray-400 border-b">
-                  <th className="text-left py-2"></th>
-                  <th className="text-center py-2">Workers</th>
-                  <th className="text-center py-2">Hrs/Each</th>
-                  <th className="text-center py-2">Total</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                <tr>
-                  <td className="py-2.5 font-bold text-gray-800">Shift</td>
-                  <td className="py-2.5 text-center font-semibold text-gray-700">{r.shift_workers}</td>
-                  <td className="py-2.5 text-center font-semibold text-gray-700">{r.shift_hours}h</td>
-                  <td className="py-2.5 text-center font-bold text-blue-700">{r.total_shift_hours}h</td>
-                </tr>
-                <tr>
-                  <td className="py-2.5 font-bold text-gray-800">Overtime</td>
-                  <td className="py-2.5 text-center font-semibold text-gray-700">{r.ot_workers}</td>
-                  <td className="py-2.5 text-center font-semibold text-gray-700">{r.ot_hours}h</td>
-                  <td className="py-2.5 text-center font-bold text-orange-700">{r.total_ot_hours}h</td>
-                </tr>
-              </tbody>
-              <tfoot>
-                <tr className="border-t-2 border-gray-200 bg-gray-50">
-                  <td className="py-3 font-black text-gray-800"></td>
-                  <td className="py-3 text-center" colSpan={2}><span className="font-black text-gray-800">GRAND TOTAL</span></td>
-                  <td className="py-3 text-center font-black text-green-700 text-base">{r.grand_total_hours}h</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </Card>
-
-        {/* ── Items ── */}
-        <Card>
-          <h3 className="font-black text-gray-700 mb-4 text-sm uppercase tracking-wider">Items</h3>
+        {/* Card 2: Items + Metrics — merged */}
+        <Card className="p-3.5">
           {(() => {
             const itemsArr = (r.items?.length ? r.items : [{ item_name: r.item_name, qty_produced: r.qty_produced, results: r.results || [] }]) as any[];
             return (
@@ -8827,9 +8946,9 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-[10px] font-black uppercase text-gray-400 border-b">
-                      <th className="text-left py-2">Item</th>
-                      <th className="text-center py-2 w-16">Qty</th>
-                      <th className="text-left py-2">Metrics</th>
+                      <th className="text-left py-1.5">Item</th>
+                      <th className="text-center py-1.5 w-16">Qty</th>
+                      <th className="text-left py-1.5">Metrics</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -8838,9 +8957,9 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
                       const metricsText = mets.length ? mets.map(m => `${m.metric}: ${m.totalQty} ${m.unit}`).join(', ') : '-';
                       return (
                         <tr key={idx}>
-                          <td className="py-2.5 font-semibold text-gray-800">{it.item_name}</td>
-                          <td className="py-2.5 text-center font-bold text-indigo-700">{it.qty_produced}</td>
-                          <td className="py-2.5 text-gray-600">{metricsText}</td>
+                          <td className="py-1.5 font-semibold text-gray-800">{it.item_name}</td>
+                          <td className="py-1.5 text-center font-bold text-indigo-700">{it.qty_produced}</td>
+                          <td className="py-1.5 text-gray-600">{metricsText}</td>
                         </tr>
                       );
                     })}
@@ -8849,46 +8968,45 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
               </div>
             );
           })()}
-        </Card>
 
-        {/* ── Metrics Total ── */}
-        <Card>
-          <h3 className="font-black text-gray-700 mb-4 text-sm uppercase tracking-wider">Metrics Total</h3>
           {r.results && r.results.length > 0 ? (
-            <div className="overflow-x-auto">
+            <div className="border-t border-gray-100 pt-2 mt-2">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-[10px] font-black uppercase text-gray-400 border-b">
-                    <th className="text-left py-2">Metric</th>
-                    <th className="text-right py-2">Req / Unit</th>
-                    <th className="text-right py-2">Total Qty</th>
-                    <th className="text-right py-2">Unit</th>
+                    <th className="text-left py-1.5">Metric</th>
+                    <th className="text-right py-1.5">Req / Unit</th>
+                    <th className="text-right py-1.5">Total Qty</th>
+                    <th className="text-right py-1.5">Unit</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {r.results.map((res, i) => (
                     <tr key={i}>
-                      <td className="py-2.5 font-semibold text-gray-800">{res.metric}</td>
-                      <td className="py-2.5 text-right text-gray-500">{res.qtyPerUnit ?? '-'}</td>
-                      <td className="py-2.5 text-right font-bold text-indigo-700">{res.totalQty}</td>
-                      <td className="py-2.5 text-right font-semibold text-gray-500">{res.unit}</td>
+                      <td className="py-1.5 font-semibold text-gray-800">{res.metric}</td>
+                      <td className="py-1.5 text-right text-gray-500">{res.qtyPerUnit ?? '-'}</td>
+                      <td className="py-1.5 text-right font-bold text-indigo-700">{res.totalQty}</td>
+                      <td className="py-1.5 text-right font-semibold text-gray-500">{res.unit}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-400 italic text-sm">No metric data for this report.</div>
+            <div className="text-center py-4 text-gray-400 italic text-sm">No metric data for this report.</div>
           )}
         </Card>
 
-        {/* ── Other Work ── */}
+        {/* Other Work — slim banner */}
         {r.other_work && (
-          <Card>
-            <h3 className="font-black text-gray-700 mb-4 text-sm uppercase tracking-wider">Other Work</h3>
-            <p className="text-sm text-gray-700 whitespace-pre-wrap">{r.other_work}</p>
-          </Card>
+          <div className="bg-yellow-50/60 border border-yellow-200 rounded-xl px-3.5 py-2.5">
+            <span className="text-[10px] font-black uppercase text-amber-600 tracking-wider flex items-center gap-1">
+              <FileText size={11}/> Other Work
+            </span>
+            <p className="text-sm text-gray-700 whitespace-pre-wrap mt-0.5">{r.other_work}</p>
+          </div>
         )}
+
       </div>
     );
   }
@@ -9006,193 +9124,202 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
 
   if (mode === 'entry') {
     return (
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <h2 className="text-xl font-black text-gray-800">{editingId ? 'Edit Production Report' : 'New Production Report'}</h2>
-          <button onClick={() => { setMode('list'); resetForm(); }} className="text-sm font-bold text-gray-500 hover:text-gray-700">← Back</button>
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <button onClick={() => { setMode('list'); resetForm(); }} className="text-xs font-black text-gray-400 hover:text-gray-600 uppercase tracking-widest mb-0.5 flex items-center gap-1">
+              <ChevronLeft size={14}/> Back to List
+            </button>
+            <h2 className="text-xl font-black text-gray-800">{editingId ? 'Edit Production Report' : 'New Production Report'}</h2>
+          </div>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="shrink-0 px-5 py-3 bg-indigo-600 text-white rounded-lg text-sm font-black hover:bg-indigo-700 disabled:opacity-50 transition-all"
+          >
+            {saving ? 'Saving...' : editingId ? 'Update' : 'Save'}
+          </button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card>
-            <h3 className="font-black text-gray-700 mb-4 text-sm">Department & Labor</h3>
-            <div className="space-y-4">
+        {/* 3-Column Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_1.4fr_2.4fr] gap-4">
+
+          {/* Column 1 — Date & Department */}
+          <Card className="p-4 rounded-xl">
+            <h3 className="text-xs font-black uppercase text-gray-400 tracking-wider mb-3">Date & Dept</h3>
+            <div className="space-y-3">
               <div>
-                <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Date</label>
-                <input type="date" value={reportDate} onChange={e => setReportDate(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border rounded-xl mt-1" />
+                <label className="text-xs font-black uppercase text-gray-400 block mb-0.5">Date</label>
+                <input type="date" value={reportDate} onChange={e => setReportDate(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-semibold focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all" />
               </div>
               <div>
-                <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Department</label>
-                <select value={selectedDept} onChange={e => setSelectedDept(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border rounded-xl mt-1">
-                  <option value="">Select Department</option>
+                <label className="text-xs font-black uppercase text-gray-400 block mb-0.5">Department</label>
+                <select value={selectedDept} onChange={e => setSelectedDept(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-semibold focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all">
+                  <option value="">Select</option>
                   {departments.filter(d => !['Office', 'Quality Control', 'Dispatch', 'QC', 'QC Control', 'Quality_Control'].includes(d.name)).map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
                 </select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="rounded-xl bg-blue-50/50 p-4 border border-blue-100">
-                  <div className="text-[10px] font-black uppercase text-blue-500 mb-2">Shift</div>
-                  <div className="space-y-2">
-                    <div>
-                      <label className="text-[11px] font-bold text-gray-500">Workers</label>
-                      <input type="number" min="0" value={shiftWorkers} onChange={e => setShiftWorkers(Number(e.target.value))} className="w-full px-3 py-2 bg-white border rounded-lg text-sm" />
-                    </div>
-                    <div>
-                      <label className="text-[11px] font-bold text-gray-500">Hours</label>
-                      <input type="number" min="0" step="0.5" value={shiftHours} onChange={e => setShiftHours(Number(e.target.value))} className="w-full px-3 py-2 bg-white border rounded-lg text-sm" />
-                    </div>
-                    <div className="text-sm font-bold text-blue-700 pt-1">Total: {totalShiftHours} hrs</div>
-                  </div>
-                </div>
-                <div className="rounded-xl bg-orange-50/50 p-4 border border-orange-100">
-                  <div className="text-[10px] font-black uppercase text-orange-500 mb-2">Overtime</div>
-                  <div className="space-y-2">
-                    <div>
-                      <label className="text-[11px] font-bold text-gray-500">Workers</label>
-                      <input type="number" min="0" value={otWorkers} onChange={e => setOtWorkers(Number(e.target.value))} className="w-full px-3 py-2 bg-white border rounded-lg text-sm" />
-                    </div>
-                    <div>
-                      <label className="text-[11px] font-bold text-gray-500">Hours</label>
-                      <input type="number" min="0" step="0.5" value={otHours} onChange={e => setOtHours(Number(e.target.value))} className="w-full px-3 py-2 bg-white border rounded-lg text-sm" />
-                    </div>
-                    <div className="text-sm font-bold text-orange-700 pt-1">Total: {totalOtHours} hrs</div>
-                  </div>
-                </div>
-              </div>
-              <div className="rounded-xl bg-green-50 p-4 border border-green-200 text-center">
-                <span className="text-xs font-black uppercase text-green-600">Total Man Hour</span>
-                <div className="text-2xl font-black text-green-700">{grandTotalHours} hrs</div>
               </div>
             </div>
           </Card>
 
-          <Card>
-            <h3 className="font-black text-gray-700 mb-4 text-sm">Item & Production</h3>
-             <div className="space-y-4">
-               <div className="text-xs font-bold text-gray-500 mb-1">Items ({entryItems.length})</div>
-               <div className="max-h-[260px] overflow-y-auto space-y-3">
-                   <div className="flex items-end gap-2 mb-1">
-                    <div className="flex-1">
-                      <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Item</label>
-                    </div>
-                    <div className="w-24">
-                      <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Qty</label>
-                    </div>
-                    <div className="w-10" />
+          {/* Column 2 — Labor Breakdown */}
+          <Card className="p-4 rounded-xl">
+            <h3 className="text-xs font-black uppercase text-gray-400 tracking-wider mb-3">Labor</h3>
+            <div className="space-y-3">
+              <div className="rounded-lg bg-blue-50/60 p-3 border border-blue-100">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                  <span className="text-[11px] font-black uppercase text-blue-600 tracking-wider">Shift</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 block">Workers</label>
+                    <input type="number" min="0" value={shiftWorkers} onChange={e => setShiftWorkers(Number(e.target.value))} className="w-full px-2 py-1.5 bg-white border border-gray-200 rounded-md text-sm font-semibold focus:border-blue-400 outline-none transition-all" />
                   </div>
-                  {entryItems.map((item, idx) => (
-                    <div key={idx} className="flex items-end gap-2">
-                      <div className="flex-1 relative">
-                        {!selectedDept ? (
-                          <div className="w-full px-3 py-2.5 bg-gray-100 border rounded-xl mt-1 text-sm text-gray-400">Select a department first</div>
-                        ) : (
-                          <>
-                            <input
-                              placeholder="Search items..."
-                              value={itemSearchText[idx] ?? ''}
-                              onChange={e => {
-                                const val = e.target.value;
-                                setItemSearchText(prev => { const next = [...prev]; next[idx] = val; return next; });
-                                if (item.itemId > 0) {
-                                  setEntryItems(prev => { const next = [...prev]; next[idx] = { ...next[idx], itemId: 0 }; return next; });
-                                }
-                                setOpenDropdownIdx(idx);
-                              }}
-                              onFocus={() => setOpenDropdownIdx(idx)}
-                              onBlur={() => setTimeout(() => setOpenDropdownIdx(null), 200)}
-                              className="w-full px-3 py-2.5 bg-gray-50 border rounded-xl mt-1 text-sm outline-none focus:border-orange-400 transition-colors"
-                            />
-                            {openDropdownIdx === idx && (
-                              <div className="absolute z-20 left-0 right-0 mt-1 bg-white border rounded-xl shadow-lg max-h-48 overflow-y-auto">
-                                {items.filter(i => (i.departments || []).includes(selectedDept!))
-                                  .filter(i => !itemSearchText[idx] || i.name.toLowerCase().includes(itemSearchText[idx].toLowerCase()))
-                                  .filter(i => !entryItems.some((e, ei) => ei !== idx && e.itemId === i.id))
-                                  .slice(0, 50)
-                                  .map(i => (
-                                    <button
-                                      type="button"
-                                      key={i.id}
-                                      onMouseDown={() => {
-                                        setEntryItems(prev => { const next = [...prev]; next[idx] = { ...next[idx], itemId: i.id }; return next; });
-                                        setItemSearchText(prev => { const next = [...prev]; next[idx] = i.name; return next; });
-                                        setOpenDropdownIdx(null);
-                                      }}
-                                      className={`w-full text-left px-3 py-2 text-sm hover:bg-orange-50 transition-colors ${item.itemId === i.id ? 'bg-orange-100 font-bold' : ''}`}
-                                    >{i.name}</button>
-                                  ))}
-                                {items.filter(i => (i.departments || []).includes(selectedDept!)).filter(i => !itemSearchText[idx] || i.name.toLowerCase().includes(itemSearchText[idx].toLowerCase())).filter(i => !entryItems.some((e, ei) => ei !== idx && e.itemId === i.id)).length === 0 && (
-                                  <div className="px-3 py-2 text-sm text-gray-400 italic">No items match</div>
-                                )}
-                              </div>
-                            )}
-                          </>
-                        )}
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 block">Hours</label>
+                    <input type="number" min="0" step="0.5" value={shiftHours} onChange={e => setShiftHours(Number(e.target.value))} className="w-full px-2 py-1.5 bg-white border border-gray-200 rounded-md text-sm font-semibold focus:border-blue-400 outline-none transition-all" />
+                  </div>
+                </div>
+                <div className="mt-1 text-sm font-bold text-blue-700">{totalShiftHours} hrs</div>
+              </div>
+              <div className="rounded-lg bg-orange-50/60 p-3 border border-orange-100">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+                  <span className="text-[11px] font-black uppercase text-orange-600 tracking-wider">Overtime</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 block">Workers</label>
+                    <input type="number" min="0" value={otWorkers} onChange={e => setOtWorkers(Number(e.target.value))} className="w-full px-2 py-1.5 bg-white border border-gray-200 rounded-md text-sm font-semibold focus:border-orange-400 outline-none transition-all" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 block">Hours</label>
+                    <input type="number" min="0" step="0.5" value={otHours} onChange={e => setOtHours(Number(e.target.value))} className="w-full px-2 py-1.5 bg-white border border-gray-200 rounded-md text-sm font-semibold focus:border-orange-400 outline-none transition-all" />
+                  </div>
+                </div>
+                <div className="mt-1 text-sm font-bold text-orange-700">{totalOtHours} hrs</div>
+              </div>
+              <div className="rounded-lg bg-green-50 p-3 border border-green-200 text-center">
+                <span className="text-[11px] font-black uppercase text-green-600 tracking-wider">Total</span>
+                <div className="text-xl font-black text-green-700">{grandTotalHours} hrs</div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Column 3 — Items + Metrics */}
+          <Card className="p-4 rounded-xl flex flex-col">
+            <h3 className="text-xs font-black uppercase text-gray-400 tracking-wider mb-3">Items</h3>
+            <div className="space-y-2 flex-1 min-h-0">
+              <div className="space-y-1.5 max-h-[140px] overflow-y-visible">
+                {entryItems.map((item, idx) => (
+                  <div key={idx} className="flex items-center gap-1.5">
+                    <div className="flex-1 relative">
+                      {!selectedDept ? (
+                        <div className="w-full px-2.5 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-400">Select dept first</div>
+                      ) : (
+                        <>
+                          <input
+                            placeholder="Item..."
+                            value={itemSearchText[idx] ?? ''}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setItemSearchText(prev => { const next = [...prev]; next[idx] = val; return next; });
+                              if (item.itemId > 0) {
+                                setEntryItems(prev => { const next = [...prev]; next[idx] = { ...next[idx], itemId: 0 }; return next; });
+                              }
+                              setOpenDropdownIdx(idx);
+                            }}
+                            onFocus={() => setOpenDropdownIdx(idx)}
+                            onBlur={() => setTimeout(() => setOpenDropdownIdx(null), 200)}
+                            className="w-full px-2.5 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-semibold focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
+                          />
+                          {openDropdownIdx === idx && (
+                            <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-36 overflow-y-auto">
+                              {items.filter(i => (i.departments || []).includes(selectedDept!))
+                                .filter(i => !itemSearchText[idx] || i.name.toLowerCase().includes(itemSearchText[idx].toLowerCase()))
+                                .filter(i => !entryItems.some((e, ei) => ei !== idx && e.itemId === i.id))
+                                .slice(0, 50)
+                                .map(i => (
+                                  <button
+                                    type="button"
+                                    key={i.id}
+                                    onMouseDown={() => {
+                                      setEntryItems(prev => { const next = [...prev]; next[idx] = { ...next[idx], itemId: i.id }; return next; });
+                                      setItemSearchText(prev => { const next = [...prev]; next[idx] = i.name; return next; });
+                                      setOpenDropdownIdx(null);
+                                    }}
+                                    className={`w-full text-left px-2.5 py-1.5 text-sm hover:bg-indigo-50 transition-colors ${item.itemId === i.id ? 'bg-indigo-100 font-bold' : ''}`}
+                                  >{i.name}</button>
+                                ))}
+                              {items.filter(i => (i.departments || []).includes(selectedDept!)).filter(i => !itemSearchText[idx] || i.name.toLowerCase().includes(itemSearchText[idx].toLowerCase())).filter(i => !entryItems.some((e, ei) => ei !== idx && e.itemId === i.id)).length === 0 && (
+                                <div className="px-2.5 py-1.5 text-sm text-gray-400 italic">No items match</div>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      )}
                     </div>
-                    <div className="w-24">
-                      <input type="number" min="0" value={item.qty} onChange={e => { const val = Number(e.target.value); setEntryItems(prev => { const next = [...prev]; next[idx] = { ...next[idx], qty: val }; return next; }); }} className="w-full px-3 py-2.5 bg-gray-50 border rounded-xl mt-1 text-sm" />
+                    <div className="w-16">
+                      <input type="number" min="0" value={item.qty} onChange={e => { const val = Number(e.target.value); setEntryItems(prev => { const next = [...prev]; next[idx] = { ...next[idx], qty: val }; return next; }); }} className="w-full px-2 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-semibold text-center focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all" />
                     </div>
                     {entryItems.length > 1 && (
-                      <button onClick={() => { setEntryItems(prev => prev.filter((_, i) => i !== idx)); setItemSearchText(prev => prev.filter((_, i) => i !== idx)); }} className="pb-1 text-red-400 hover:text-red-600"><Trash2 size={18} /></button>
+                      <button onClick={() => { setEntryItems(prev => prev.filter((_, i) => i !== idx)); setItemSearchText(prev => prev.filter((_, i) => i !== idx)); }} className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"><Trash2 size={14} /></button>
                     )}
                   </div>
                 ))}
               </div>
-                <button onClick={() => { setEntryItems(prev => [...prev, { itemId: 0, qty: 0 }]); setItemSearchText(prev => [...prev, '']); }} className="text-indigo-600 text-sm font-bold hover:text-indigo-800 flex items-center gap-1">
-                  <Plus size={16} /> Add Item
-                </button>
-
-              {metricResults.length > 0 && (
-                <div className="border-t pt-4">
-                  <h4 className="font-bold text-sm text-gray-500 mb-3">📊 Metric Calculation</h4>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-[10px] font-black uppercase text-gray-400 border-b">
-                          <th className="text-left py-2">Metric</th>
-                          <th className="text-right py-2">Req/Unit</th>
-                          <th className="text-right py-2">Total</th>
-                          <th className="text-right py-2">Unit</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {metricResults.map((r, i) => (
-                          <tr key={i} className="text-sm">
-                            <td className="py-2 font-bold text-gray-700">{r.metric}</td>
-                            <td className="py-2 text-right text-gray-500">{r.qtyPerUnit ?? '-'}</td>
-                            <td className="py-2 text-right font-black text-indigo-700">{r.totalQty}</td>
-                            <td className="py-2 text-right font-bold text-gray-500">{r.unit}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="mt-3 bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3 text-center">
-                    <span className="text-sm font-black text-indigo-800">
-                      In {grandTotalHours} Hrs Total {metricResults.map((res, i) => (
-                        <span key={i}>
-                          {i > 0 && (i === metricResults.length - 1 ? <span> and </span> : <span>, </span>)}
-                          {res.totalQty} {res.unit}
-                        </span>
-                      ))} Work was done
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block">Other Work</label>
-                <textarea placeholder="Describe any other work done..." value={otherWork} onChange={e => setOtherWork(e.target.value)} rows={3} className="w-full px-4 py-3 bg-gray-50 border rounded-xl text-sm resize-none" />
-              </div>
-
-              <div className="sticky bottom-0 bg-white pb-2 pt-4">
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black shadow-lg hover:bg-indigo-700 disabled:opacity-50"
-                >
-                  {saving ? 'Saving...' : editingId ? 'Update' : 'Save'}
-                </button>
-              </div>
+              <button onClick={() => { setEntryItems(prev => [...prev, { itemId: 0, qty: 0 }]); setItemSearchText(prev => [...prev, '']); }} className="text-indigo-600 text-sm font-bold hover:text-indigo-800 flex items-center gap-1 transition-colors">
+                <Plus size={14} /> Add Item
+              </button>
             </div>
+
+            {/* Metrics (inline compact) */}
+            {metricResults.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <h4 className="text-xs font-black uppercase text-gray-400 tracking-wider mb-1.5">Metrics</h4>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-[10px] font-black uppercase text-gray-400 border-b border-gray-200">
+                        <th className="text-left py-1">Metric</th>
+                        <th className="text-right py-1">Unit</th>
+                        <th className="text-right py-1">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {metricResults.map((r, i) => (
+                        <tr key={i} className="hover:bg-gray-50">
+                          <td className="py-1 font-bold text-gray-700">{r.metric}</td>
+                          <td className="py-1 text-right text-gray-500">{r.unit}</td>
+                          <td className="py-1 text-right font-black text-indigo-700 tabular-nums">{r.totalQty}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mt-1.5 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-1.5 text-center">
+                  <span className="text-sm font-black text-indigo-800">
+                    In {grandTotalHours} hrs • {metricResults.map((res, i) => (
+                      <span key={i}>
+                        {i > 0 && (i === metricResults.length - 1 ? <span> & </span> : <span>, </span>)}
+                        {res.totalQty} {res.unit}
+                      </span>
+                    ))}
+                  </span>
+                </div>
+              </div>
+            )}
           </Card>
+        </div>
+
+        {/* Bottom Bar — Other Work Notes */}
+        <div className="bg-yellow-50/60 border border-yellow-200 rounded-xl p-4">
+          <label className="text-xs font-black uppercase text-amber-600 block mb-1.5 flex items-center gap-1">
+            <FileText size={12}/> Other Work Notes
+          </label>
+          <textarea placeholder="Describe any other work done during the shift..." value={otherWork} onChange={e => setOtherWork(e.target.value)} rows={3} className="w-full px-3 py-2.5 bg-white border border-yellow-200 rounded-lg text-sm resize-y focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none transition-all" />
         </div>
       </div>
     );

@@ -26,6 +26,9 @@ const DepartmentStatusTracker: React.FC<DepartmentStatusTrackerProps> = ({
   const isQC = userDept === 'Quality_Control';
   const isOffice = userDept === 'Office';
   const canQC = isQC || isOffice;
+  const DEPT_STATUS_ORDER = ['Not Started', 'Work Started', 'Ready for QC'];
+  const isDeptForward = (current: string, next: string) =>
+    DEPT_STATUS_ORDER.indexOf(next) === DEPT_STATUS_ORDER.indexOf(current) + 1;
 
   const getDepartmentStatus = (dept: string): DepartmentStatus => {
     return departmentStatuses?.find(ds =>
@@ -135,16 +138,16 @@ const DepartmentStatusTracker: React.FC<DepartmentStatusTrackerProps> = ({
 
               {canEdit && !isQC && (
                 <div className="grid grid-cols-3 gap-1.5 no-print">
-                  {['Not Started', 'Work Started', 'Ready for QC'].map(status => (
+                  {DEPT_STATUS_ORDER.filter(s => isDeptForward(deptStatus.status, s) || s === deptStatus.status).map(status => (
                     <button
                       key={status}
                       onClick={() => handleStatusChange(dept, status)}
                       disabled={deptStatus.status === status || isDepartmentBusy}
                        className={`min-h-10 px-2 py-2 rounded-xl text-[11px] font-black transition-all ${
-                        deptStatus.status === status
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 text-gray-600'
-                      } disabled:opacity-50`}
+                         deptStatus.status === status
+                           ? 'bg-blue-600 text-white'
+                           : 'bg-gray-100 text-gray-600'
+                       } disabled:opacity-50`}
                     >
                       {isDepartmentBusy ? 'Updating' : status === 'Not Started' ? 'Queue' : status === 'Work Started' ? 'Progress' : 'Ready QC'}
                     </button>
@@ -152,7 +155,7 @@ const DepartmentStatusTracker: React.FC<DepartmentStatusTrackerProps> = ({
                 </div>
               )}
 
-              {canEdit && canQC && deptStatus.status === 'Ready for QC' && (
+              {canEdit && canQC && deptStatus.status === 'Ready for QC' && deptStatus.qc_status !== 'QC Approved' && (
                 <div className="grid grid-cols-2 gap-1.5 no-print">
                   <button onClick={() => handleQCStatusChange(dept, 'QC Approved')} disabled={isDepartmentBusy} className="min-h-10 rounded-xl bg-green-600 text-white text-xs font-black disabled:opacity-50">Approve</button>
                   <button onClick={() => handleQCStatusChange(dept, 'QC Denied')} disabled={isDepartmentBusy} className="min-h-10 rounded-xl bg-red-600 text-white text-xs font-black disabled:opacity-50">Deny</button>
@@ -203,7 +206,7 @@ const DepartmentStatusTracker: React.FC<DepartmentStatusTrackerProps> = ({
 
             {canEdit && !isQC && (
               <div className="grid grid-cols-3 sm:flex gap-1.5 sm:gap-1 flex-wrap mb-2 sm:mb-1.5 no-print">
-                {['Not Started', 'Work Started', 'Ready for QC'].map(status => (
+                {DEPT_STATUS_ORDER.filter(s => isDeptForward(deptStatus.status, s) || s === deptStatus.status).map(status => (
                   <button
                     key={status}
                     onClick={() => handleStatusChange(dept, status)}
@@ -233,7 +236,7 @@ const DepartmentStatusTracker: React.FC<DepartmentStatusTrackerProps> = ({
                   </div>
                 )}
                 
-                {canEdit && canQC && (
+                {canEdit && canQC && deptStatus.qc_status !== 'QC Approved' && (
                   <div className="flex gap-1.5 no-print">
                     <button
                       onClick={() => handleQCStatusChange(dept, 'QC Approved')}

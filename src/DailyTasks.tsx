@@ -54,6 +54,7 @@ const allStatuses = ['pending', 'in progress', 'completed', 'cancelled'];
 
 const DailyTasks: React.FC<Props> = ({ loggedInUser }) => {
   const [tasks, setTasks] = useState<DailyTask[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingTask, setEditingTask] = useState<DailyTask | null>(null);
@@ -71,7 +72,12 @@ const DailyTasks: React.FC<Props> = ({ loggedInUser }) => {
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchTasks(); }, [fetchTasks]);
+  const fetchUsers = useCallback(async () => {
+    const { data } = await supabase.from('users').select('*');
+    if (data) setUsers(data as User[]);
+  }, []);
+
+  useEffect(() => { fetchTasks(); fetchUsers(); }, [fetchTasks, fetchUsers]);
 
   const handleSave = async () => {
     if (!form.title.trim() || !form.assignee.trim()) {
@@ -113,6 +119,15 @@ const DailyTasks: React.FC<Props> = ({ loggedInUser }) => {
   };
 
   const filtered = filter === 'All' ? tasks : tasks.filter(t => t.status === filter);
+  const visibleTasks = isOffice ? filtered : filtered.filter(t => t.assignee === loggedInUser.username);
+
+  const groupedUsers = users.reduce<Record<string, User[]>>((acc, u) => {
+    const dept = normalizeDepartment(u.department) || 'Other';
+    if (!acc[dept]) acc[dept] = [];
+    acc[dept].push(u);
+    return acc;
+  }, {});
+  const sortedGroups = Object.entries(groupedUsers).sort(([a], [b]) => a.localeCompare(b));
 
   const statuses = ['All', ...allStatuses];
 
@@ -141,7 +156,16 @@ const DailyTasks: React.FC<Props> = ({ loggedInUser }) => {
             <input value={form.title} onChange={e => setForm({...form, title: e.target.value})} placeholder="Task title *" className="w-full px-3 py-2.5 border rounded-lg text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500" />
             <textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})} placeholder="Description" rows={5} className="w-full px-3 py-2.5 border rounded-lg text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500 resize-y" />
             <div className="grid grid-cols-2 gap-2">
-              <input value={form.assignee} onChange={e => setForm({...form, assignee: e.target.value})} placeholder="Assign to" className="w-full px-3 py-2.5 border rounded-lg text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500" />
+              <select value={form.assignee} onChange={e => setForm({...form, assignee: e.target.value})} className="w-full px-3 py-2.5 border rounded-lg text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">Select user...</option>
+                {sortedGroups.map(([dept, deptUsers]) => (
+                  <optgroup key={dept} label={dept.replace(/_/g, ' ')}>
+                    {deptUsers.map(u => (
+                      <option key={u.id} value={u.username}>{u.username}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
               <input type="date" value={form.due_date} onChange={e => setForm({...form, due_date: e.target.value})} className="w-full px-3 py-2.5 border rounded-lg text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <select value={form.priority} onChange={e => setForm({...form, priority: e.target.value})} className="w-full px-3 py-2.5 border rounded-lg text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500">
@@ -160,11 +184,11 @@ const DailyTasks: React.FC<Props> = ({ loggedInUser }) => {
 
       {loading ? (
         <div className="text-center py-10 text-sm font-semibold text-gray-400">Loading...</div>
-      ) : filtered.length === 0 ? (
-        <div className="text-center py-10 text-sm font-semibold text-gray-400">No tasks found.</div>
+      ) : visibleTasks.length === 0 ? (
+        <div className="text-center py-10 text-sm font-semibold text-gray-400">{isOffice ? 'No tasks found.' : 'No tasks assigned to you.'}</div>
       ) : (
         <div className="grid gap-2.5">
-          {filtered.map(task => (
+          {visibleTasks.map(task => (
             <div key={task.id} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
