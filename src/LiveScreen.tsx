@@ -103,6 +103,14 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
   useEffect(() => { fetchData(); }, [fetchData]);
 
   useEffect(() => {
+    const channel = supabase
+      .channel('live-screen-wo-changes')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'work_orders' }, () => { fetchData(); })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchData]);
+
+  useEffect(() => {
     const iv = setInterval(() => { if (playing) { fetchData(); setTick(t => t + 1); } }, 30000);
     return () => clearInterval(iv);
   }, [playing, fetchData]);

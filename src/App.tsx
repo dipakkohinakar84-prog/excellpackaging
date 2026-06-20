@@ -66,7 +66,6 @@ import { AppView, User, Customer, Item, WorkOrder, Department, WOStatus, ChildIt
 import { supabase, supabaseAnonKey, pb, loginWithMobilePassword, getCurrentAuthUser, logoutAuth, mapAuthRecordToUser } from './supabase';
 import Login from './LoginComponent';
 import { canAccessView, filterWorkOrdersByDepartment, getQCApprovalProgress, sendNotification, normalizeDepartment } from './utils';
-import DepartmentStatusTracker from './DepartmentStatusTracker';
 import MyTasks from './MyTasks';
 import DailyTasks from './DailyTasks';
 import LiveScreen from './LiveScreen';
@@ -483,6 +482,35 @@ const buildDepartmentStatusUpdate = (wo: WorkOrder, user: User, nextStatus: stri
     departmentStatuses,
     overallStatus,
   };
+};
+
+const updateSingleDepartmentStatus = (wo: WorkOrder, department: string, user: User, nextStatus: string) => {
+  const now = new Date().toISOString();
+  const existingStatuses = Array.isArray(wo.department_statuses) ? wo.department_statuses : [];
+  const targetDeptNorm = normalizeDepartment(department);
+  let found = false;
+  const departmentStatuses: DepartmentStatus[] = existingStatuses.map(s => {
+    if (normalizeDepartment(s.department) !== targetDeptNorm) return s;
+    found = true;
+    return {
+      ...s,
+      status: nextStatus as DepartmentWOStatus,
+      qc_status: nextStatus === 'QC Approved' || nextStatus === 'QC Denied' ? nextStatus as QCStatus : s.qc_status,
+      updated_at: now,
+      updated_by: user.username,
+    };
+  });
+  if (!found) {
+    departmentStatuses.push({
+      department,
+      status: nextStatus as DepartmentWOStatus,
+      qc_status: nextStatus === 'QC Approved' || nextStatus === 'QC Denied' ? nextStatus as QCStatus : undefined,
+      updated_at: now,
+      updated_by: user.username,
+    });
+  }
+  const overallStatus = deriveOverallStatusFromDepartmentStatuses(wo, departmentStatuses);
+  return { departmentStatuses, overallStatus };
 };
 
 const deriveOverallStatusFromDepartmentStatuses = (wo: WorkOrder, departmentStatuses: DepartmentStatus[]): WOStatus => {
@@ -5579,6 +5607,41 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
     return map;
   }, [statusEvents]);
 
+  const [pendingDeptAction, setPendingDeptAction] = useState<{dept: string; status: string} | null>(null);
+
+  const updateWODetailsDeptStatus = useCallback(async (targetWo: WorkOrder, department: string, status: string) => {
+    if (isUpdatingStatus) return;
+    setIsUpdatingStatus(true);
+    const previousWo = wo;
+    try {
+      const result = updateSingleDepartmentStatus(targetWo, department, loggedInUser, status);
+      setWo({ ...targetWo, department_statuses: result.departmentStatuses, status: result.overallStatus });
+      const { error } = await supabase.from('work_orders').update({
+        department_statuses: result.departmentStatuses,
+        status: result.overallStatus,
+      }).eq('id', targetWo.id);
+      if (error) throw error;
+      const prevDeptStatus = (targetWo.department_statuses || []).find(s => normalizeDepartment(s.department) === normalizeDepartment(department));
+      void logActivity({
+        eventType: 'work_order', action: 'department_status_changed',
+        title: 'Department Status Changed',
+        body: `Order #${targetWo.id} | ${department.replace(/_/g, ' ')}: ${(prevDeptStatus?.status || 'Not Started')} -> ${status}`,
+        actor: loggedInUser, targetCollection: 'work_orders', targetId: targetWo.id, targetLabel: targetWo.job_details,
+        workOrderId: targetWo.id, customerName: targetWo.customer, itemName: targetWo.job_details,
+        department, oldValue: prevDeptStatus?.status || 'Not Started', newValue: status,
+        severity: status === 'QC Denied' ? 'warning' : 'success',
+      });
+      invalidateCollectionCache('work_orders');
+      fetchWO();
+    } catch (err) {
+      setWo(previousWo);
+      alert('Failed to update status');
+    } finally {
+      setIsUpdatingStatus(false);
+      setPendingDeptAction(null);
+    }
+  }, [wo, loggedInUser, isUpdatingStatus, fetchWO]);
+
   const updateWODetailsStatus = useCallback(async (targetWo: WorkOrder, status: string) => {
     if (isUpdatingStatus) return;
     const userDept = normalizeDepartment(loggedInUser.department);
@@ -5644,23 +5707,15 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
 
   const normUserDept = normalizeDepartment(loggedInUser.department);
   const isOffice = normUserDept === 'Office';
+  const assignedProductionDepts = (wo.assigned_departments || []).filter(d => {
+    const norm = normalizeDepartment(d);
+    return norm !== 'Office' && norm !== 'Quality_Control' && norm !== 'Dispatch' && norm !== 'Plywood';
+  });
 
   const STATUS_FLOW = ['Not Started', 'Work Started', 'Ready for QC', 'Ready for despatch', 'Dispatched', 'Delivered'];
-  const STEP_LABELS: Record<string, string> = {
-    'Not Started': 'Order Placed',
-    'Work Started': 'Work Started',
-    'Ready for QC': 'Send To QC',
-    'Ready for despatch': 'QC Done',
-    'Dispatched': 'Dispatched',
-    'Delivered': 'Delivered',
-  };
-  const currentStepIdx = STATUS_FLOW.indexOf(wo.status);
-
-  const getStepState = (idx: number) => {
-    if (idx < currentStepIdx) return 'completed';
-    if (idx === currentStepIdx) return 'current';
-    return 'upcoming';
-  };
+  const DEPT_FLOW = ['Not Started', 'Work Started', 'Ready for QC'];
+  const QC_FLOW = ['Pending QC', 'QC Approved', 'QC Denied'];
+  const DISPATCH_FLOW = ['Ready for despatch', 'Dispatched', 'Delivered'];
 
   return (
     <div className="space-y-3 sm:space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
@@ -5689,68 +5744,307 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
             </div>
           </Card>
 
-          {/* Progress Timeline */}
-          <Card className="p-3 md:p-5 rounded-xl overflow-hidden">
-            <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-4">Order Progress</h3>
-            <div className="relative">
-              {STATUS_FLOW.map((step, idx) => {
-                const state = getStepState(idx);
-                return (
-                  <div key={step} className="flex items-start gap-3 pb-6 last:pb-0 relative">
-                    {/* Vertical connector line */}
-                    {idx < STATUS_FLOW.length - 1 && (
-                      <div className={`absolute left-[11px] top-5 w-0.5 h-full -z-0 ${
-                        state === 'completed' ? 'bg-emerald-400' : 'bg-gray-200'
-                      }`} />
-                    )}
-                    {/* Circle */}
-                    <div className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center z-10 ${
-                      state === 'completed'
-                        ? 'bg-emerald-100 text-emerald-600'
-                        : state === 'current'
-                        ? 'bg-blue-100 text-blue-600 ring-4 ring-blue-50'
-                        : 'bg-gray-100 text-gray-300'
-                    }`}>
-                      {state === 'completed' ? (
-                        <Check size={14} strokeWidth={3} />
-                      ) : state === 'current' ? (
-                        <div className="w-2.5 h-2.5 rounded-full bg-blue-600" />
-                      ) : (
-                        <div className="w-2.5 h-2.5 rounded-full bg-gray-300" />
+          {/* Department Progress */}
+          <>
+            <style>{`
+              @keyframes fadeSlideUp{0%{opacity:0;transform:translateY(16px)}100%{opacity:1;transform:translateY(0)}}
+              @keyframes checkPop{0%{transform:scale(0)}50%{transform:scale(1.25)}100%{transform:scale(1)}}
+              @keyframes pulseDot{0%,100%{opacity:1}50%{opacity:0.35}}
+              .animate-fade-slide-up{animation:fadeSlideUp .35s ease-out both}
+              .animate-check-pop{animation:checkPop .35s cubic-bezier(.34,1.56,.64,1) both}
+              .animate-pulse-dot{animation:pulseDot 2s ease-in-out infinite}
+              .scrollbar-thin::-webkit-scrollbar{width:6px;height:6px}
+              .scrollbar-thin::-webkit-scrollbar-track{background:transparent}
+              .scrollbar-thin::-webkit-scrollbar-thumb{background:#e2e8f0;border-radius:8px}
+            `}</style>
+
+            <div className="space-y-3">
+                {/* Compact Overall Header */}
+                <div className="flex items-center justify-between bg-white rounded-xl px-4 py-3 border border-gray-100 shadow-sm">
+                  <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Overall</span>
+                  <div className="flex items-center gap-1.5">
+                    {STATUS_FLOW.map((step, idx) => {
+                      const currentStepIdx = STATUS_FLOW.indexOf(wo.status);
+                      const state = idx < currentStepIdx ? 'completed' : idx === currentStepIdx ? 'current' : 'upcoming';
+                      return (
+                        <div key={step}
+                          className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
+                            state === 'completed' ? 'bg-emerald-400' :
+                            state === 'current' ? 'bg-blue-500 animate-pulse-dot' :
+                            'bg-gray-200'
+                          }`}
+                        />
+                      );
+                    })}
+                    <span className="ml-2 text-xs font-bold text-gray-500">{wo.status}</span>
+                  </div>
+                </div>
+
+                {/* Per-Department Cards — horizontal scrollable row */}
+                {assignedProductionDepts.length > 0 && (
+                  <div className="flex gap-3 justify-center flex-wrap">
+                    {assignedProductionDepts.map((dept, deptIdx) => {
+                  const deptStatus = (wo.department_statuses || []).find(
+                    s => normalizeDepartment(s.department) === normalizeDepartment(dept)
+                  );
+                  const currentStepIdx = DEPT_FLOW.indexOf(deptStatus?.status || 'Not Started');
+
+                  const getDeptStepState = (stepIdx: number) => {
+                    if (stepIdx < currentStepIdx) return 'completed';
+                    if (stepIdx === currentStepIdx) return 'current';
+                    return 'upcoming';
+                  };
+
+                  const getQCState = (qcStep: string) => {
+                    if (!deptStatus?.qc_status) return qcStep === 'Pending QC' ? 'current' : 'upcoming';
+                    if (deptStatus.qc_status === qcStep) return 'current';
+                    return 'upcoming';
+                  };
+
+                  return (
+                    <div key={dept} className="flex-1 min-w-[260px] bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden animate-fade-slide-up"
+                      style={{ animationDelay: `${deptIdx * 0.08}s` }}>
+                      {/* Department Header */}
+                      <div className="flex items-center justify-between px-3 py-2.5 border-b border-gray-50">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-500">
+                            {normalizeDepartment(dept) === 'Wood_Work' ? <Hammer size={14} /> :
+                             normalizeDepartment(dept) === 'Corrugation' ? <Layers size={14} /> :
+                             <Package size={14} />}
+                          </div>
+                          <span className="text-xs font-bold text-gray-800">
+                            {normalizeDepartment(dept) === 'Wood_Work' ? 'Wood Work' :
+                             normalizeDepartment(dept) === 'Corrugation' ? 'Corrugation' :
+                             normalizeDepartment(dept).replace(/_/g, ' ')}
+                          </span>
+                        </div>
+                        <StatusBadge status={(deptStatus?.status || 'Not Started') as WOStatus} />
+                      </div>
+
+                      {/* Vertical Steps */}
+                      <div className="px-3 py-3">
+                        {DEPT_FLOW.map((step, stepIdx) => {
+                          const state = getDeptStepState(stepIdx);
+                          return (
+                            <div key={step} className="flex items-start gap-3 pb-5 last:pb-0 relative">
+                              {stepIdx < DEPT_FLOW.length - 1 && (
+                                <div className={`absolute left-[11px] top-5 w-0.5 -z-0 transition-all duration-500 ${
+                                  stepIdx < currentStepIdx ? 'bg-emerald-400' :
+                                  stepIdx === currentStepIdx ? 'bg-emerald-400/40' :
+                                  'bg-gray-200'
+                                }`} style={{ height: 'calc(100% + 4px)' }} />
+                              )}
+                              <div className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center z-10 transition-all duration-300 ${
+                                state === 'completed'
+                                  ? 'bg-emerald-100 text-emerald-600 animate-check-pop'
+                                  : state === 'current'
+                                  ? 'bg-blue-100 text-blue-600 ring-4 ring-blue-50'
+                                  : 'bg-gray-100 text-gray-300'
+                              }`}>
+                                {state === 'completed' ? (
+                                  <Check size={13} strokeWidth={3} />
+                                ) : state === 'current' ? (
+                                  <div className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse-dot" />
+                                ) : (
+                                  <div className="w-2.5 h-2.5 rounded-full bg-gray-300" />
+                                )}
+                              </div>
+                              <div className="pt-0.5 min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <p className={`text-sm font-bold leading-tight whitespace-nowrap ${
+                                    state === 'completed' ? 'text-emerald-700' :
+                                    state === 'current' ? 'text-blue-700' :
+                                    'text-gray-400'
+                                  }`}>{step}</p>
+                                  {(state === 'completed' || state === 'current') && deptStatus?.updated_by && (
+                                    <span className="text-[9px] text-gray-400 truncate max-w-[130px]">
+                                      · by {deptStatus.updated_by} · {deptStatus.updated_at ? new Date(deptStatus.updated_at).toLocaleString('en-GB') : ''}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* QC Section */}
+                      {(deptStatus?.qc_status || currentStepIdx >= 2) && (
+                        <div className="border-t border-gray-50 bg-gray-50/40 px-3 py-2.5">
+                          <div className="flex items-center justify-center gap-3">
+                            {QC_FLOW.map(qcStep => {
+                              const qcState = getQCState(qcStep);
+                              const isDenied = qcStep === 'QC Denied';
+                              const isApproved = qcStep === 'QC Approved';
+                              return (
+                                <div key={qcStep} className="flex items-center gap-1">
+                                  <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center transition-all ${
+                                    qcState === 'current'
+                                      ? isApproved ? 'bg-emerald-100 text-emerald-600' :
+                                        isDenied ? 'bg-red-100 text-red-500' :
+                                        'bg-amber-100 text-amber-600'
+                                      : qcState === 'completed'
+                                      ? 'bg-emerald-100 text-emerald-600'
+                                      : 'bg-gray-100 text-gray-300'
+                                  }`}>
+                                    {qcState === 'current' ? (
+                                      isApproved ? <Check size={8} strokeWidth={3} /> :
+                                      isDenied ? <X size={8} strokeWidth={3} /> :
+                                      <div className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse-dot" />
+                                    ) : qcState === 'completed' ? (
+                                      <Check size={8} strokeWidth={3} />
+                                    ) : (
+                                      <div className="w-1.5 h-1.5 rounded-full bg-gray-300" />
+                                    )}
+                                  </div>
+                                  <span className={`text-[9px] font-semibold ${
+                                    qcState === 'current'
+                                      ? isApproved ? 'text-emerald-700' :
+                                        isDenied ? 'text-red-600' :
+                                        'text-amber-700'
+                                      : qcState === 'completed'
+                                      ? 'text-emerald-600'
+                                      : 'text-gray-400'
+                                  }`}>{qcStep.replace('QC ', '') || qcStep}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          {deptStatus?.qc_status && deptStatus.updated_by && (
+                            <p className="text-[9px] text-gray-400 text-center mt-1.5">
+                              by {deptStatus.updated_by} · {deptStatus.updated_at ? new Date(deptStatus.updated_at).toLocaleString('en-GB') : ''}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Office per-department status buttons */}
+                      {isOffice && (
+                        <div className="border-t border-gray-50 px-3 py-2.5">
+                          {(() => {
+                            const currentDeptStatus = deptStatus?.status || 'Not Started';
+                            const currentQcStatus = deptStatus?.qc_status;
+                            const nextStepIndex = DEPT_FLOW.indexOf(currentDeptStatus) + 1;
+
+                            const renderConfirm = (statusLabel: string, confirmStatus: string) => (
+                              <div className="flex items-center justify-between gap-2 rounded-lg bg-indigo-50/70 border border-indigo-200/60 px-3 py-2">
+                                <span className="text-xs font-bold text-indigo-700">
+                                  Set to <span className="font-black">{statusLabel}</span>?
+                                </span>
+                                <div className="flex gap-1.5">
+                                  <button onClick={() => setPendingDeptAction(null)}
+                                    className="px-2 py-1 rounded-md bg-white text-gray-600 text-[10px] font-black border border-gray-200 hover:bg-gray-50">Cancel</button>
+                                  <button onClick={() => updateWODetailsDeptStatus(wo as WorkOrder, dept, confirmStatus)}
+                                    disabled={isUpdatingStatus}
+                                    className="px-2 py-1 rounded-md bg-indigo-600 text-white text-[10px] font-black hover:bg-indigo-700 disabled:opacity-50">{isUpdatingStatus ? '...' : 'Confirm'}</button>
+                                </div>
+                              </div>
+                            );
+
+                            if (currentQcStatus) return null;
+
+                            if (nextStepIndex < DEPT_FLOW.length) {
+                              const nextStatus = DEPT_FLOW[nextStepIndex];
+                              if (pendingDeptAction?.dept === dept && pendingDeptAction.status === nextStatus) return renderConfirm(nextStatus, nextStatus);
+                              return (
+                                <button onClick={() => setPendingDeptAction({ dept, status: nextStatus })}
+                                  className="w-full py-1.5 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold transition-all border border-indigo-100">
+                                  Change status to {nextStatus}
+                                </button>
+                              );
+                            }
+
+                            if (currentDeptStatus === 'Ready for QC') {
+                              if (pendingDeptAction?.dept === dept) {
+                                if (pendingDeptAction.status === 'QC Approved') return renderConfirm('QC Approved', 'QC Approved');
+                                if (pendingDeptAction.status === 'QC Denied') return renderConfirm('QC Denied', 'QC Denied');
+                              }
+                              return (
+                                <div className="flex gap-2">
+                                  <button onClick={() => setPendingDeptAction({ dept, status: 'QC Approved' })}
+                                    className="flex-1 py-1.5 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold transition-all border border-emerald-100">Approve QC</button>
+                                  <button onClick={() => setPendingDeptAction({ dept, status: 'QC Denied' })}
+                                    className="flex-1 py-1.5 px-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-bold transition-all border border-red-100">Deny QC</button>
+                                </div>
+                              );
+                            }
+
+                            return null;
+                          })()}
+                        </div>
                       )}
                     </div>
-                    {/* Label */}
-                    <div className="pt-0.5">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className={`text-sm font-bold ${
-                          state === 'completed' ? 'text-emerald-700' :
-                          state === 'current' ? 'text-blue-700' :
-                          'text-gray-400'
-                        }`}>
-                          {STEP_LABELS[step]}
-                        </p>
-                        {state === 'current' && (
-                          <span className="text-[10px] font-semibold text-blue-500 uppercase tracking-wider">Current</span>
-                        )}
-                        {(state === 'completed' || state === 'current') && (() => {
-                          const info = statusActorMap.get(step);
-                          if (!info) return null;
-                          const d = new Date(info.event_time);
-                          const dateStr = !isNaN(d.getTime()) ? d.toLocaleString('en-GB') : info.event_time;
-                          return (
-                            <span className="text-[10px] text-gray-400">
-                              ·  by {info.actor_name}  •  {dateStr}
-                            </span>
-                          );
-                        })()}
-                      </div>
-                    </div>
+                  );
+                })}
                   </div>
-                );
-              })}
-            </div>
-          </Card>
-        </div>
+                )}
+
+                {/* Dispatch/Delivery Card — vertical */}
+                <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden animate-fade-slide-up"
+                  style={{ animationDelay: `${(assignedProductionDepts.length + 1) * 0.08}s` }}>
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-gray-50">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-500">
+                        <Truck size={16} />
+                      </div>
+                      <span className="text-sm font-bold text-gray-800">Dispatch</span>
+                    </div>
+                    <StatusBadge status={wo.status} />
+                  </div>
+                  <div className="px-4 py-3">
+                    {DISPATCH_FLOW.map((step, stepIdx) => {
+                      const currentDispatchIdx = DISPATCH_FLOW.indexOf(wo.status);
+                      const state = stepIdx < currentDispatchIdx ? 'completed' : stepIdx === currentDispatchIdx ? 'current' : 'upcoming';
+                      return (
+                        <div key={step} className="flex items-start gap-3 pb-5 last:pb-0 relative">
+                          {stepIdx < DISPATCH_FLOW.length - 1 && (
+                            <div className={`absolute left-[11px] top-5 w-0.5 -z-0 transition-all duration-500 ${
+                              stepIdx < currentDispatchIdx ? 'bg-emerald-400' :
+                              stepIdx === currentDispatchIdx ? 'bg-emerald-400/40' :
+                              'bg-gray-200'
+                            }`} style={{ height: 'calc(100% + 4px)' }} />
+                          )}
+                          <div className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center z-10 transition-all duration-300 ${
+                            state === 'completed'
+                              ? 'bg-emerald-100 text-emerald-600 animate-check-pop'
+                              : state === 'current'
+                              ? 'bg-blue-100 text-blue-600 ring-4 ring-blue-50'
+                              : 'bg-gray-100 text-gray-300'
+                          }`}>
+                            {state === 'completed' ? (
+                              <Check size={13} strokeWidth={3} />
+                            ) : state === 'current' ? (
+                              <div className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse-dot" />
+                            ) : (
+                              <div className="w-2.5 h-2.5 rounded-full bg-gray-300" />
+                            )}
+                          </div>
+                          <div className="pt-0.5 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <p className={`text-sm font-bold leading-tight whitespace-nowrap ${
+                                state === 'completed' ? 'text-emerald-700' :
+                                state === 'current' ? 'text-blue-700' :
+                                'text-gray-400'
+                              }`}>{step}</p>
+                              {(state === 'completed' || state === 'current') && (() => {
+                                const info = statusActorMap.get(step);
+                                if (!info) return null;
+                                return (
+                                  <span className="text-[9px] text-gray-400 truncate max-w-[180px]">
+                                    · by {info.actor_name} · {new Date(info.event_time).toLocaleString('en-GB')}
+                                  </span>
+                                );
+                              })()}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </>
+          </div>
 
         {/* Right Sidebar */}
         <div className="w-full xl:w-80 space-y-4">
@@ -5784,7 +6078,7 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
               <button onClick={() => window.print()} className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2">
                 <Printer size={16}/> Print Job Card
               </button>
-              {(() => {
+              {!isOffice && (() => {
                 const statusOptions = getCardStatusOptions(wo as WorkOrder, loggedInUser);
                 if (statusOptions.length === 0) return null;
                 if (pendingStatus) return (
