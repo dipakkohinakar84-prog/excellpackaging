@@ -261,7 +261,7 @@ const DepartmentStatusTracker: React.FC<DepartmentStatusTrackerProps> = ({
 
             {deptStatus.updated_at && (() => {
               const d = new Date(deptStatus.updated_at!);
-              const dateStr = !isNaN(d.getTime()) ? d.toLocaleString() : deptStatus.updated_at;
+              const dateStr = !isNaN(d.getTime()) ? d.toLocaleString('en-GB') : deptStatus.updated_at;
               return (
                 <div className="mt-1.5 text-[10px] text-gray-400">
                   Updated: {dateStr}

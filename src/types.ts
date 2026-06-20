@@ -20,6 +20,7 @@ export type AppView =
   | 'profile' 
   | 'backup'
   | 'daily-tasks'
+  | 'my-tasks'
   | 'live-screen'
   | 'live-screen-login'
   | 'client-login'
@@ -207,7 +208,7 @@ export interface ProductionReport {
 
 export type DepartmentWOStatus = 'Not Started' | 'Work Started' | 'Ready for QC';
 export type QCStatus = 'Pending QC' | 'QC Denied' | 'QC Approved';
-export type WOStatus = 'Not Started' | 'Work Started' | 'Ready for QC' | 'Ready for despatch' | 'Dispatched' | 'Delivered' | 'Cancelled';
+export type WOStatus = 'Not Started' | 'Work Started' | 'Ready for QC' | 'Ready for despatch' | 'Dispatched' | 'Delivered';
 
 export interface DepartmentStatus {
   department: string;

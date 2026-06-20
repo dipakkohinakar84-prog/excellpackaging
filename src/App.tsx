@@ -67,6 +67,7 @@ import { supabase, supabaseAnonKey, pb, loginWithMobilePassword, getCurrentAuthU
 import Login from './LoginComponent';
 import { canAccessView, filterWorkOrdersByDepartment, getQCApprovalProgress, sendNotification, normalizeDepartment } from './utils';
 import DepartmentStatusTracker from './DepartmentStatusTracker';
+import MyTasks from './MyTasks';
 import DailyTasks from './DailyTasks';
 import LiveScreen from './LiveScreen';
 import ClientPortal from './ClientPortal';
@@ -114,8 +115,7 @@ const StatusBadge: React.FC<{ status: WOStatus }> = ({ status }) => {
     'Ready for QC': { bg: 'bg-yellow-100', text: 'text-yellow-600', label: 'Ready for QC' },
     'Ready for despatch': { bg: 'bg-purple-100', text: 'text-purple-600', label: 'Ready for Despatch' },
     'Dispatched': { bg: 'bg-indigo-100', text: 'text-indigo-600', label: 'Dispatched' },
-    'Delivered': { bg: 'bg-emerald-100', text: 'text-emerald-600', label: 'Delivered' },
-    'Cancelled': { bg: 'bg-red-100', text: 'text-red-600', label: 'Cancelled' }
+    'Delivered': { bg: 'bg-emerald-100', text: 'text-emerald-600', label: 'Delivered' }
   };
   
   const style = styles[status] || styles['Not Started'];
@@ -133,7 +133,6 @@ const statusTabColors: Record<string, string> = {
   'Ready for despatch': 'bg-purple-100 text-purple-700 border-purple-200',
   'Dispatched': 'bg-indigo-100 text-indigo-700 border-indigo-200',
   'Delivered': 'bg-emerald-100 text-emerald-700 border-emerald-200',
-  'Cancelled': 'bg-red-100 text-red-700 border-red-200',
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -143,7 +142,6 @@ const STATUS_LABELS: Record<string, string> = {
   'Ready for despatch': 'Ready for Despatch',
   'Dispatched': 'Dispatched',
   'Delivered': 'Delivered',
-  'Cancelled': 'Cancelled',
 };
 
 const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = "" }) => (
@@ -418,13 +416,13 @@ const getCardStatusOptions = (wo: WorkOrder, user: User): string[] => {
   let options: string[] = [];
   if (userDept === 'Office') {
     if (getEditableDepartmentForUser(wo, user)) { options = ['QC Approved', 'QC Denied']; }
-    else { options = ['Not Started', 'Work Started', 'Ready for QC', 'Ready for despatch', 'Cancelled']; }
+    else { options = ['Not Started', 'Work Started', 'Ready for QC', 'Ready for despatch']; }
   } else if (userDept === 'Quality_Control') {
     options = getEditableDepartmentForUser(wo, user) ? ['QC Approved', 'QC Denied'] : [];
   } else {
     options = getEditableDepartmentForUser(wo, user) ? ['Not Started', 'Work Started', 'Ready for QC'] : [];
   }
-  return options.filter(s => s === 'Cancelled' || isSequentialOnly(wo.status, s as WOStatus));
+  return options.filter(s => isSequentialOnly(wo.status, s as WOStatus));
 };
 
 const isCardStatusCurrent = (wo: WorkOrder, user: User, status: string) => {
@@ -514,6 +512,21 @@ const deriveOverallStatusFromDepartmentStatuses = (wo: WorkOrder, departmentStat
   return 'Not Started';
 };
 
+const deriveDepartmentStatusesFromOverallStatus = (wo: WorkOrder, newStatus: string, user: User): DepartmentStatus[] => {
+  const now = new Date().toISOString();
+  const existing = Array.isArray(wo.department_statuses) ? wo.department_statuses : [];
+  const departments = wo.assigned_departments || [];
+  return departments.map(dept => {
+    const existingEntry = existing.find(d => normalizeDepartment(d.department) === normalizeDepartment(dept));
+    const base: DepartmentStatus = { department: dept, status: 'Not Started', updated_at: now, updated_by: user.username };
+    if (newStatus === 'Not Started') return { ...base, ...existingEntry, status: 'Not Started' };
+    if (newStatus === 'Work Started') return { ...base, ...existingEntry, status: 'Work Started' };
+    if (newStatus === 'Ready for QC') return { ...base, ...existingEntry, status: 'Ready for QC' };
+    if (newStatus === 'Ready for despatch') return { ...base, ...existingEntry, status: 'Ready for QC', qc_status: 'QC Approved' as QCStatus };
+    return existingEntry || base;
+  });
+};
+
 const getBomParentReferences = (items: Item[], childType: BomRowType, childId: string | number) => {
   const childIdText = String(childId);
 
@@ -571,8 +584,7 @@ const STATUS_FILTER_ORDER: WOStatus[] = [
   'Ready for QC',
   'Ready for despatch',
   'Dispatched',
-  'Delivered',
-  'Cancelled'
+  'Delivered'
 ];
 
 const sortStatuses = (statuses: string[]): string[] => {
@@ -664,7 +676,6 @@ const WorkOrderCardActions: React.FC<{
       'Ready for despatch': 'bg-purple-50 text-purple-600 hover:bg-purple-100',
       'Dispatched': 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100',
       'Delivered': 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100',
-      'Cancelled': 'bg-red-50 text-red-600 hover:bg-red-100',
     };
     return colors[status] || 'bg-gray-100 text-gray-600 hover:bg-indigo-50 hover:text-indigo-700';
   };
@@ -1286,12 +1297,12 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
 
   const kpis = useMemo(() => {
     const totalOrders = analyticsOrders.length;
-    const openOrders = analyticsOrders.filter(wo => !['Delivered', 'Cancelled'].includes(wo.status)).length;
+    const openOrders = analyticsOrders.filter(wo => wo.status !== 'Delivered').length;
     const deliveredOrders = analyticsOrders.filter(wo => wo.status === 'Delivered').length;
     const overdue = analyticsOrders.filter(wo => {
       if (!wo.etd) return false;
       const etd = new Date(`${wo.etd}T12:00:00`);
-      return !Number.isNaN(etd.getTime()) && etd < new Date() && !['Delivered', 'Cancelled'].includes(wo.status);
+      return !Number.isNaN(etd.getTime()) && etd < new Date() && wo.status !== 'Delivered';
     }).length;
     return { totalOrders, openOrders, deliveredOrders, overdue };
   }, [analyticsOrders]);
@@ -1408,7 +1419,7 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
   }, [analyticsOrders]);
 
   const etdHeatmap = useMemo(() => {
-    const openOrders = analyticsOrders.filter(wo => !['Delivered', 'Cancelled'].includes(wo.status));
+    const openOrders = analyticsOrders.filter(wo => wo.status !== 'Delivered');
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const cells = [
@@ -4436,7 +4447,7 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
     setBusyCardStatusId(wo.id);
 
     // Sequential-only guard
-    if (status !== 'Cancelled' && status !== 'QC Approved' && status !== 'QC Denied') {
+    if (status !== 'QC Approved' && status !== 'QC Denied') {
       const dept = getEditableDepartmentForUser(wo, loggedInUser);
       const currentStatus: WOStatus = dept
         ? ((wo.department_statuses || []).find(s => normalizeDepartment(s.department) === normalizeDepartment(dept))?.status || 'Not Started') as WOStatus
@@ -4451,8 +4462,9 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
     const previousData = data;
     try {
       if (userDept === 'Office') {
-        setData(prev => prev.map(row => row.id === wo.id ? { ...row, status: status as WOStatus } : row));
-        const { error } = await supabase.from('work_orders').update({ status }).eq('id', wo.id);
+        const deptStatuses = deriveDepartmentStatusesFromOverallStatus(wo, status, loggedInUser);
+        setData(prev => prev.map(row => row.id === wo.id ? { ...row, status: status as WOStatus, department_statuses: deptStatuses } : row));
+        const { error } = await supabase.from('work_orders').update({ status, department_statuses: deptStatuses }).eq('id', wo.id);
         if (error) throw error;
         void logActivity({
           eventType: 'work_order',
@@ -4975,7 +4987,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
     setBusyCardStatusId(wo.id);
 
     // Forward-only guard
-    if (status !== 'Cancelled' && status !== 'QC Approved' && status !== 'QC Denied') {
+    if (status !== 'QC Approved' && status !== 'QC Denied') {
       const dept = getEditableDepartmentForUser(wo, loggedInUser);
       const currentStatus: WOStatus = dept
         ? ((wo.department_statuses || []).find(s => normalizeDepartment(s.department) === normalizeDepartment(dept))?.status || 'Not Started') as WOStatus
@@ -4990,8 +5002,9 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
     const previousData = data;
     try {
       if (userDept === 'Office') {
-        setData(prev => prev.map(row => row.id === wo.id ? { ...row, status: status as WOStatus } : row));
-        const { error } = await supabase.from('work_orders').update({ status }).eq('id', wo.id);
+        const deptStatuses = deriveDepartmentStatusesFromOverallStatus(wo, status, loggedInUser);
+        setData(prev => prev.map(row => row.id === wo.id ? { ...row, status: status as WOStatus, department_statuses: deptStatuses } : row));
+        const { error } = await supabase.from('work_orders').update({ status, department_statuses: deptStatuses }).eq('id', wo.id);
         if (error) throw error;
         void logActivity({
           eventType: 'work_order',
@@ -5218,7 +5231,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                               setOpenDropdownKey(null);
                             }}
                             className="w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 border-b last:border-0"
-                          >{i.name}</button>
+                          >{i.name} ({i.customer_name})</button>
                         ))}
                         {customerFilteredItems.filter(i => i.name.toLowerCase().includes((itemSearchQueries[item.key] ?? '').toLowerCase())).length === 0 && (
                           <div className="px-3 py-4 text-center text-xs text-gray-400">No items found</div>
@@ -5273,7 +5286,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                               setOpenDropdownKey(null);
                             }}
                             className="w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 border-b last:border-0"
-                          >{i.name}</button>
+                          >{i.name} ({i.customer_name})</button>
                         ))}
                         {customerFilteredItems.filter(i => i.name.toLowerCase().includes((itemSearchQueries[item.key] ?? '').toLowerCase())).length === 0 && (
                           <div className="px-3 py-4 text-center text-xs text-gray-400">No items found</div>
@@ -5525,33 +5538,106 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
   const [loading, setLoading] = useState(true);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [statusActionKey, setStatusActionKey] = useState<string | null>(null);
+  const [statusEvents, setStatusEvents] = useState<any[]>([]);
+  const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+  const [showStatusOptions, setShowStatusOptions] = useState(false);
 
   const fetchWO = useCallback(async () => {
     const { data } = await supabase.from('work_orders').select('*').eq('id', id).single();
     if (data) {
       const departments = parseAssignedDepartments(data.assigned_departments);
-      
-      // Access Control
       const normUserDept = normalizeDepartment(loggedInUser.department);
       const qcApprovalProgress = getQCApprovalProgress({ ...data, assigned_departments: departments });
       const isOfficeOrDispatch = normUserDept === 'Office' || normUserDept === 'Dispatch';
       const isQC = normUserDept === 'Quality_Control';
       const isAssigned = departments.some(d => normalizeDepartment(d) === normUserDept);
       const isRestrictedByFullQCApproval = qcApprovalProgress === 'full' && (isQC || isAssigned);
-
       if (isOfficeOrDispatch || (!isRestrictedByFullQCApproval && (isQC || isAssigned))) {
         setWo({ ...data, assigned_departments: departments });
       } else {
         console.warn(`[WODetails] Access denied for order ID: ${id}. User ${loggedInUser.department} is not authorized.`);
-        setWo(null); 
+        setWo(null);
       }
     }
     setLoading(false);
   }, [id, loggedInUser]);
 
+  useEffect(() => { fetchWO(); }, [fetchWO]);
+
   useEffect(() => {
-    fetchWO();
-  }, [fetchWO]);
+    supabase.from('activity_events')
+      .select('new_value, actor_name, event_time')
+      .eq('work_order_id', id)
+      .in('action', ['overall_status_changed', 'department_status_changed'])
+      .order('event_time', { ascending: true })
+      .then(({ data }) => { if (data) setStatusEvents(data); });
+  }, [id]);
+
+  const statusActorMap = useMemo(() => {
+    const map = new Map<string, { actor_name: string; event_time: string }>();
+    statusEvents.forEach(ev => { if (ev.new_value) map.set(ev.new_value, { actor_name: ev.actor_name, event_time: ev.event_time }); });
+    return map;
+  }, [statusEvents]);
+
+  const updateWODetailsStatus = useCallback(async (targetWo: WorkOrder, status: string) => {
+    if (isUpdatingStatus) return;
+    const userDept = normalizeDepartment(loggedInUser.department);
+    setIsUpdatingStatus(true);
+    if (status !== 'QC Approved' && status !== 'QC Denied') {
+      const dept = getEditableDepartmentForUser(targetWo, loggedInUser);
+      const currentStatus: WOStatus = dept
+        ? ((targetWo.department_statuses || []).find(s => normalizeDepartment(s.department) === normalizeDepartment(dept))?.status || 'Not Started') as WOStatus
+        : targetWo.status;
+      if (!isSequentialOnly(currentStatus, status as WOStatus)) {
+        alert('Status can only move forward one step at a time.');
+        setIsUpdatingStatus(false);
+        return;
+      }
+    }
+    const previousWo = wo;
+    try {
+      if (userDept === 'Office') {
+        const deptStatuses = deriveDepartmentStatusesFromOverallStatus(targetWo, status, loggedInUser);
+        setWo({ ...targetWo, status: status as WOStatus, department_statuses: deptStatuses });
+        const { error } = await supabase.from('work_orders').update({ status, department_statuses: deptStatuses }).eq('id', targetWo.id);
+        if (error) throw error;
+        void logActivity({
+          eventType: 'work_order', action: 'overall_status_changed', title: 'Order Status Changed',
+          body: `Order #${targetWo.id}: ${targetWo.status} -> ${status}`, actor: loggedInUser,
+          targetCollection: 'work_orders', targetId: targetWo.id, targetLabel: targetWo.job_details,
+          workOrderId: targetWo.id, customerName: targetWo.customer, itemName: targetWo.job_details,
+          oldValue: targetWo.status, newValue: status, severity: 'info',
+        });
+      } else {
+        const update = buildDepartmentStatusUpdate(targetWo, loggedInUser, status);
+        if (!update) { setIsUpdatingStatus(false); return; }
+        setWo({ ...targetWo, department_statuses: update.departmentStatuses, status: update.overallStatus });
+        const { error } = await supabase.from('work_orders').update({ department_statuses: update.departmentStatuses, status: update.overallStatus }).eq('id', targetWo.id);
+        if (error) throw error;
+        const department = getEditableDepartmentForUser(targetWo, loggedInUser);
+        const previousDeptStatus = (targetWo.department_statuses || []).find(s => normalizeDepartment(s.department) === normalizeDepartment(department));
+        void logActivity({
+          eventType: 'work_order', action: normalizeDepartment(loggedInUser.department) === 'Quality_Control' ? 'qc_status_changed' : 'department_status_changed',
+          title: normalizeDepartment(loggedInUser.department) === 'Quality_Control' ? 'QC Status Changed' : 'Department Status Changed',
+          body: `Order #${targetWo.id} | ${(department || '').replace(/_/g, ' ')}: ${(normalizeDepartment(loggedInUser.department) === 'Quality_Control' ? previousDeptStatus?.qc_status : previousDeptStatus?.status) || 'Not Started'} -> ${status}`,
+          actor: loggedInUser, targetCollection: 'work_orders', targetId: targetWo.id, targetLabel: targetWo.job_details,
+          workOrderId: targetWo.id, customerName: targetWo.customer, itemName: targetWo.job_details,
+          department: department || undefined,
+          oldValue: (normalizeDepartment(loggedInUser.department) === 'Quality_Control' ? previousDeptStatus?.qc_status : previousDeptStatus?.status) || 'Not Started',
+          newValue: status, severity: status === 'QC Denied' ? 'warning' : 'success',
+        });
+      }
+      invalidateCollectionCache('work_orders');
+      fetchWO();
+    } catch (err) {
+      setWo(previousWo);
+      alert('Failed to update status');
+    } finally {
+      setIsUpdatingStatus(false);
+      setPendingStatus(null);
+      setShowStatusOptions(false);
+    }
+  }, [wo, loggedInUser, isUpdatingStatus, fetchWO]);
 
   if (loading) return <LoadingState />;
   if (!wo) return <div className="p-20 text-center font-black text-red-500">Order not found or you do not have permission to view it.</div>;
@@ -5560,6 +5646,14 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
   const isOffice = normUserDept === 'Office';
 
   const STATUS_FLOW = ['Not Started', 'Work Started', 'Ready for QC', 'Ready for despatch', 'Dispatched', 'Delivered'];
+  const STEP_LABELS: Record<string, string> = {
+    'Not Started': 'Order Placed',
+    'Work Started': 'Work Started',
+    'Ready for QC': 'Send To QC',
+    'Ready for despatch': 'QC Done',
+    'Dispatched': 'Dispatched',
+    'Delivered': 'Delivered',
+  };
   const currentStepIdx = STATUS_FLOW.indexOf(wo.status);
 
   const getStepState = (idx: number) => {
@@ -5627,151 +5721,34 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                     </div>
                     {/* Label */}
                     <div className="pt-0.5">
-                      <p className={`text-sm font-bold ${
-                        state === 'completed' ? 'text-emerald-700' :
-                        state === 'current' ? 'text-blue-700' :
-                        'text-gray-400'
-                      }`}>
-                        {step === 'Ready for despatch' ? 'Ready for Dispatch' : step}
-                      </p>
-                      {state === 'current' && (
-                        <p className="text-[10px] font-semibold text-blue-500 uppercase tracking-wider mt-0.5">Current</p>
-                      )}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className={`text-sm font-bold ${
+                          state === 'completed' ? 'text-emerald-700' :
+                          state === 'current' ? 'text-blue-700' :
+                          'text-gray-400'
+                        }`}>
+                          {STEP_LABELS[step]}
+                        </p>
+                        {state === 'current' && (
+                          <span className="text-[10px] font-semibold text-blue-500 uppercase tracking-wider">Current</span>
+                        )}
+                        {(state === 'completed' || state === 'current') && (() => {
+                          const info = statusActorMap.get(step);
+                          if (!info) return null;
+                          const d = new Date(info.event_time);
+                          const dateStr = !isNaN(d.getTime()) ? d.toLocaleString('en-GB') : info.event_time;
+                          return (
+                            <span className="text-[10px] text-gray-400">
+                              ·  by {info.actor_name}  •  {dateStr}
+                            </span>
+                          );
+                        })()}
+                      </div>
                     </div>
                   </div>
                 );
               })}
             </div>
-          </Card>
-
-          {/* Department Statuses */}
-          <Card className="p-3 md:p-5 rounded-xl overflow-hidden">
-            <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-4">Department Status</h3>
-            <DepartmentStatusTracker
-              workOrderId={wo.id}
-              assignedDepartments={wo.assigned_departments || []}
-              departmentStatuses={wo.department_statuses || []}
-              loggedInUser={loggedInUser}
-              isBusy={isUpdatingStatus}
-              busyDepartmentKey={statusActionKey?.startsWith('dept-') ? statusActionKey.replace('dept-', '') : null}
-              onStatusUpdate={async (department, status, qcStatus) => {
-                if (isUpdatingStatus) return;
-                try {
-                  setIsUpdatingStatus(true);
-                  setStatusActionKey(`dept-${normalizeDepartment(department)}`);
-                  const existingStatuses = wo.department_statuses || [];
-                  const previousDeptStatus = existingStatuses.find(ds => normalizeDepartment(ds.department) === normalizeDepartment(department));
-                  const previousStatus = previousDeptStatus?.status;
-                  const previousQCStatus = previousDeptStatus?.qc_status;
-                  const updatedStatuses = existingStatuses.map(ds =>
-                    normalizeDepartment(ds.department) === normalizeDepartment(department)
-                      ? { ...ds, status: status as any, qc_status: qcStatus as any, updated_at: new Date().toISOString(), updated_by: loggedInUser.username }
-                      : ds
-                  );
-
-                  if (!updatedStatuses.find(ds => normalizeDepartment(ds.department) === normalizeDepartment(department))) {
-                    updatedStatuses.push({
-                      department: department,
-                      status: status as any,
-                      qc_status: qcStatus as any,
-                      updated_at: new Date().toISOString(),
-                      updated_by: loggedInUser.username
-                    });
-                  }
-
-                  const allDepartments = wo.assigned_departments || [];
-                  const wasAllApproved = allDepartments.length > 0 && allDepartments.every(dept => {
-                    const ds = existingStatuses.find(s => normalizeDepartment(s.department) === normalizeDepartment(dept));
-                    return ds?.qc_status === 'QC Approved';
-                  });
-                  const allApproved = allDepartments.length > 0 && allDepartments.every(dept => {
-                    const ds = updatedStatuses.find(s => normalizeDepartment(s.department) === normalizeDepartment(dept));
-                    return ds?.qc_status === 'QC Approved';
-                  });
-
-                  const newOverallStatus = deriveOverallStatusFromDepartmentStatuses(wo, updatedStatuses);
-                  const optimisticWo = { ...wo, department_statuses: updatedStatuses, status: newOverallStatus };
-                  setWo(optimisticWo);
-
-                  const { error } = await supabase.from('work_orders').update({ department_statuses: updatedStatuses, status: newOverallStatus }).eq('id', wo.id);
-                  if (error) throw error;
-                  invalidateCollectionCache('work_orders');
-
-                  void logActivity({
-                    eventType: 'work_order',
-                    action: qcStatus ? 'qc_status_changed' : 'department_status_changed',
-                    title: qcStatus ? 'QC Status Changed' : 'Department Status Changed',
-                    body: `Order #${wo.id} | ${department.replace(/_/g, ' ')}: ${qcStatus ? (previousQCStatus || 'Pending QC') : (previousStatus || 'Not Started')} -> ${qcStatus || status}`,
-                    actor: loggedInUser,
-                    targetCollection: 'work_orders',
-                    targetId: wo.id,
-                    targetLabel: wo.job_details,
-                    workOrderId: wo.id,
-                    customerName: wo.customer,
-                    itemName: wo.job_details,
-                    department,
-                    oldValue: qcStatus ? (previousQCStatus || 'Pending QC') : (previousStatus || 'Not Started'),
-                    newValue: qcStatus || status,
-                    severity: qcStatus === 'QC Denied' ? 'warning' : 'success',
-                  });
-
-                  const notificationTasks: Promise<any>[] = [];
-
-                  if (status === 'Work Started' && previousStatus !== 'Work Started') {
-                    notificationTasks.push(sendBackgroundPushEvent({
-                      title: 'Work Started',
-                      body: `Order #${wo.id} | ${department.replace(/_/g, ' ')}\nProduction has started`,
-                      departments: ['Office'],
-                      workOrderId: wo.id,
-                      actor: loggedInUser.username,
-                    }));
-                  }
-
-                  if (status === 'Ready for QC' && previousStatus !== 'Ready for QC') {
-                    notificationTasks.push(sendBackgroundPushEvent({
-                      title: 'QC Check Required',
-                      body: `Order #${wo.id} | ${department.replace(/_/g, ' ')}\nReady for quality approval`,
-                      departments: ['Quality_Control'],
-                      workOrderId: wo.id,
-                      actor: loggedInUser.username,
-                    }));
-                  }
-
-                  if ((qcStatus === 'QC Approved' || qcStatus === 'QC Denied') && previousQCStatus !== qcStatus) {
-                    notificationTasks.push(sendBackgroundPushEvent({
-                      title: qcStatus,
-                      body: `Order #${wo.id} | ${department.replace(/_/g, ' ')}\n${qcStatus}`,
-                      departments: [department],
-                      workOrderId: wo.id,
-                      actor: loggedInUser.username,
-                    }));
-                  }
-
-                  if (!wasAllApproved && allApproved && newOverallStatus === 'Ready for despatch') {
-                    notificationTasks.push(sendBackgroundPushEvent({
-                      title: 'Dispatch Ready',
-                      body: `Order #${wo.id}\nQC approved. Ready for dispatch`,
-                      departments: ['Dispatch'],
-                      workOrderId: wo.id,
-                      actor: loggedInUser.username,
-                    }));
-                  }
-
-                  if (notificationTasks.length > 0) {
-                    void Promise.all(notificationTasks).catch(error => {
-                      console.error('Status notification failed:', error);
-                    });
-                  }
-                } catch (err) {
-                  console.error('Status update failed:', err);
-                  setWo(wo);
-                  alert('Failed to update status');
-                } finally {
-                  setIsUpdatingStatus(false);
-                  setStatusActionKey(null);
-                }
-              }}
-            />
           </Card>
         </div>
 
@@ -5807,6 +5784,39 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
               <button onClick={() => window.print()} className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2">
                 <Printer size={16}/> Print Job Card
               </button>
+              {(() => {
+                const statusOptions = getCardStatusOptions(wo as WorkOrder, loggedInUser);
+                if (statusOptions.length === 0) return null;
+                if (pendingStatus) return (
+                  <div className="flex items-center justify-between gap-2 rounded-lg bg-indigo-50/70 border border-indigo-200/60 px-3 py-2">
+                    <span className="text-[10px] font-bold text-indigo-700">
+                      Set to <span className="font-black">{pendingStatus}</span>?
+                    </span>
+                    <div className="flex gap-1.5">
+                      <button onClick={() => setPendingStatus(null)} className="px-2.5 py-1 rounded-md bg-white text-gray-600 text-[9px] font-black border border-gray-200 hover:bg-gray-50">Cancel</button>
+                      <button onClick={() => updateWODetailsStatus(wo as WorkOrder, pendingStatus)} disabled={isUpdatingStatus} className="px-2.5 py-1 rounded-md bg-indigo-600 text-white text-[9px] font-black hover:bg-indigo-700 disabled:opacity-50">{isUpdatingStatus ? '...' : 'Confirm'}</button>
+                    </div>
+                  </div>
+                );
+                if (showStatusOptions) return (
+                  <div className="flex gap-1 flex-wrap">
+                    {statusOptions.map(s => {
+                      const isCurrent = isCardStatusCurrent(wo as WorkOrder, loggedInUser, s);
+                      return (
+                        <button key={s} disabled={isCurrent || isUpdatingStatus} onClick={() => setPendingStatus(s)}
+                          className={`px-2.5 py-1.5 rounded-lg text-[10px] font-black transition-all ${isCurrent ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'} disabled:opacity-50`}>
+                          {s}
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+                return (
+                  <button onClick={() => setShowStatusOptions(true)} className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2">
+                    <ClipboardList size={16}/> Update Status
+                  </button>
+                );
+              })()}
               {isOffice && (
                 <button onClick={async () => {
                   if(confirm("Delete Order?")) {
@@ -7227,7 +7237,7 @@ const PlanGenerator: React.FC<{ ids: number[]; onBack: () => void }> = ({ ids, o
                 <p className="text-slate-500 font-semibold text-sm mt-1">Generated material requirement by department</p>
             </div>
             <div className="text-right">
-                <div className="text-xs font-bold text-slate-500">Date: {new Date().toLocaleDateString()}</div>
+                <div className="text-xs font-bold text-slate-500">Date: {new Date().toLocaleDateString('en-GB')}</div>
                 <div className="text-xs font-black uppercase text-indigo-600">{orders.length} Item(s)</div>
             </div>
          </div>
@@ -7311,7 +7321,7 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
   const formatEventTime = (ev: any) => {
     const timestamp = getEventTimestamp(ev);
     if (!timestamp) return 'No time';
-    return new Date(timestamp).toLocaleString();
+    return new Date(timestamp).toLocaleString('en-GB');
   };
 
   const getEventActor = (ev: any) => ev.actor_name || ev.actor || ev.dispatched_by || '-';
@@ -7823,7 +7833,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
     const dateLabel = fromDate || toDate
       ? `${fromDate || '…'} to ${toDate || '…'}`
       : 'All dates';
-    const now = new Date().toLocaleString();
+    const now = new Date().toLocaleString('en-GB');
 
     // Gray background fill
     doc.setFillColor(245, 245, 245);
@@ -7869,9 +7879,9 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
         case 'item-usage':
           return [String(r.item || ''), String(r.orders ?? 0), String(r.totalQty ?? 0), String(r.companyCount ?? 0)];
         case 'on-time':
-          return [r.when ? new Date(r.when).toLocaleDateString() : '-', `#${r.work_order_id || ''}`, r.order?.customer || '-', r.order?.job_details || '-', String(r.dispatch_qty ?? 0), r.invoice_no || '-'];
+          return [r.when ? new Date(r.when).toLocaleDateString('en-GB') : '-', `#${r.work_order_id || ''}`, r.order?.customer || '-', r.order?.job_details || '-', String(r.dispatch_qty ?? 0), r.invoice_no || '-'];
         case 'delayed':
-          return [r.when ? new Date(r.when).toLocaleDateString() : '-', `#${r.work_order_id || ''}`, r.order?.customer || '-', r.order?.job_details || '-', `${r.daysDelay || 0} days`, String(r.dispatch_qty ?? 0)];
+          return [r.when ? new Date(r.when).toLocaleDateString('en-GB') : '-', `#${r.work_order_id || ''}`, r.order?.customer || '-', r.order?.job_details || '-', `${r.daysDelay || 0} days`, String(r.dispatch_qty ?? 0)];
         case 'dept-wise':
           return [String(r.dept || ''), String(r.reports ?? 0), String(r.shiftHrs ?? 0), String(r.otHrs ?? 0), String(r.totalHrs ?? 0), String(r.qtyProduced ?? 0)];
         case 'company-performance':
@@ -8297,7 +8307,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
               <tbody className="divide-y divide-gray-100">
                 {sortedRows.map((row: any, i: number) => (
                   <tr key={row.id} className={`hover:bg-green-50/40 transition-colors border-l-2 border-l-green-400 ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
-                    <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{row.when ? new Date(row.when).toLocaleString() : '-'}</td>
+                    <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{row.when ? new Date(row.when).toLocaleString('en-GB') : '-'}</td>
                     <td className="px-4 py-3 font-black text-indigo-600 text-right tabular-nums">#{row.work_order_id}</td>
                     <td className="px-4 py-3 font-semibold text-gray-700">{row.order?.customer || '-'}</td>
                     <td className="px-4 py-3 text-gray-600">{row.order?.job_details || '-'}</td>
@@ -8342,7 +8352,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
               <tbody className="divide-y divide-gray-100">
                 {sortedRows.map((row: any, i: number) => (
                   <tr key={row.id} className={`hover:bg-red-50/40 transition-colors border-l-2 border-l-red-400 ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
-                    <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{row.when ? new Date(row.when).toLocaleString() : '-'}</td>
+                    <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{row.when ? new Date(row.when).toLocaleString('en-GB') : '-'}</td>
                     <td className="px-4 py-3 font-black text-indigo-600 text-right tabular-nums">#{row.work_order_id}</td>
                     <td className="px-4 py-3 font-semibold text-gray-700">{row.order?.customer || '-'}</td>
                     <td className="px-4 py-3 text-gray-600">{row.order?.job_details || '-'}</td>
@@ -8455,7 +8465,7 @@ const formatDateDMY = (dateStr: string) => {
   if (!dateStr) return '';
   const [y, m, d] = dateStr.split('-');
   if (!y || !m || !d) return dateStr;
-  return `${d}/${m}/${y.slice(2)}`;
+  return `${d}/${m}/${y}`;
 };
 
 const parseDMY = (dmy: string) => {
@@ -8855,7 +8865,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(160);
     doc.text('Excell Packaging', ml, fy + 5);
-    doc.text(`Generated: ${new Date().toLocaleString()}`, pw - ml, fy + 5, { align: 'right' });
+    doc.text(`Generated: ${new Date().toLocaleString('en-GB')}`, pw - ml, fy + 5, { align: 'right' });
 
     doc.save(`production-report-${r.id}.pdf`);
   };
@@ -9251,7 +9261,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
                                       setOpenDropdownIdx(null);
                                     }}
                                     className={`w-full text-left px-2.5 py-1.5 text-sm hover:bg-indigo-50 transition-colors ${item.itemId === i.id ? 'bg-indigo-100 font-bold' : ''}`}
-                                  >{i.name}</button>
+                                  >{i.name} ({i.customer_name})</button>
                                 ))}
                               {items.filter(i => (i.departments || []).includes(selectedDept!)).filter(i => !itemSearchText[idx] || i.name.toLowerCase().includes(itemSearchText[idx].toLowerCase())).filter(i => !entryItems.some((e, ei) => ei !== idx && e.itemId === i.id)).length === 0 && (
                                 <div className="px-2.5 py-1.5 text-sm text-gray-400 italic">No items match</div>
@@ -10030,6 +10040,7 @@ export default function App() {
           { id: 'dispatch-dashboard' as AppView, label: 'Dispatch', icon: Truck },
           { id: 'work-orders' as AppView, label: 'Orders', icon: ClipboardList },
           { id: 'daily-tasks' as AppView, label: 'Daily Tasks', icon: ListTodo },
+          { id: 'my-tasks' as AppView, label: 'My Tasks', icon: CheckSquare },
           { id: 'live-screen' as AppView, label: 'Live Screen', icon: Monitor },
           { id: 'notification-audit' as AppView, label: 'Alerts Log', icon: AlertCircle },
           { id: 'client-orders' as AppView, label: 'Client Orders', icon: ShoppingCart },
@@ -10257,7 +10268,7 @@ export default function App() {
   const formatNotificationEventTime = useCallback((event: any) => {
     const timestamp = getNotificationEventTime(event);
     if (!timestamp) return 'No time';
-    return new Date(timestamp).toLocaleString([], {
+    return new Date(timestamp).toLocaleString('en-GB', {
       month: 'short',
       day: '2-digit',
       hour: '2-digit',
@@ -10378,7 +10389,8 @@ export default function App() {
        case 'production-reports': return <ProductionReports onError={onError} />;
        case 'reports': return <ReportsView onError={onError} />;
         case 'notification-audit': return <NotificationAuditView onError={onError} />;
-        case 'daily-tasks': return <DailyTasks loggedInUser={loggedInUser} />;
+         case 'daily-tasks': return <DailyTasks loggedInUser={loggedInUser} />;
+         case 'my-tasks': return <MyTasks loggedInUser={loggedInUser} />;
         case 'live-screen-login': return <LiveScreenLogin onLogin={handleLiveScreenLogin} />;
         case 'live-screen': return <Dashboard user={loggedInUser} setView={navigateTo} onError={onError} />;
         case 'client-orders': return <ClientOrderManager loggedInUser={loggedInUser} />;
@@ -10641,7 +10653,10 @@ export default function App() {
             return (
               <section key={group.key} className="space-y-1.5 border-b border-white/10 pb-3 last:border-b-0 last:pb-0">
                 <button
-                  onClick={() => setMobileNavOpen(prev => ({ ...prev, [group.key]: !isOpen }))}
+                  onClick={() => setMobileNavOpen(prev => {
+                    const closed = Object.fromEntries(Object.keys(prev).map(k => [k, false]));
+                    return { ...closed, [group.key]: !(prev[group.key] ?? false) };
+                  })}
                   className={`w-full rounded-lg px-1 py-2 text-center text-[9px] font-black uppercase tracking-[0.16em] transition-colors ${hasActiveItem ? 'bg-white/12 text-white' : 'text-blue-100/75 hover:bg-white/10 hover:text-white'}`}
                   title={`${isOpen ? 'Hide' : 'Show'} ${group.label}`}
                 >
@@ -10703,7 +10718,10 @@ export default function App() {
                 return (
                   <div key={group.key} className="liquid-nav-group rounded-xl border border-slate-200/80 overflow-hidden">
                     <button
-                      onClick={() => setMobileNavOpen(prev => ({ ...prev, [group.key]: !isOpen }))}
+                      onClick={() => setMobileNavOpen(prev => {
+                      const closed = Object.fromEntries(Object.keys(prev).map(k => [k, false]));
+                      return { ...closed, [group.key]: !(prev[group.key] ?? false) };
+                    })}
                       className="liquid-nav-head w-full flex items-center justify-between px-3 py-2.5 bg-white/60 text-slate-600"
                     >
                       <span className="text-[10px] font-medium uppercase tracking-widest">{group.label}</span>

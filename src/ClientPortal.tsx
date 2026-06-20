@@ -187,7 +187,7 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
                     <span className="text-xs font-bold text-gray-800">Order #{o.id}</span>
                     <StatusBadge status={o.status} />
                   </div>
-                  <p className="text-[10px] text-gray-500">{o.items.length} item(s) · {new Date(o.created_at).toLocaleDateString()}</p>
+                  <p className="text-[10px] text-gray-500">{o.items.length} item(s) · {new Date(o.created_at).toLocaleDateString('en-GB')}</p>
                   {o.status === 'Rejected' && o.rejection_reason && (
                     <p className="text-[10px] text-red-500 mt-1">Reason: {o.rejection_reason}</p>
                   )}

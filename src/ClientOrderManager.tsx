@@ -95,7 +95,7 @@ const tabColors: Record<string, string> = {
                     <OrderStatusBadge status={order.status} />
                   </div>
                   <p className="text-xs text-gray-500 mb-1">{order.customer_name}</p>
-                  <p className="text-[10px] text-gray-400 mb-2">{new Date(order.created_at).toLocaleString()}</p>
+                  <p className="text-[10px] text-gray-400 mb-2">{new Date(order.created_at).toLocaleString('en-GB')}</p>
                   <div className="flex flex-wrap gap-1.5">
                     {(order.items || []).map((item: any, i: number) => (
                       <span key={i} className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-700 text-[10px] font-semibold">{item.item_name} x{item.qty}</span>
