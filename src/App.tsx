@@ -1824,6 +1824,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
   const [dispatchCustomFrom, setDispatchCustomFrom] = useState('');
   const [dispatchCustomTo, setDispatchCustomTo] = useState('');
   const [dispatchCompanyFilter, setDispatchCompanyFilter] = useState('All');
+  const [dispatchLogsMap, setDispatchLogsMap] = useState<Map<number, any[]>>(new Map());
   const [page, setPage] = useState(1);
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [vehicleOptions, setVehicleOptions] = useState<string[]>([]);
@@ -1835,16 +1836,20 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
   // Track selected orders and their dispatch quantities using Record to be TS friendly
   const [selectedOrders, setSelectedOrders] = useState<Record<number, number>>({});
   const [dispatchMode, setDispatchMode] = useState(false);
+  const [editingDispatchDate, setEditingDispatchDate] = useState<number | null>(null);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [woResult, itemRes, usersRes] = await Promise.all([
+      const [woResult, itemRes, usersRes, logsRes] = await Promise.all([
         supabase.from('work_orders').select('*').order('id', { ascending: false }),
         loadCachedCollection<Item>('items'),
         loadCachedCollection<User>('users', 'id', 200),
+        supabase.from('dispatch_logs').select('*').order('dispatch_date', { ascending: true }),
       ]);
       const { data: woRes, error: woErr } = woResult;
+      const { data: logsRaw } = logsRes;
+      const logsData = Array.isArray(logsRaw) ? logsRaw : [];
 
       if (woErr?.code === '42P01') { onError(); return; }
 
@@ -1855,6 +1860,15 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
           itemInfo: itemsByName.get(wo.job_details),
           qty_dispatched: wo.qty_dispatched ?? 0,
         }));
+
+        // Build dispatch logs map
+        const logsMap = new Map<number, any[]>();
+        logsData.forEach((log: any) => {
+          const oid = log.work_order_id;
+          if (!logsMap.has(oid)) logsMap.set(oid, []);
+          logsMap.get(oid)!.push(log);
+        });
+        setDispatchLogsMap(logsMap);
 
         // Show orders that are Ready for despatch or already in dispatch process
         const dispatchOrders = enriched.filter(wo => 
@@ -2037,6 +2051,12 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
     setIsDispatchMetaModalOpen(true);
   };
 
+  const saveSingleDispatchDate = async (logId: number, date: string) => {
+    if (!date) return;
+    await supabase.from('dispatch_logs').update({ dispatch_date: date }).eq('id', logId);
+    fetchData();
+  };
+
   const dispatchCompanyOptions = useMemo(() => {
     const companies = new Set<string>();
     data.forEach(wo => { if (wo.customer) companies.add(wo.customer); });
@@ -2046,7 +2066,13 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
   const filteredOrders = useMemo(() => {
     const statusFiltered = statusFilter === 'All' ? data.filter(wo => wo.status !== 'Dispatched') : data.filter(wo => wo.status === statusFilter);
     const companyFiltered = dispatchCompanyFilter === 'All' ? statusFiltered : statusFiltered.filter(wo => wo.customer === dispatchCompanyFilter);
-    const dateFiltered = companyFiltered.filter(wo => filterByDate(wo.etd, dispatchDateFilter, dispatchCustomFrom, dispatchCustomTo));
+    const dateFiltered = companyFiltered.filter(wo => {
+      const logs = dispatchLogsMap.get(wo.id) || [];
+      if (logs.length > 0) {
+        return logs.some((log: any) => filterByDate(log.dispatch_date, dispatchDateFilter, dispatchCustomFrom, dispatchCustomTo));
+      }
+      return filterByDate(wo.etd, dispatchDateFilter, dispatchCustomFrom, dispatchCustomTo);
+    });
     if (!deferredSearchQuery) return dateFiltered;
     const lowerQuery = deferredSearchQuery.toLowerCase();
     return dateFiltered.filter(wo =>
@@ -2054,7 +2080,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
       wo.customer.toLowerCase().includes(lowerQuery) ||
       wo.job_details.toLowerCase().includes(lowerQuery)
     );
-  }, [data, deferredSearchQuery, statusFilter, dispatchDateFilter, dispatchCustomFrom, dispatchCustomTo, dispatchCompanyFilter]);
+  }, [data, deferredSearchQuery, statusFilter, dispatchDateFilter, dispatchCustomFrom, dispatchCustomTo, dispatchCompanyFilter, dispatchLogsMap]);
 
   const statusOptions = useMemo(() => {
     const uniqueStatuses = Array.from(new Set(data.map(wo => wo.status))).filter(s => s !== 'QC Approved');
@@ -2218,7 +2244,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                 <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Remaining</th>
                 <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Invoice</th>
                 <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Vehicle</th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Dispatched Date</th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Dispatch Date</th>
                 {dispatchMode && (
                   <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Dispatch Qty</th>
                 )}
@@ -2270,7 +2296,43 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                     </td>
                     <td className="px-6 py-4"><span className="text-xs font-bold text-gray-600">{wo.last_invoice_no || '-'}</span></td>
                     <td className="px-6 py-4"><span className="text-xs font-bold text-gray-600">{wo.last_vehicle_no || '-'}</span></td>
-                    <td className="px-6 py-4"><span className="text-xs font-bold text-gray-600">{wo.dispatch_date ? formatDateDMY(wo.dispatch_date) : '-'}</span></td>
+                    <td className="px-6 py-4">
+                      {editingDispatchDate === wo.id ? (
+                        <div className="flex flex-col gap-1">
+                          {(dispatchLogsMap.get(wo.id) || []).map((log: any) => (
+                            <div key={log.id} className="flex items-center gap-1">
+                              <input type="date" defaultValue={log.dispatch_date?.slice(0, 10)} onChange={e => { saveSingleDispatchDate(log.id, e.target.value); }} className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white w-44" />
+                              <span className="text-xs text-gray-500 font-semibold">Qty: {log.dispatch_qty}</span>
+                            </div>
+                          ))}
+                          <button onClick={() => setEditingDispatchDate(null)} className="self-end px-3 py-1 text-xs font-bold text-gray-500 hover:text-gray-700">Done</button>
+                        </div>
+                      ) : (
+                        <div className="relative group flex items-center gap-1">
+                          {(dispatchLogsMap.get(wo.id) || []).length > 0 ? (
+                            <span className="text-sm font-bold text-gray-600">{(dispatchLogsMap.get(wo.id) || []).map((log: any) => `${formatDateDMY(log.dispatch_date)} (${log.dispatch_qty})`).join(', ')}</span>
+                          ) : (
+                            <span className="text-sm font-bold text-gray-600">-</span>
+                          )}
+                          {(dispatchLogsMap.get(wo.id) || []).length > 0 && (
+                            <button onClick={() => setEditingDispatchDate(wo.id)} className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded opacity-0 group-hover:opacity-100 transition-opacity"><Pencil size={16} /></button>
+                          )}
+                          {dispatchLogsMap.has(wo.id) && (dispatchLogsMap.get(wo.id) || []).length > 0 && (
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50">
+                              <div className="bg-gray-900 text-white text-[10px] font-semibold rounded-lg px-3 py-2 shadow-xl whitespace-nowrap space-y-1">
+                                {(dispatchLogsMap.get(wo.id) || []).map((log, i) => (
+                                  <div key={i} className="flex items-center gap-2">
+                                    <span>{formatDateDMY(log.dispatch_date)}</span>
+                                    <span className="text-gray-400">Qty: {log.dispatch_qty}</span>
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900" />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </td>
                     {dispatchMode && (
                       <td className="px-6 py-4">
                         {isSelected ? (
