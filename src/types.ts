@@ -208,7 +208,7 @@ export interface ProductionReport {
 
 export type DepartmentWOStatus = 'Not Started' | 'Work Started' | 'Ready for QC';
 export type QCStatus = 'Pending QC' | 'QC Denied' | 'QC Approved';
-export type WOStatus = 'Not Started' | 'Work Started' | 'Ready for QC' | 'Ready for despatch' | 'Dispatched' | 'Delivered';
+export type WOStatus = 'Not Started' | 'Work Started' | 'Ready for QC' | 'Ready for despatch' | 'Dispatched';
 
 export interface DepartmentStatus {
   department: string;
@@ -281,6 +281,7 @@ export interface WorkOrder {
   qty_dispatched?: number;
   last_invoice_no?: string;
   last_vehicle_no?: string;
+  dispatch_date?: string;
   etd: string;
   ready_date: string;
   status: WOStatus;

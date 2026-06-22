@@ -41,6 +41,7 @@ import {
   ExternalLink,
   LogIn,
   LogOut,
+  ChevronDown,
   ChevronRight,
   ListPlus,
   Database,
@@ -60,7 +61,8 @@ import {
   ListTodo,
   Monitor,
   ShoppingCart,
-  CalendarDays
+  CalendarDays,
+  Wrench
 } from 'lucide-react';
 import { AppView, User, Customer, Item, WorkOrder, Department, WOStatus, ChildItem, DepartmentStatus, Metric, FEATURE_FLAG_GROUPS } from './types';
 import { supabase, supabaseAnonKey, pb, loginWithMobilePassword, getCurrentAuthUser, logoutAuth, mapAuthRecordToUser } from './supabase';
@@ -114,7 +116,6 @@ const StatusBadge: React.FC<{ status: WOStatus }> = ({ status }) => {
     'Ready for QC': { bg: 'bg-yellow-100', text: 'text-yellow-600', label: 'Ready for QC' },
     'Ready for despatch': { bg: 'bg-purple-100', text: 'text-purple-600', label: 'Ready for Despatch' },
     'Dispatched': { bg: 'bg-indigo-100', text: 'text-indigo-600', label: 'Dispatched' },
-    'Delivered': { bg: 'bg-emerald-100', text: 'text-emerald-600', label: 'Delivered' }
   };
   
   const style = styles[status] || styles['Not Started'];
@@ -131,7 +132,6 @@ const statusTabColors: Record<string, string> = {
   'Ready for QC': 'bg-yellow-100 text-yellow-700 border-yellow-200',
   'Ready for despatch': 'bg-purple-100 text-purple-700 border-purple-200',
   'Dispatched': 'bg-indigo-100 text-indigo-700 border-indigo-200',
-  'Delivered': 'bg-emerald-100 text-emerald-700 border-emerald-200',
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -140,7 +140,6 @@ const STATUS_LABELS: Record<string, string> = {
   'Ready for QC': 'Ready for QC',
   'Ready for despatch': 'Ready for Despatch',
   'Dispatched': 'Dispatched',
-  'Delivered': 'Delivered',
 };
 
 const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = "" }) => (
@@ -148,7 +147,7 @@ const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ chi
 );
 
 const LoadingState: React.FC<{ message?: string }> = ({ message = "Loading..." }) => (
-  <div className="flex flex-col items-center justify-center py-20 text-gray-400 animate-in fade-in duration-500">
+  <div className="flex flex-col items-center justify-center py-20 text-gray-500 animate-in fade-in duration-500">
     <div className="mb-5 grid w-full max-w-sm gap-2 px-8">
       <div className="erp-skeleton h-3 rounded-full" />
       <div className="erp-skeleton h-3 w-4/5 rounded-full" />
@@ -386,7 +385,7 @@ const getItemForWorkOrder = (items: Item[], wo: WorkOrder) => {
   ) || items.find(item => normalizeDuplicateKey(item.name || '') === itemNameKey);
 };
 
-const STATUS_ORDER: WOStatus[] = ['Not Started', 'Work Started', 'Ready for QC', 'Ready for despatch', 'Dispatched', 'Delivered'];
+const STATUS_ORDER: WOStatus[] = ['Not Started', 'Work Started', 'Ready for QC', 'Ready for despatch', 'Dispatched'];
 const isSequentialOnly = (current: WOStatus, next: WOStatus) =>
   STATUS_ORDER.indexOf(next) === STATUS_ORDER.indexOf(current) + 1;
 
@@ -494,7 +493,7 @@ const updateSingleDepartmentStatus = (wo: WorkOrder, department: string, user: U
     found = true;
     return {
       ...s,
-      status: nextStatus as DepartmentWOStatus,
+      status: (nextStatus === 'QC Approved' || nextStatus === 'QC Denied') ? 'Ready for QC' as DepartmentWOStatus : nextStatus as DepartmentWOStatus,
       qc_status: nextStatus === 'QC Approved' || nextStatus === 'QC Denied' ? nextStatus as QCStatus : s.qc_status,
       updated_at: now,
       updated_by: user.username,
@@ -503,7 +502,7 @@ const updateSingleDepartmentStatus = (wo: WorkOrder, department: string, user: U
   if (!found) {
     departmentStatuses.push({
       department,
-      status: nextStatus as DepartmentWOStatus,
+      status: (nextStatus === 'QC Approved' || nextStatus === 'QC Denied') ? 'Ready for QC' as DepartmentWOStatus : nextStatus as DepartmentWOStatus,
       qc_status: nextStatus === 'QC Approved' || nextStatus === 'QC Denied' ? nextStatus as QCStatus : undefined,
       updated_at: now,
       updated_by: user.username,
@@ -611,8 +610,7 @@ const STATUS_FILTER_ORDER: WOStatus[] = [
   'Work Started',
   'Ready for QC',
   'Ready for despatch',
-  'Dispatched',
-  'Delivered'
+  'Dispatched'
 ];
 
 const sortStatuses = (statuses: string[]): string[] => {
@@ -703,7 +701,6 @@ const WorkOrderCardActions: React.FC<{
       'QC Denied': 'bg-red-50 text-red-600 hover:bg-red-100',
       'Ready for despatch': 'bg-purple-50 text-purple-600 hover:bg-purple-100',
       'Dispatched': 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100',
-      'Delivered': 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100',
     };
     return colors[status] || 'bg-gray-100 text-gray-600 hover:bg-indigo-50 hover:text-indigo-700';
   };
@@ -719,7 +716,7 @@ const WorkOrderCardActions: React.FC<{
         <button
           type="button"
           onClick={e => { e.stopPropagation(); onViewPlan(wo.id); }}
-          className="flex-1 rounded-lg bg-blue-50 px-2 py-2 text-[9px] font-black text-blue-700 transition-colors hover:bg-blue-100"
+          className="flex-1 rounded-lg bg-blue-50 px-2 py-2 text-xs font-black text-blue-700 transition-colors hover:bg-blue-100"
         >
           View Plan
         </button>
@@ -730,7 +727,7 @@ const WorkOrderCardActions: React.FC<{
             if (drawingUrl) onViewDrawing(drawingUrl);
           }}
           disabled={!drawingUrl}
-          className="flex-1 rounded-lg bg-slate-50 px-2 py-2 text-[9px] font-black text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex-1 rounded-lg bg-slate-50 px-2 py-2 text-xs font-black text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Drawing PDF
         </button>
@@ -738,7 +735,7 @@ const WorkOrderCardActions: React.FC<{
           <button
             type="button"
             onClick={e => { e.stopPropagation(); setShowOptions(v => !v); }}
-            className={`rounded-lg px-3 py-2 text-[9px] font-black transition-all shrink-0 ${showOptions ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            className={`rounded-lg px-3 py-2 text-xs font-black transition-all shrink-0 ${showOptions ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
           >
             Status
           </button>
@@ -747,13 +744,13 @@ const WorkOrderCardActions: React.FC<{
 
       {pendingStatus ? (
         <div className="flex items-center justify-between gap-2 rounded-lg bg-indigo-50/70 border border-indigo-200/60 px-3 py-2">
-          <span className="text-[10px] font-bold text-indigo-700">
+          <span className="text-xs font-bold text-indigo-700">
             Set to <span className="font-black">{STATUS_LABELS[pendingStatus] || pendingStatus}</span>?
           </span>
           <div className="flex gap-1.5">
             <button
               onClick={e => { e.stopPropagation(); closeAll(); }}
-              className="px-2.5 py-1 rounded-md bg-white text-gray-600 text-[9px] font-black border border-gray-200 hover:bg-gray-50 transition-colors"
+              className="px-2.5 py-1 rounded-md bg-white text-gray-600 text-xs font-black border border-gray-200 hover:bg-gray-50 transition-colors"
             >
               Cancel
             </button>
@@ -764,7 +761,7 @@ const WorkOrderCardActions: React.FC<{
                 onChangeStatus(wo, pendingStatus);
               }}
               disabled={busy}
-              className="px-2.5 py-1 rounded-md bg-indigo-600 text-white text-[9px] font-black hover:bg-indigo-700 transition-colors disabled:opacity-50"
+              className="px-2.5 py-1 rounded-md bg-indigo-600 text-white text-xs font-black hover:bg-indigo-700 transition-colors disabled:opacity-50"
             >
               {busy ? '...' : 'Confirm'}
             </button>
@@ -784,13 +781,13 @@ const WorkOrderCardActions: React.FC<{
                   setShowOptions(false);
                   setPendingStatus(status);
                 }}
-                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[9px] font-black transition-all ${
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-black transition-all ${
                   isCurrent
                     ? 'bg-indigo-600 text-white cursor-default shadow-sm'
                     : `${getRadioColor(status)} border border-transparent hover:border-current`
                 } disabled:opacity-60`}
               >
-                <span className={`text-[7px] ${isCurrent ? '' : 'opacity-40'}`}>{isCurrent ? '●' : '○'}</span>
+                <span className={`text-[10px] ${isCurrent ? '' : 'opacity-40'}`}>{isCurrent ? '●' : '○'}</span>
                 {STATUS_LABELS[status] || status}
               </button>
             );
@@ -998,7 +995,7 @@ const LiveScreenLogin: React.FC<{ onLogin: (user: any) => void }> = ({ onLogin }
         <div className="text-center mb-6">
           <Monitor size={48} className="text-blue-400 mx-auto mb-3" />
           <h1 className="text-xl font-black text-white">Live Screen</h1>
-          <p className="text-sm text-gray-400 mt-1">Sign in to display</p>
+          <p className="text-sm text-gray-500 mt-1">Sign in to display</p>
         </div>
         {error && <div className="mb-4 px-3 py-2 rounded-lg bg-red-900/50 text-red-400 text-xs font-semibold">{error}</div>}
         <div className="space-y-3">
@@ -1063,7 +1060,6 @@ ALTER TABLE work_orders ADD CONSTRAINT work_orders_status_check CHECK (status IN
   'Ready for QC',
   'Ready for despatch',
   'Dispatched',
-  'Delivered',
   'Cancelled'
 ));
 
@@ -1157,6 +1153,50 @@ CREATE TABLE IF NOT EXISTS live_screen_users (
     alert("SQL copied to clipboard!");
   };
 
+  const [migrating, setMigrating] = useState(false);
+  const [migrationDone, setMigrationDone] = useState(false);
+
+  const handleMigrateDeliveredToDispatched = async () => {
+    if (!confirm('Migrate all "Delivered" records to "Dispatched"? This is safe to run multiple times.')) return;
+    setMigrating(true);
+    try {
+      const wo = await pb.collection('work_orders').getFullList({
+        filter: 'status="Delivered"',
+        requestKey: null
+      });
+      for (const r of wo) {
+        await pb.collection('work_orders').update(r.id, { status: 'Dispatched' }, { requestKey: null });
+      }
+
+      const evNew = await pb.collection('activity_events').getFullList({
+        filter: 'new_value="Delivered"',
+        requestKey: null
+      });
+      for (const r of evNew) {
+        await pb.collection('activity_events').update(r.id, { new_value: 'Dispatched' }, { requestKey: null });
+      }
+
+      const evOld = await pb.collection('activity_events').getFullList({
+        filter: 'old_value="Delivered"',
+        requestKey: null
+      });
+      for (const r of evOld) {
+        await pb.collection('activity_events').update(r.id, { old_value: 'Dispatched' }, { requestKey: null });
+      }
+
+      setMigrationDone(true);
+      alert(`Migration complete!\n\n` +
+        `• ${wo.length} work_orders updated\n` +
+        `• ${evNew.length} activity events (new_value) updated\n` +
+        `• ${evOld.length} activity events (old_value) updated\n\n` +
+        `The button will now hide.`);
+    } catch (err: any) {
+      alert('Migration failed: ' + (err?.message || String(err)));
+    } finally {
+      setMigrating(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-white overflow-y-auto">
       <div className="max-w-3xl w-full space-y-8 animate-in fade-in zoom-in duration-500">
@@ -1184,12 +1224,28 @@ CREATE TABLE IF NOT EXISTS live_screen_users (
           <div className="flex items-start gap-4 p-4 bg-white/5 rounded-xl text-sm">
             <Info className="text-blue-400 shrink-0" size={20} />
             <p className="text-slate-300">
-              Paste the script above into your <b>Supabase SQL Editor</b> and click <b>Run</b>. 
+              Paste the script above into your <b>Supabase SQL Editor</b> and click <b>Run</b>.
             </p>
           </div>
           <button onClick={onRetry} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black shadow-lg shadow-blue-500/20 hover:bg-blue-500 transition-all flex items-center justify-center gap-3">
             REFRESH APP <RefreshCw size={20} />
           </button>
+
+          {!migrationDone && (
+            <div className="mt-6 border-t border-amber-500/30 pt-5">
+              <p className="text-xs font-black text-amber-400 mb-2 uppercase tracking-widest">⚠️ One-time data migration (safe to re-run)</p>
+              <p className="text-xs text-slate-400 mb-3">
+                Click below to convert any old "Delivered" records to "Dispatched" after deploying the status change.
+              </p>
+              <button
+                onClick={handleMigrateDeliveredToDispatched}
+                disabled={migrating}
+                className="w-full py-3 bg-orange-600 text-white rounded-2xl font-black hover:bg-orange-500 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+              >
+                {migrating ? 'Migrating…' : 'Migrate Old "Delivered" → "Dispatched"'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1325,14 +1381,14 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
 
   const kpis = useMemo(() => {
     const totalOrders = analyticsOrders.length;
-    const openOrders = analyticsOrders.filter(wo => wo.status !== 'Delivered').length;
-    const deliveredOrders = analyticsOrders.filter(wo => wo.status === 'Delivered').length;
+    const openOrders = analyticsOrders.filter(wo => wo.status !== 'Dispatched').length;
+    const dispatchedOrders = analyticsOrders.filter(wo => wo.status === 'Dispatched').length;
     const overdue = analyticsOrders.filter(wo => {
       if (!wo.etd) return false;
       const etd = new Date(`${wo.etd}T12:00:00`);
-      return !Number.isNaN(etd.getTime()) && etd < new Date() && wo.status !== 'Delivered';
+      return !Number.isNaN(etd.getTime()) && etd < new Date() && wo.status !== 'Dispatched';
     }).length;
-    return { totalOrders, openOrders, deliveredOrders, overdue };
+    return { totalOrders, openOrders, dispatchedOrders, overdue };
   }, [analyticsOrders]);
 
   const statusDistribution = useMemo(() => {
@@ -1430,7 +1486,6 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
       { label: 'Ready QC', count: analyticsOrders.filter(wo => wo.status === 'Ready for QC').length, tone: 'bg-amber-500' },
       { label: 'Ready Dispatch', count: analyticsOrders.filter(wo => wo.status === 'Ready for despatch').length, tone: 'bg-violet-500' },
       { label: 'Dispatched', count: analyticsOrders.filter(wo => wo.status === 'Dispatched').length, tone: 'bg-sky-500' },
-      { label: 'Delivered', count: analyticsOrders.filter(wo => wo.status === 'Delivered').length, tone: 'bg-slate-400' },
     ];
     const max = Math.max(1, ...rows.map(row => row.count));
     return rows.map(row => ({ ...row, width: Math.max(6, Math.round((row.count / max) * 100)) }));
@@ -1447,7 +1502,7 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
   }, [analyticsOrders]);
 
   const etdHeatmap = useMemo(() => {
-    const openOrders = analyticsOrders.filter(wo => wo.status !== 'Delivered');
+    const openOrders = analyticsOrders.filter(wo => wo.status !== 'Dispatched');
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const cells = [
@@ -1509,9 +1564,9 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
         <StatusBadge status={wo.status} />
       </div>
       <div className="grid grid-cols-3 gap-2 text-[10px] font-bold text-gray-500">
-        <div className="rounded-xl bg-gray-50 px-2 py-1.5"><span className="block text-gray-400">Qty</span><span className="text-slate-800">{wo.qty || 0}</span></div>
-        <div className="rounded-xl bg-gray-50 px-2 py-1.5"><span className="block text-gray-400">ETD</span><span className="text-slate-800">{formatDashboardDate(wo.etd)}</span></div>
-        <div className="rounded-xl bg-gray-50 px-2 py-1.5"><span className="block text-gray-400">Sent</span><span className="text-slate-800">{wo.qty_dispatched || 0}</span></div>
+        <div className="rounded-xl bg-gray-50 px-2 py-1.5"><span className="block text-gray-500">Qty</span><span className="text-slate-800">{wo.qty || ''}</span></div>
+        <div className="rounded-xl bg-gray-50 px-2 py-1.5"><span className="block text-gray-500">ETD</span><span className="text-slate-800">{formatDashboardDate(wo.etd)}</span></div>
+        <div className="rounded-xl bg-gray-50 px-2 py-1.5"><span className="block text-gray-500">Sent</span><span className="text-slate-800">{wo.qty_dispatched || 0}</span></div>
       </div>
       {!compact && (
         <div className="flex flex-wrap gap-1">
@@ -1551,7 +1606,7 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
       )}
 
       <div className="overflow-hidden rounded-[20px] border border-gray-200 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
-        <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7">
           {[
             { label: 'Open', value: kpis.openOrders, tone: 'text-slate-900' },
             { label: 'Work Started', value: dashboardBuckets[0]?.rows.length || 0, tone: 'text-slate-900' },
@@ -1559,7 +1614,6 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
             { label: 'Ready Dispatch', value: dashboardBuckets[2]?.rows.length || 0, tone: 'text-violet-700' },
             { label: 'Dispatched', value: dashboardBuckets[3]?.rows.length || 0, tone: 'text-sky-700' },
             { label: 'Overdue', value: kpis.overdue, tone: 'text-red-600' },
-            { label: 'Delivered', value: kpis.deliveredOrders, tone: 'text-slate-900' },
             { label: 'Window', value: kpis.totalOrders, tone: 'text-slate-900' },
           ].map((metric, index) => (
             <div key={metric.label} className="border-b border-r border-gray-100 px-4 py-3" style={{ animationDelay: `${index * 20}ms` }}>
@@ -1578,7 +1632,7 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
             className="group flex items-center justify-between rounded-2xl border border-gray-200 bg-white px-3 py-2 text-left transition-colors hover:bg-gray-50 active:scale-[0.99]"
           >
             <div>
-              <h3 className="text-[9px] font-black uppercase tracking-wider text-gray-400">{stat.label}</h3>
+              <h3 className="text-[10px] font-black uppercase tracking-wider text-gray-500">{stat.label}</h3>
               <span className="mt-0.5 block text-lg font-black leading-none text-gray-900">{stat.count}</span>
             </div>
             <div className="text-gray-300 group-hover:text-gray-500">
@@ -1608,13 +1662,13 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
                   <StatusBadge status={wo.status} />
                 </div>
                 <div className="mt-2 flex items-center justify-between text-[11px] font-bold text-gray-500">
-                  <span>Qty <span className="text-gray-900">{wo.qty || 0}</span></span>
+                  <span>Qty <span className="text-gray-900">{wo.qty || ''}</span></span>
                   <span>ETD <span className="text-gray-900">{formatDashboardDate(wo.etd)}</span></span>
                   <span>Sent <span className="text-gray-900">{wo.qty_dispatched || 0}</span></span>
                 </div>
               </button>
             ))}
-            {recentOrders.length === 0 && <div className="px-5 py-12 text-center text-sm font-semibold text-gray-400">No recent orders found.</div>}
+            {recentOrders.length === 0 && <div className="px-5 py-12 text-center text-sm font-bold text-gray-500">No recent orders found.</div>}
           </div>
         </section>
 
@@ -1645,15 +1699,15 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
                             <div className="truncate text-[11px] font-black text-gray-900 group-hover:text-slate-700">#{wo.id} {wo.job_details}</div>
                             <div className="mt-0.5 truncate text-[11px] font-semibold text-gray-500">{wo.customer}</div>
                           </div>
-                          <div className="shrink-0 text-[10px] font-black text-gray-400">{formatDashboardDate(wo.etd)}</div>
+                          <div className="shrink-0 text-[10px] font-black text-gray-500">{formatDashboardDate(wo.etd)}</div>
                         </div>
                         <div className="mt-1.5 flex items-center justify-between text-[10px] font-bold text-gray-500">
-                          <span>Qty {wo.qty || 0}</span>
+                          <span>Qty {wo.qty || ''}</span>
                           <span>Sent {wo.qty_dispatched || 0}</span>
                         </div>
                       </button>
                     ))}
-                    {bucket.rows.length === 0 && <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-6 text-center text-xs font-semibold text-gray-400">No orders</div>}
+                    {bucket.rows.length === 0 && <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-6 text-center text-xs font-bold text-gray-500">No orders</div>}
                   </div>
                 </section>
               );
@@ -1666,14 +1720,14 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
         <section className="rounded-[20px] border border-gray-200 bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-black uppercase tracking-wider text-gray-900">Status Mix</h3>
-            <span className="text-[10px] font-black text-gray-400">{kpis.totalOrders} orders</span>
+            <span className="text-[10px] font-black text-gray-500">{kpis.totalOrders} orders</span>
           </div>
           <div className="mt-4 flex items-center gap-4">
             <div className="relative h-28 w-28 shrink-0 rounded-full" style={{ background: pieGradient }}>
               <div className="absolute inset-5 rounded-full bg-white shadow-inner" />
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <span className="text-2xl font-black leading-none text-slate-900">{kpis.openOrders}</span>
-                <span className="text-[9px] font-black uppercase tracking-wider text-gray-400">Open</span>
+                <span className="text-[10px] font-black uppercase tracking-wider text-gray-500">Open</span>
               </div>
             </div>
             <div className="min-w-0 flex-1 space-y-2">
@@ -1683,7 +1737,7 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
                   <span className="text-gray-900">{row.pct}%</span>
                 </div>
               ))}
-              {statusChart.length === 0 && <div className="text-xs font-semibold text-gray-400">No orders in this window.</div>}
+              {statusChart.length === 0 && <div className="text-xs font-bold text-gray-500">No orders in this window.</div>}
             </div>
           </div>
         </section>
@@ -1691,7 +1745,7 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
         <section className="rounded-[20px] border border-gray-200 bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-black uppercase tracking-wider text-gray-900">Stage Load</h3>
-            <span className="text-[10px] font-black text-gray-400">Production</span>
+            <span className="text-[10px] font-black text-gray-500">Production</span>
           </div>
           <div className="mt-4 space-y-3">
             {productionStageData.map(row => (
@@ -1711,7 +1765,7 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
         <section className="rounded-[20px] border border-gray-200 bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-black uppercase tracking-wider text-gray-900">Department Load</h3>
-            <span className="text-[10px] font-black text-gray-400">Top {departmentWorkload.length}</span>
+            <span className="text-[10px] font-black text-gray-500">Top {departmentWorkload.length}</span>
           </div>
           <div className="mt-4 space-y-3">
             {departmentWorkload.map(row => (
@@ -1723,20 +1777,20 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
                 <span className="text-right text-gray-900">{row.orders}</span>
               </div>
             ))}
-            {departmentWorkload.length === 0 && <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-3 py-8 text-center text-xs font-semibold text-gray-400">No department assignments.</div>}
+            {departmentWorkload.length === 0 && <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-3 py-8 text-center text-xs font-bold text-gray-500">No department assignments.</div>}
           </div>
         </section>
 
         <section className="rounded-[20px] border border-gray-200 bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-black uppercase tracking-wider text-gray-900">ETD & Dispatch</h3>
-            <span className="text-[10px] font-black text-gray-400">Next 7 days</span>
+            <span className="text-[10px] font-black text-gray-500">Next 7 days</span>
           </div>
           <div className="mt-4 grid grid-cols-4 gap-1.5">
             {etdHeatmap.map(cell => (
               <div key={cell.label} className={`rounded-xl border px-2 py-2 text-center ${cell.late && cell.count > 0 ? 'border-red-100 bg-red-50' : 'border-gray-100 bg-gray-50'}`}>
                 <div className={`text-lg font-black leading-none ${cell.late && cell.count > 0 ? 'text-red-600' : 'text-slate-900'}`} style={!cell.late ? { opacity: 0.45 + (cell.intensity * 0.55) } : undefined}>{cell.count}</div>
-                <div className="mt-1 text-[9px] font-black uppercase tracking-wider text-gray-400">{cell.label}</div>
+                <div className="mt-1 text-[10px] font-black uppercase tracking-wider text-gray-500">{cell.label}</div>
               </div>
             ))}
           </div>
@@ -1766,6 +1820,10 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [dispatchDateFilter, setDispatchDateFilter] = useState('all');
+  const [dispatchCustomFrom, setDispatchCustomFrom] = useState('');
+  const [dispatchCustomTo, setDispatchCustomTo] = useState('');
+  const [dispatchCompanyFilter, setDispatchCompanyFilter] = useState('All');
   const [page, setPage] = useState(1);
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [vehicleOptions, setVehicleOptions] = useState<string[]>([]);
@@ -1801,8 +1859,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
         // Show orders that are Ready for despatch or already in dispatch process
         const dispatchOrders = enriched.filter(wo => 
           wo.status === 'Ready for despatch' || 
-          wo.status === 'Dispatched' || 
-          wo.status === 'Delivered'
+          wo.status === 'Dispatched'
         );
 
         setData(dispatchOrders);
@@ -1889,8 +1946,9 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
         const currentDispatched = order.qty_dispatched ?? 0;
         const newDispatched = currentDispatched + dispatchQty;
         const remaining = order.qty - newDispatched;
+        const isFullyDispatched = remaining === 0;
 
-        const newStatus: WOStatus = remaining === 0 ? 'Delivered' : 'Dispatched';
+        const newStatus: WOStatus = 'Dispatched';
 
         const { error } = await supabase
           .from('work_orders')
@@ -1899,6 +1957,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
             status: newStatus,
             last_invoice_no: invoiceNo,
             last_vehicle_no: vehicleNo,
+            dispatch_date: dispatchDate,
           })
           .eq('id', orderId);
 
@@ -1923,8 +1982,8 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
 
         void logActivity({
           eventType: 'dispatch',
-          action: newStatus === 'Delivered' ? 'delivered' : 'dispatched',
-          title: newStatus === 'Delivered' ? 'Order Delivered' : 'Order Dispatched',
+          action: isFullyDispatched ? 'fully_dispatched' : 'partially_dispatched',
+          title: isFullyDispatched ? 'Order Fully Dispatched' : 'Order Partially Dispatched',
           body: `Order #${orderId}: ${dispatchQty} unit(s) dispatched. Invoice ${invoiceNo} | Vehicle ${vehicleNo}`,
           actor: loggedInUser,
           targetCollection: 'work_orders',
@@ -1935,8 +1994,8 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
           itemName: order.job_details,
           oldValue: order.status,
           newValue: newStatus,
-          metadata: { dispatch_qty: dispatchQty, qty_dispatched: newDispatched, invoice_no: invoiceNo, vehicle_no: vehicleNo },
-          severity: newStatus === 'Delivered' ? 'success' : 'info',
+          metadata: { dispatch_qty: dispatchQty, qty_dispatched: newDispatched, remaining_qty: remaining, invoice_no: invoiceNo, vehicle_no: vehicleNo },
+          severity: isFullyDispatched ? 'success' : 'info',
         });
       }));
 
@@ -1978,16 +2037,24 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
     setIsDispatchMetaModalOpen(true);
   };
 
+  const dispatchCompanyOptions = useMemo(() => {
+    const companies = new Set<string>();
+    data.forEach(wo => { if (wo.customer) companies.add(wo.customer); });
+    return Array.from(companies).sort();
+  }, [data]);
+
   const filteredOrders = useMemo(() => {
-    const statusFiltered = statusFilter === 'All' ? data.filter(wo => wo.status !== 'Delivered') : data.filter(wo => wo.status === statusFilter);
-    if (!deferredSearchQuery) return statusFiltered;
+    const statusFiltered = statusFilter === 'All' ? data.filter(wo => wo.status !== 'Dispatched') : data.filter(wo => wo.status === statusFilter);
+    const companyFiltered = dispatchCompanyFilter === 'All' ? statusFiltered : statusFiltered.filter(wo => wo.customer === dispatchCompanyFilter);
+    const dateFiltered = companyFiltered.filter(wo => filterByDate(wo.etd, dispatchDateFilter, dispatchCustomFrom, dispatchCustomTo));
+    if (!deferredSearchQuery) return dateFiltered;
     const lowerQuery = deferredSearchQuery.toLowerCase();
-    return statusFiltered.filter(wo =>
+    return dateFiltered.filter(wo =>
       wo.id.toString().includes(lowerQuery) ||
       wo.customer.toLowerCase().includes(lowerQuery) ||
       wo.job_details.toLowerCase().includes(lowerQuery)
     );
-  }, [data, deferredSearchQuery, statusFilter]);
+  }, [data, deferredSearchQuery, statusFilter, dispatchDateFilter, dispatchCustomFrom, dispatchCustomTo, dispatchCompanyFilter]);
 
   const statusOptions = useMemo(() => {
     const uniqueStatuses = Array.from(new Set(data.map(wo => wo.status))).filter(s => s !== 'QC Approved');
@@ -2011,45 +2078,9 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
 
   return (
     <div className="space-y-6 custom-bom-print">
-      <div className="sticky top-16 md:top-0 z-20 bg-gray-50/95 backdrop-blur px-1 py-2 rounded-xl border border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-        <h2 className="text-2xl font-black text-gray-800">Dispatch Dashboard</h2>
-        <div className="flex flex-wrap gap-3 w-full md:w-auto">
-          {!dispatchMode && (
-            <button
-              onClick={() => setDispatchMode(true)}
-              className="flex-1 md:flex-none px-4 py-2 bg-blue-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-blue-700 transition-colors"
-            >
-              <Package size={20} />
-              Bulk Dispatch
-            </button>
-          )}
-          {dispatchMode && (
-            <>
-              <button
-                onClick={() => {
-                  setDispatchMode(false);
-                  setSelectedOrders({});
-                }}
-                className="flex-1 md:flex-none px-4 py-2 bg-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-300 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleBulkDispatch}
-                disabled={Object.keys(selectedOrders).length === 0}
-                className="flex-1 md:flex-none px-4 py-2 bg-green-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Check size={20} />
-                Dispatch ({Object.keys(selectedOrders).length})
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={20} />
           <input 
             type="text" 
             placeholder="Search by order, customer, or job..." 
@@ -2063,13 +2094,28 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
           {statusOptions.map(s => (
             <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === s ? (statusTabColors[s] || 'bg-slate-900 text-white') : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS[s] || s}</button>
           ))}
+          {!dispatchMode && (
+            <button onClick={() => setDispatchMode(true)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 transition-colors flex items-center gap-1.5">
+              <Package size={14} /> Bulk Dispatch
+            </button>
+          )}
+          {dispatchMode && (
+            <>
+              <button onClick={() => { setDispatchMode(false); setSelectedOrders({}); }} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors">
+                Cancel
+              </button>
+              <button onClick={handleBulkDispatch} disabled={Object.keys(selectedOrders).length === 0} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
+                <Check size={14} /> Dispatch ({Object.keys(selectedOrders).length})
+              </button>
+            </>
+          )}
         </div>
       </div>
 
       <Modal isOpen={isDispatchMetaModalOpen} onClose={() => { if (!isSubmittingDispatch) setIsDispatchMetaModalOpen(false); }} title="Dispatch Details">
         <div className="space-y-4">
           <div>
-            <label className="text-[10px] font-black uppercase text-gray-400 block mb-1 tracking-widest">Invoice Number</label>
+            <label className="text-[10px] font-black uppercase text-gray-500 block mb-1 tracking-widest">Invoice Number</label>
             <input
               value={dispatchMeta.invoiceNo}
               onChange={e => setDispatchMeta(prev => ({ ...prev, invoiceNo: e.target.value }))}
@@ -2080,7 +2126,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
           </div>
 
           <div>
-            <label className="text-[10px] font-black uppercase text-gray-400 block mb-1 tracking-widest">Vehicle Number</label>
+            <label className="text-[10px] font-black uppercase text-gray-500 block mb-1 tracking-widest">Vehicle Number</label>
             <div className="space-y-2">
               <select
                 value={dispatchMeta.vehicleNo}
@@ -2102,7 +2148,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
           </div>
 
           <div>
-            <label className="text-[10px] font-black uppercase text-gray-400 block mb-1 tracking-widest">Dispatch Date</label>
+            <label className="text-[10px] font-black uppercase text-gray-500 block mb-1 tracking-widest">Dispatch Date</label>
             <input type="date" value={dispatchMeta.dispatchDate} max={todayDateStr}
               onChange={e => setDispatchMeta(prev => ({ ...prev, dispatchDate: e.target.value }))}
               disabled={isSubmittingDispatch}
@@ -2148,19 +2194,20 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                     />
                   </th>
                 )}
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-400 whitespace-nowrap">Order #</th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-400 whitespace-nowrap">Customer</th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-400 whitespace-nowrap">Job Details</th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-400 whitespace-nowrap">Total Qty</th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-400 whitespace-nowrap">Dispatched</th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-400 whitespace-nowrap">Remaining</th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-400 whitespace-nowrap">Invoice</th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-400 whitespace-nowrap">Vehicle</th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Order #</th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Customer</th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Job Details</th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Total Qty</th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Dispatched</th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Remaining</th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Invoice</th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Vehicle</th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Dispatched Date</th>
                 {dispatchMode && (
-                  <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-400 whitespace-nowrap">Dispatch Qty</th>
+                  <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Dispatch Qty</th>
                 )}
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-400 whitespace-nowrap">Status</th>
-                <th className="px-6 py-3 text-right text-[10px] font-black uppercase text-gray-400 whitespace-nowrap">Actions</th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Status</th>
+                <th className="px-6 py-3 text-right text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -2207,6 +2254,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                     </td>
                     <td className="px-6 py-4"><span className="text-xs font-bold text-gray-600">{wo.last_invoice_no || '-'}</span></td>
                     <td className="px-6 py-4"><span className="text-xs font-bold text-gray-600">{wo.last_vehicle_no || '-'}</span></td>
+                    <td className="px-6 py-4"><span className="text-xs font-bold text-gray-600">{wo.dispatch_date ? formatDateDMY(wo.dispatch_date) : '-'}</span></td>
                     {dispatchMode && (
                       <td className="px-6 py-4">
                         {isSelected ? (
@@ -2219,7 +2267,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                             className="w-20 px-2 py-1 border rounded-lg text-center font-bold"
                           />
                         ) : (
-                          <span className="text-gray-400">—</span>
+                          <span className="text-gray-500">—</span>
                         )}
                       </td>
                     )}
@@ -2242,7 +2290,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
               })}
               {filteredOrders.length === 0 && (
                 <tr>
-                  <td colSpan={dispatchMode ? 12 : 11} className="px-6 py-12 text-center text-gray-400 italic">
+                  <td colSpan={dispatchMode ? 12 : 11} className="px-6 py-12 text-center text-gray-500 italic font-semibold">
                     No orders for dispatch
                   </td>
                 </tr>
@@ -2297,26 +2345,26 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
 
                 <div className="grid grid-cols-3 gap-1.5 mt-2 text-center">
                   <div className="bg-gray-50 rounded-lg py-1">
-                    <div className="text-[9px] font-black text-gray-400 uppercase">Total</div>
+                    <div className="text-[10px] font-black text-gray-500 uppercase">Total</div>
                     <div className="font-black text-gray-800 text-xs">{wo.qty}</div>
                   </div>
                   <div className="bg-blue-50 rounded-lg py-1">
-                    <div className="text-[9px] font-black text-blue-400 uppercase">Done</div>
+                    <div className="text-[10px] font-black text-blue-400 uppercase">Done</div>
                     <div className="font-black text-blue-600 text-xs">{wo.qty_dispatched || 0}</div>
                   </div>
                   <div className="bg-orange-50 rounded-lg py-1">
-                    <div className="text-[9px] font-black text-orange-400 uppercase">Left</div>
+                    <div className="text-[10px] font-black text-orange-400 uppercase">Left</div>
                     <div className="font-black text-orange-600 text-xs">{remaining}</div>
                   </div>
                 </div>
 
                 <div className="mt-2 grid grid-cols-2 gap-1.5 text-[10px]">
                   <div className="bg-gray-50 rounded-lg px-2 py-1">
-                    <span className="font-black text-gray-400 uppercase">Inv</span>
+                    <span className="font-black text-gray-500 uppercase">Inv</span>
                     <div className="font-bold text-gray-700 truncate">{wo.last_invoice_no || '-'}</div>
                   </div>
                   <div className="bg-gray-50 rounded-lg px-2 py-1">
-                    <span className="font-black text-gray-400 uppercase">Vehicle</span>
+                    <span className="font-black text-gray-500 uppercase">Vehicle</span>
                     <div className="font-bold text-gray-700 truncate">{wo.last_vehicle_no || '-'}</div>
                   </div>
                 </div>
@@ -2355,7 +2403,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
           })}
 
           {filteredOrders.length === 0 && (
-            <div className="py-8 text-center text-gray-400 italic text-sm">No orders for dispatch</div>
+            <div className="py-8 text-center text-gray-500 italic font-semibold text-sm">No orders for dispatch</div>
           )}
         </div>
 
@@ -2600,7 +2648,7 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
       </div>
 
       <div className="relative">
-        <Search className="absolute left-3 top-3 text-gray-400" size={18} />
+        <Search className="absolute left-3 top-3 text-gray-500" size={18} />
         <input placeholder="Search users by name..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-white border rounded-xl outline-none" />
       </div>
 
@@ -2611,7 +2659,7 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
           </div>
 
           <div>
-            <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-400">Full Name</label>
+            <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500">Full Name</label>
             <input
               required
               disabled={isSubmitting}
@@ -2623,7 +2671,7 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
           </div>
 
           <div>
-            <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-400">Email / Login Email</label>
+            <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500">Email / Login Email</label>
             <input
               required
               disabled={isSubmitting}
@@ -2637,7 +2685,7 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-400">Mobile Number</label>
+              <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500">Mobile Number</label>
               <input
                 required
                 disabled={isSubmitting}
@@ -2650,7 +2698,7 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
             </div>
 
             <div>
-              <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-400">Vehicle Number</label>
+              <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500">Vehicle Number</label>
               <input
                 disabled={isSubmitting}
                 placeholder="Optional vehicle number"
@@ -2662,7 +2710,7 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
           </div>
 
           <div>
-            <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-400">Passkey / Password</label>
+            <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500">Passkey / Password</label>
             <input
               required={!editingUser}
               disabled={isSubmitting}
@@ -2676,7 +2724,7 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-400">Department</label>
+              <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500">Department</label>
               <select required disabled={isSubmitting} value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl disabled:opacity-60">
                 <option value="">Select department</option>
                 {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
@@ -2684,7 +2732,7 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
             </div>
 
             <div>
-              <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-400">Role</label>
+              <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500">Role</label>
               <select disabled={isSubmitting} value={formData.level} onChange={e => setFormData({...formData, level: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl disabled:opacity-60">
                 <option value="1-Manager">Manager</option>
                 <option value="2-Supervisor">Supervisor</option>
@@ -2725,7 +2773,7 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
       <Card className="p-0 overflow-hidden shadow-md">
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full min-w-[760px] text-left text-sm">
-            <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-400 border-b">
+            <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-500 border-b">
               <tr><th className="px-6 py-4 whitespace-nowrap">Name</th><th className="px-6 py-4 whitespace-nowrap">Contact</th><th className="px-6 py-4 whitespace-nowrap">Vehicle</th><th className="px-6 py-4 whitespace-nowrap">Dept</th><th className="px-6 py-4 whitespace-nowrap">Actions</th></tr>
             </thead>
             <tbody className="divide-y">
@@ -2743,7 +2791,7 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
               ))}
               {filteredUsers.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-6 py-10 text-center text-gray-400 italic">No users found.</td>
+                  <td colSpan={5} className="px-6 py-10 text-center text-gray-500 italic font-semibold">No users found.</td>
                 </tr>
               )}
             </tbody>
@@ -2784,7 +2832,7 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
           ))}
 
           {filteredUsers.length === 0 && (
-            <div className="py-8 text-center text-gray-400 italic text-sm">No users found.</div>
+            <div className="py-8 text-center text-gray-500 italic font-semibold text-sm">No users found.</div>
           )}
         </div>
       </Card>
@@ -2911,20 +2959,20 @@ const DepartmentList: React.FC<{ onError: () => void }> = ({ onError }) => {
             </div>
             <div className="space-y-2 mt-4">
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-400 font-bold text-[10px] uppercase tracking-wider">In-charge</span>
+                <span className="text-gray-500 font-bold text-[10px] uppercase tracking-wider">In-charge</span>
                 <span className="font-bold text-gray-700">{d.incharge || 'N/A'}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-400 font-bold text-[10px] uppercase tracking-wider">Supervisor</span>
+                <span className="text-gray-500 font-bold text-[10px] uppercase tracking-wider">Supervisor</span>
                 <span className="font-bold text-gray-700">{d.supervisor || 'N/A'}</span>
               </div>
             </div>
             {d.metrics && d.metrics.length > 0 && (
               <div className="border-t pt-3 mt-3">
-                <span className="text-gray-400 font-bold text-[10px] uppercase tracking-wider">📊 Metrics</span>
+                <span className="text-gray-500 font-bold text-[10px] uppercase tracking-wider">📊 Metrics</span>
                 {d.metrics.map((m, i) => (
                   <div key={i} className="flex justify-between text-sm text-gray-700 mt-1">
-                    <span className="font-medium">{m.type}</span>
+                    <span className="font-semibold">{m.type}</span>
                     <span className="text-gray-500">{m.unit}</span>
                   </div>
                 ))}
@@ -2976,6 +3024,14 @@ const CustomerManagement: React.FC<{ onError: () => void; editingId?: number }> 
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    const duplicateCustomer = data.find(c =>
+      normalizeDuplicateKey(c.name) === normalizeDuplicateKey(formData.name) &&
+      (!editingCustomer || Number(c.id) !== Number(editingCustomer.id))
+    );
+    if (duplicateCustomer) {
+      alert(`A client named "${formData.name}" already exists.`);
+      return;
+    }
     const oldCustomerName = editingCustomer?.name || '';
     const result = editingCustomer
       ? await supabase.from('customers').update(formData).eq('id', editingCustomer.id)
@@ -3073,7 +3129,7 @@ const CustomerManagement: React.FC<{ onError: () => void; editingId?: number }> 
             <div className="flex justify-between items-start mb-4 pr-10">
               <div>
                 <h3 className="text-lg font-black text-gray-800 leading-tight">{c.name}</h3>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1 flex items-center gap-1">
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mt-1 flex items-center gap-1">
                    <MapPin size={10} /> {c.city || 'Location N/A'}
                 </p>
               </div>
@@ -3106,6 +3162,7 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('All');
+  const [companyFilter, setCompanyFilter] = useState('All');
   
   // Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -3151,6 +3208,12 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
     return Array.from(uniqueDepartments).sort((a, b) => a.localeCompare(b));
   }, [data]);
 
+  const companyOptions = useMemo(() => {
+    const unique = new Set<string>();
+    data.forEach(item => { if (item.customer_name) unique.add(item.customer_name); });
+    return Array.from(unique).sort((a, b) => a.localeCompare(b));
+  }, [data]);
+
   const filteredData = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return data.filter(item => {
@@ -3160,9 +3223,11 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
         (item.drawing_no || '').toLowerCase().includes(query);
       const matchesDepartment = departmentFilter === 'All' ||
         (item.departments || []).includes(departmentFilter);
-      return matchesSearch && matchesDepartment;
+      const matchesCompany = companyFilter === 'All' ||
+        (item.customer_name || '') === companyFilter;
+      return matchesSearch && matchesDepartment && matchesCompany;
     });
-  }, [data, searchQuery, departmentFilter]);
+  }, [data, searchQuery, departmentFilter, companyFilter]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -3496,14 +3561,9 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-xl font-black text-gray-800">Item Master</h2>
-        <button onClick={() => { setEditingItem(null); resetItemForm(); setIsModalOpen(true); }} className="bg-orange-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg hover:bg-orange-700 transition-colors"><Plus size={18} /></button>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
           <input
             type="text"
             placeholder="Search items by name, customer or drawing no..."
@@ -3515,13 +3575,24 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
         <select
           value={departmentFilter}
           onChange={e => setDepartmentFilter(e.target.value)}
-          className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
+          className="px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="All">All Departments</option>
           {departmentOptions.map(dept => (
             <option key={dept} value={dept}>{dept.replace(/_/g, ' ')}</option>
           ))}
         </select>
+        <select
+          value={companyFilter}
+          onChange={e => setCompanyFilter(e.target.value)}
+          className="px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="All">All Companies</option>
+          {companyOptions.map(company => (
+            <option key={company} value={company}>{company}</option>
+          ))}
+        </select>
+        <button onClick={() => { setEditingItem(null); resetItemForm(); setIsModalOpen(true); }} className="bg-orange-600 text-white px-4 py-2.5 rounded-lg font-bold shadow-lg hover:bg-orange-700 transition-colors whitespace-nowrap"><Plus size={18} /></button>
       </div>
 
       <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingItem(null); }} title={editingItem ? "Edit Item" : "New Item"} maxWidthClassName="max-w-6xl">
@@ -3631,7 +3702,7 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
             <div className="flex-shrink-0 flex items-center justify-between p-5 pb-3">
               <div>
                 <h4 className="text-xs font-black uppercase tracking-widest text-gray-500">Items</h4>
-                <p className="text-[11px] text-gray-400 mt-0.5">Add item masters one by one</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">Add item masters one by one</p>
               </div>
               {!editingItem && <button type="button" onClick={addItemRow} className="flex items-center gap-1.5 rounded-xl border border-orange-200 bg-orange-50 px-4 py-2.5 text-xs font-black text-orange-700 hover:bg-orange-100"><Plus size={14} /> Add Item</button>}
             </div>
@@ -3649,15 +3720,15 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
 
                     <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                       <div className="md:col-span-3">
-                        <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block">Item Name</label>
+                        <label className="text-[10px] font-black uppercase text-gray-500 mb-1.5 block">Item Name</label>
                         <input required={index === 0} placeholder="e.g. Wooden Box 12x8" value={row.name} onChange={e => updateItemRow(index, 'name', e.target.value)} className="w-full px-5 py-3.5 bg-white border rounded-lg text-base" />
                       </div>
                       <div>
-                        <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block">Drawing No.</label>
+                        <label className="text-[10px] font-black uppercase text-gray-500 mb-1.5 block">Drawing No.</label>
                         <input required={index === 0} placeholder="e.g. DWG-001" value={row.drawing_no} onChange={e => updateItemRow(index, 'drawing_no', e.target.value)} className="w-full px-4 py-3 bg-white border rounded-lg text-sm" />
                       </div>
                       <div className="md:col-span-1">
-                        <label className="text-[10px] font-black uppercase text-gray-400 mb-1.5 block">Drawing File</label>
+                        <label className="text-[10px] font-black uppercase text-gray-500 mb-1.5 block">Drawing File</label>
                         <label className="flex min-h-[48px] cursor-pointer items-center justify-between gap-3 rounded-lg border bg-white px-4 py-3 text-sm font-bold text-gray-500 hover:bg-orange-50">
                           <span className="min-w-0 truncate">{row.drawing_file ? row.drawing_file.name : 'Upload PDF'}</span>
                           <Upload size={16} className="flex-shrink-0 text-orange-600" />
@@ -3668,10 +3739,10 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
 
                     {/* Departments */}
                     <div className="mt-4">
-                      <h5 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-3">Departments</h5>
+                      <h5 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-3">Departments</h5>
                       <div className="flex flex-wrap gap-2">
                         {involvingDepartments.map(d => (
-                          <button key={d.id} type="button" onClick={() => handleDeptToggle(index, d.name)} className={`px-4 py-2 text-xs font-black border rounded-xl transition-all ${(row.departments || []).includes(d.name) ? 'bg-orange-600 text-white shadow-md border-orange-600' : 'bg-gray-50 text-gray-400 border-gray-200 hover:border-orange-300'}`}>{d.name}</button>
+                          <button key={d.id} type="button" onClick={() => handleDeptToggle(index, d.name)} className={`px-4 py-2 text-xs font-black border rounded-xl transition-all ${(row.departments || []).includes(d.name) ? 'bg-orange-600 text-white shadow-md border-orange-600' : 'bg-gray-50 text-gray-500 border-gray-200 hover:border-orange-300'}`}>{d.name}</button>
                         ))}
                       </div>
                       {rowWithDeptError === index && <p className="mt-2 text-xs font-bold text-red-500">Please select at least one department.</p>}
@@ -3681,10 +3752,10 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
 
                   <div>
                     <div className="rounded-xl border border-orange-200 bg-white p-4">
-                      <h5 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-3 flex items-center gap-1.5">📊 Metric Requirements {(row.metric_requirements?.length || 0) > 0 && <span className="text-purple-600 font-black">({row.metric_requirements!.length})</span>}</h5>
+                      <h5 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-3 flex items-center gap-1.5">📊 Metric Requirements {(row.metric_requirements?.length || 0) > 0 && <span className="text-purple-600 font-black">({row.metric_requirements!.length})</span>}</h5>
                       {row.metric_requirements && row.metric_requirements.length > 0 && (
                           <div className="space-y-2 mb-3">
-                            <div className="flex items-center gap-2 text-[10px] font-black uppercase text-gray-400 px-1">
+                            <div className="flex items-center gap-2 text-[10px] font-black uppercase text-gray-500 px-1">
                               <span className="flex-1">Metric</span>
                               <span className="w-20 text-center">Unit</span>
                               <span className="w-20 text-right">Qty/Unit</span>
@@ -3701,8 +3772,29 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
                           </div>
                         )}
                         <button type="button" onClick={() => { const updated = [...(itemRows[index].metric_requirements || []), { metric: '', unit: '', qtyPerUnit: 0 }]; updateItemRow(index, 'metric_requirements', updated); }} className="text-purple-600 text-sm font-bold hover:text-purple-800 flex items-center gap-1"><Plus size={14} /> Add Metric Requirement</button>
-                      </div>
-                  </div>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <select value={dispatchCompanyFilter} onChange={e => setDispatchCompanyFilter(e.target.value)} className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="All">All Companies</option>
+          {dispatchCompanyOptions.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select value={dispatchDateFilter} onChange={e => { setDispatchDateFilter(e.target.value); if (e.target.value !== 'custom') { setDispatchCustomFrom(''); setDispatchCustomTo(''); } }} className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="all">All Dates</option>
+          <option value="today">Today</option>
+          <option value="week">This Week</option>
+          <option value="month">This Month</option>
+          <option value="custom">Custom</option>
+        </select>
+        {dispatchDateFilter === 'custom' && (
+          <>
+            <input type="date" value={dispatchCustomFrom} onChange={e => setDispatchCustomFrom(e.target.value)} className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs bg-white" />
+            <span className="text-gray-500 text-xs">to</span>
+            <input type="date" value={dispatchCustomTo} onChange={e => setDispatchCustomTo(e.target.value)} className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs bg-white" />
+          </>
+        )}
+      </div>
                 </div>
               </div>
             ))}
@@ -3724,7 +3816,7 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
                <p className="text-sm font-bold text-gray-500 uppercase tracking-widest">{selectedItem.name} ({selectedItem.drawing_no})</p>
             </div>
          ) : (
-            <div className="p-20 text-center text-gray-300 italic">No drawing PDF link provided.</div>
+            <div className="p-20 text-center text-gray-500 italic font-semibold">No drawing PDF link provided.</div>
          )}
       </Modal>
 
@@ -3744,12 +3836,12 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
                        <Badge color={item.type === 'item' ? 'indigo' : 'blue'}>{item.type === 'item' ? 'Item' : 'Component'}</Badge>
                        <div className="flex gap-1 mt-1">
                           {(item.departments || []).map((d: string) => (
-                             <span key={d} className="text-[9px] text-gray-400 font-bold uppercase">{d}</span>
+                             <span key={d} className="text-[10px] text-gray-500 font-bold uppercase">{d}</span>
                           ))}
                        </div>
                     </div>
                     <div className="flex items-center gap-2 bg-gray-50 rounded-lg p-1 border">
-                       <span className="text-[9px] font-black text-gray-400 pl-2">QTY</span>
+                       <span className="text-[10px] font-black text-gray-500 pl-2">QTY</span>
                        <input
                         type="number"
                         min="1"
@@ -3769,7 +3861,7 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
                 ))}
               </div>
             ) : (
-               <div className="text-center py-8 text-blue-300 text-sm font-medium">No components selected for this item.</div>
+               <div className="text-center py-8 text-blue-300 text-sm font-semibold">No components selected for this item.</div>
             )}
             <button
               onClick={saveComponentsToItem}
@@ -3781,7 +3873,7 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
 
           <div className="flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden">
             <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={20} />
               <input 
                 type="text"
                 placeholder="Search library components..."
@@ -3798,13 +3890,13 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
             <div className={`flex min-h-0 flex-1 flex-col overflow-hidden ${componentSearch.trim() && filteredComponents.length === 0 ? 'xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)] xl:gap-6' : ''}`}>
             <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200">
-                <div className="bg-gray-50 px-4 py-2 border-b border-gray-200 text-[10px] font-black uppercase text-gray-400 tracking-widest">Available Components & Items</div>
+                <div className="bg-gray-50 px-4 py-2 border-b border-gray-200 text-[10px] font-black uppercase text-gray-500 tracking-widest">Available Components & Items</div>
                 <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2 space-y-1">
                   {availableBomRows.map(({ kind, row }) => (
                     <div key={`${kind}-${row.id}`} className="flex items-center justify-between p-3 border border-transparent hover:border-gray-200 hover:bg-gray-50 rounded-lg group transition-all">
                       <div className="flex-1">
                         <div className="font-bold text-gray-800 text-sm">{row.name}</div>
-                        {kind === 'item' && <div className="text-[10px] font-semibold text-gray-400 truncate">{row.customer_name} {row.drawing_no ? `| ${row.drawing_no}` : ''}</div>}
+                        {kind === 'item' && <div className="text-[10px] font-bold text-gray-500 truncate">{row.customer_name} {row.drawing_no ? `| ${row.drawing_no}` : ''}</div>}
                         <div className="flex flex-wrap gap-1 mt-1">
                           <Badge color={kind === 'item' ? 'indigo' : 'blue'}>{kind === 'item' ? 'Item' : 'Component'}</Badge>
                           {(row.departments || []).map((d: string) => <Badge key={d} color="gray">{d}</Badge>)}
@@ -3820,20 +3912,20 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
                     </div>
                   ))}
                   {availableBomRows.length === 0 && (
-                     <div className="p-6 text-center text-sm font-semibold text-gray-400">No matching components or items found.</div>
-                   )}
-                </div>
-            </div>
+                     <div className="p-6 text-center text-sm font-bold text-gray-500">No matching components or items found.</div>
+          )}
+        </div>
+      </div>
             </div>
 
           {componentSearch.trim() && filteredComponents.length === 0 && (
             <div className="space-y-5 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
               <div>
                 <div className="text-base font-black text-gray-800">New Standard Component</div>
-                <div className="mt-1 text-xs font-semibold text-gray-400">Add one or many components to the library and this BOM.</div>
+                <div className="mt-1 text-xs font-bold text-gray-500">Add one or many components to the library and this BOM.</div>
               </div>
               <div>
-                <label className="mb-2 ml-1 block text-[10px] font-black uppercase tracking-widest text-gray-400">Component name</label>
+                <label className="mb-2 ml-1 block text-[10px] font-black uppercase tracking-widest text-gray-500">Component name</label>
                 <textarea
                   value={newComponentNames}
                   onChange={e => setNewComponentNames(e.target.value)}
@@ -3842,7 +3934,7 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
                 />
               </div>
               <div>
-                <label className="mb-3 ml-1 block text-[10px] font-black uppercase tracking-widest text-gray-400">Related departments (select at least one)</label>
+                <label className="mb-3 ml-1 block text-[10px] font-black uppercase tracking-widest text-gray-500">Related departments (select at least one)</label>
                 <div className="flex flex-wrap gap-2">
                   {involvingDepartments.map(department => (
                     <button
@@ -3874,7 +3966,7 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
       <Card className="p-0 overflow-hidden shadow-md">
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full min-w-[780px] text-left text-sm">
-            <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-400 border-b">
+            <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-500 border-b">
               <tr>
                 <th className="px-6 py-4 whitespace-nowrap">Item Name</th>
                 <th className="px-6 py-4 whitespace-nowrap">Customer</th>
@@ -3911,7 +4003,7 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
               ))}
               {filteredData.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-gray-400 italic">No items found.</td>
+                  <td colSpan={5} className="px-6 py-12 text-center text-gray-500 italic font-semibold">No items found.</td>
                 </tr>
               )}
             </tbody>
@@ -3935,7 +4027,7 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
                 {c.departments && c.departments.length > 0 ? (
                   c.departments.map((d: string) => <Badge key={d} color="gray">{d}</Badge>)
                 ) : (
-                  <span className="text-[11px] font-semibold text-gray-400">No departments</span>
+                  <span className="text-[11px] font-bold text-gray-500">No departments</span>
                 )}
               </div>
 
@@ -3947,7 +4039,7 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
                   <Layers size={14} />
                   BOM
                   {(c.children?.length || 0) > 0 && (
-                    <span className="rounded-full bg-orange-500 px-1.5 py-0.5 text-[9px] text-white">{c.children?.length}</span>
+                    <span className="rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] text-white">{c.children?.length}</span>
                   )}
                 </button>
 
@@ -3984,7 +4076,7 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
           ))}
 
           {filteredData.length === 0 && (
-            <div className="py-8 text-center text-gray-400 italic text-sm">No items found.</div>
+            <div className="py-8 text-center text-gray-500 italic font-semibold text-sm">No items found.</div>
           )}
         </div>
       </Card>
@@ -4214,11 +4306,27 @@ const ChildItemListView: React.FC<{ onError: () => void; editingId?: number | st
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start sm:items-center justify-between gap-2 sm:gap-3">
-        <div className="min-w-0">
-          <h2 className="text-lg sm:text-xl font-black text-gray-800 leading-tight">Component Library</h2>
-          <p className="hidden sm:block text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Manage standard parts and sub-assemblies</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+          <input
+            type="text"
+            placeholder="Search components or departments..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+          />
         </div>
+        <select
+          value={departmentFilter}
+          onChange={e => setDepartmentFilter(e.target.value)}
+          className="px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="All">All Departments</option>
+          {departmentOptions.map(dept => (
+            <option key={dept} value={dept}>{dept.replace(/_/g, ' ')}</option>
+          ))}
+        </select>
         <button
           onClick={() => { setEditingComponent(null); setComponentNameRows([{ name: '', departments: [] }]); setIsModalOpen(true); }}
           aria-label="Add Component"
@@ -4230,34 +4338,10 @@ const ChildItemListView: React.FC<{ onError: () => void; editingId?: number | st
         </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-          <input
-            type="text"
-            placeholder="Search components or departments..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-          />
-        </div>
-
-        <select
-          value={departmentFilter}
-          onChange={e => setDepartmentFilter(e.target.value)}
-          className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="All">All Departments</option>
-          {departmentOptions.map(dept => (
-            <option key={dept} value={dept}>{dept.replace(/_/g, ' ')}</option>
-          ))}
-        </select>
-      </div>
-
       <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingComponent(null); }} title={editingComponent ? "Edit Component" : "New Standard Component"}>
          <form onSubmit={handleSubmit} className="space-y-6">
              <div>
-                <label className="text-[10px] font-black uppercase text-gray-400 mb-2 block tracking-widest ml-1">Component Name</label>
+                <label className="text-[10px] font-black uppercase text-gray-500 mb-2 block tracking-widest ml-1">Component Name</label>
                <div className="space-y-2">
                   {componentNameRows.map((row, index) => (
                     <div key={index} className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
@@ -4274,7 +4358,7 @@ const ChildItemListView: React.FC<{ onError: () => void; editingId?: number | st
                         </button>
                       </div>
                       <div className="mt-3">
-                        <label className="mb-2 ml-1 block text-[10px] font-black uppercase tracking-widest text-gray-400">Departments for this component</label>
+                        <label className="mb-2 ml-1 block text-[10px] font-black uppercase tracking-widest text-gray-500">Departments for this component</label>
                         <div className="flex flex-wrap gap-2">
                           {involvingDepartments.map(d => (
                             <button
@@ -4305,7 +4389,7 @@ const ChildItemListView: React.FC<{ onError: () => void; editingId?: number | st
       <Card className="p-0 overflow-hidden shadow-md">
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full min-w-[680px] text-left text-sm">
-            <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-400 border-b">
+            <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-500 border-b">
               <tr>
                 <th className="px-6 py-4 whitespace-nowrap">Component Name</th>
                 <th className="px-6 py-4 whitespace-nowrap">Depts</th>
@@ -4341,7 +4425,7 @@ const ChildItemListView: React.FC<{ onError: () => void; editingId?: number | st
               ))}
               {filteredComponents.length === 0 && (
                 <tr>
-                    <td colSpan={3} className="px-6 py-12 text-center text-gray-400 italic">
+                    <td colSpan={3} className="px-6 py-12 text-center text-gray-500 italic font-semibold">
                       {data.length === 0 ? 'Library is empty. Add standard components to get started.' : 'No components match the current search/filter.'}
                     </td>
                 </tr>
@@ -4360,7 +4444,7 @@ const ChildItemListView: React.FC<{ onError: () => void; editingId?: number | st
                     {(c.departments || []).length > 0 ? (
                       (c.departments || []).map((d: string) => <Badge key={d} color="gray">{d}</Badge>)
                     ) : (
-                      <span className="text-[11px] font-semibold text-gray-400">No departments</span>
+                      <span className="text-[11px] font-bold text-gray-500">No departments</span>
                     )}
                   </div>
                 </div>
@@ -4389,7 +4473,7 @@ const ChildItemListView: React.FC<{ onError: () => void; editingId?: number | st
           ))}
 
           {filteredComponents.length === 0 && (
-            <div className="py-10 text-center text-gray-400 italic text-sm">
+            <div className="py-10 text-center text-gray-500 italic font-semibold text-sm">
               {data.length === 0 ? 'Library is empty. Add standard components to get started.' : 'No components match the current search/filter.'}
             </div>
           )}
@@ -4411,6 +4495,9 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
   const [selectedImageUrl, setSelectedImageUrl] = useState('');
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [busyCardStatusId, setBusyCardStatusId] = useState<number | null>(null);
+  const [jobsDateFilter, setJobsDateFilter] = useState('all');
+  const [jobsCustomFrom, setJobsCustomFrom] = useState('');
+  const [jobsCustomTo, setJobsCustomTo] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -4445,15 +4532,16 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
   }, [loggedInUser]);
 
   const filteredOrders = useMemo(() => {
-    const statusFiltered = statusFilter === 'All' ? data.filter(wo => wo.status !== 'Delivered') : data.filter(wo => wo.status === statusFilter);
-    if (!deferredSearchQuery) return statusFiltered;
+    const statusFiltered = statusFilter === 'All' ? data.filter(wo => wo.status !== 'Dispatched') : data.filter(wo => wo.status === statusFilter);
+    const dateFiltered = statusFiltered.filter(wo => filterByDate(wo.etd, jobsDateFilter, jobsCustomFrom, jobsCustomTo));
+    if (!deferredSearchQuery) return dateFiltered;
     const lowerCaseQuery = deferredSearchQuery.toLowerCase();
-    return statusFiltered.filter(wo =>
+    return dateFiltered.filter(wo =>
       wo.id.toString().includes(lowerCaseQuery) ||
       wo.customer.toLowerCase().includes(lowerCaseQuery) ||
       wo.job_details.toLowerCase().includes(lowerCaseQuery)
     );
-  }, [data, deferredSearchQuery, statusFilter]);
+  }, [data, deferredSearchQuery, statusFilter, jobsDateFilter, jobsCustomFrom, jobsCustomTo]);
 
   const statusOptions = useMemo(() => {
     const uniqueStatuses = Array.from(new Set(data.map(wo => wo.status))).filter(s => s !== 'QC Approved');
@@ -4549,15 +4637,9 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
 
   return (
     <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-300">
-      <div className="rounded-[20px] bg-white p-3 sm:p-5 text-slate-900 shadow-[0_2px_8px_rgba(15,23,42,0.12)] border border-slate-200 flex flex-col gap-1 sm:gap-2 mb-3 sm:mb-6">
-        <div className="md:hidden text-[10px] font-black uppercase tracking-widest text-blue-700">Production Queue</div>
-        <h1 className="text-lg md:text-2xl font-black text-slate-900 md:text-gray-800">{loggedInUser.department.replace(/_/g, ' ')} Dashboard</h1>
-        <p className="hidden md:block text-slate-600 md:text-gray-500 text-sm">Manage your department's active work orders.</p>
-      </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-6">
         <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={20} />
           <input 
             type="text" 
             placeholder="Search by order, customer, or job..." 
@@ -4573,6 +4655,22 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
           ))}
         </div>
       </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <select value={jobsDateFilter} onChange={e => { setJobsDateFilter(e.target.value); if (e.target.value !== 'custom') { setJobsCustomFrom(''); setJobsCustomTo(''); } }} className="px-3 py-1.5 border rounded-xl text-xs font-semibold bg-white">
+          <option value="all">All Dates</option>
+          <option value="today">Today</option>
+          <option value="week">This Week</option>
+          <option value="month">This Month</option>
+          <option value="custom">Custom</option>
+        </select>
+        {jobsDateFilter === 'custom' && (
+          <>
+            <input type="date" value={jobsCustomFrom} onChange={e => setJobsCustomFrom(e.target.value)} className="px-3 py-1.5 border rounded-xl text-xs bg-white" />
+            <span className="text-gray-500 text-xs">to</span>
+            <input type="date" value={jobsCustomTo} onChange={e => setJobsCustomTo(e.target.value)} className="px-3 py-1.5 border rounded-xl text-xs bg-white" />
+          </>
+        )}
+      </div>
 
       <Modal isOpen={isImageModalOpen} onClose={() => setIsImageModalOpen(false)} title="Drawing PDF Preview" maxWidthClassName="max-w-6xl">
          <div className="flex flex-col items-center">
@@ -4584,7 +4682,7 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
                  </div>
                </div>
             ) : (
-               <p className="text-gray-400 italic py-10">No drawing PDF available.</p>
+               <p className="text-gray-500 italic font-semibold py-10">No drawing PDF available.</p>
             )}
          </div>
       </Modal>
@@ -4600,10 +4698,10 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
               <div>
                 <div className="flex items-center gap-1 flex-wrap">
                   <span className="text-[10px] font-black text-indigo-600">#{wo.id}</span>
-                  {wo.order_type === 'suborder' && <Badge color="purple" className="!text-[8px]">Suborder Of #{wo.parent_work_order_id || '-'}</Badge>}
+                  {wo.order_type === 'suborder' && <Badge color="purple" className="!text-[10px]">Suborder Of #{wo.parent_work_order_id || '-'}</Badge>}
                 </div>
                 <h3 className="text-xs font-black text-slate-800 leading-tight mt-0.5 line-clamp-1 md:line-clamp-2">{wo.job_details}</h3>
-                <p className="hidden md:block text-[10px] font-bold text-gray-400 uppercase">{wo.customer}</p>
+                <p className="hidden md:block text-[10px] font-bold text-gray-500 uppercase">{wo.customer}</p>
               </div>
               <div className="flex flex-col items-end gap-1">
                 <StatusBadge status={wo.status} />
@@ -4618,7 +4716,7 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
 
             <div className="flex items-center justify-between gap-2 pt-1 border-t border-gray-100">
               <div className="flex items-center gap-1.5 min-w-0">
-                <span className="hidden md:inline text-[9px] font-black text-gray-300 uppercase">DRW</span>
+                <span className="hidden md:inline text-[10px] font-black text-gray-500 uppercase">DRW</span>
                 <span className="text-[10px] font-bold text-slate-500 truncate md:hidden">{wo.customer}</span>
                 <span className="hidden md:inline text-[10px] font-mono font-bold text-slate-500 truncate">{wo.drawing || wo.itemInfo?.drawing_no || 'TBD'}</span>
               </div>
@@ -4638,7 +4736,7 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
         {filteredOrders.length === 0 && (
           <div className="flex flex-col items-center justify-center py-12 text-center">
              <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4"><CheckCircle2 size={32} className="text-gray-300"/></div>
-             <p className="text-gray-400 font-medium">No pending work orders found for your department.</p>
+             <p className="text-gray-500 font-semibold">No pending work orders found for your department.</p>
           </div>
         )}
       </div>
@@ -4669,12 +4767,21 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
   const [searchQuery, setSearchQuery] = useState(''); 
   const [statusFilter, setStatusFilter] = useState('All');
   const [departmentFilter, setDepartmentFilter] = useState('All');
+  const [orderDateFilter, setOrderDateFilter] = useState('all');
+  const [orderCustomFrom, setOrderCustomFrom] = useState('');
+  const [orderCustomTo, setOrderCustomTo] = useState('');
   const [page, setPage] = useState(1);
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [busyCardStatusId, setBusyCardStatusId] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'card'>(() => (
     typeof window !== 'undefined' && window.innerWidth < 768 ? 'card' : 'table'
   ));
+
+  const isOrderOverdue = (wo: WorkOrder & { itemInfo?: Item }) => {
+    if (!wo.etd || wo.status === 'Dispatched') return false;
+    const etd = new Date(`${wo.etd}T12:00:00`);
+    return !Number.isNaN(etd.getTime()) && etd < new Date();
+  };
 
   useEffect(() => {
     const handleResize = () => {
@@ -4984,21 +5091,23 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
   };
 
   const filteredOrders = useMemo(() => {
-    const statusFiltered = statusFilter === 'All' ? data.filter(wo => wo.status !== 'Delivered') : data.filter(wo => wo.status === statusFilter);
+    const statusFiltered = statusFilter === 'All' ? data.filter(wo => wo.status !== 'Dispatched') : data.filter(wo => wo.status === statusFilter);
 
     const departmentFiltered = canFilterByDepartment && departmentFilter !== 'All'
       ? statusFiltered.filter(wo => (wo.assigned_departments || []).some(dept => normalizeDepartment(dept) === normalizeDepartment(departmentFilter)))
       : statusFiltered;
 
-    if (!deferredSearchQuery) return departmentFiltered;
+    const dateFiltered = departmentFiltered.filter(wo => filterByDate(wo.etd, orderDateFilter, orderCustomFrom, orderCustomTo));
+
+    if (!deferredSearchQuery) return dateFiltered;
     const lowerCaseQuery = deferredSearchQuery.toLowerCase();
-    return departmentFiltered.filter(wo =>
+    return dateFiltered.filter(wo =>
       wo.id.toString().includes(lowerCaseQuery) ||
       wo.customer.toLowerCase().includes(lowerCaseQuery) ||
       wo.job_details.toLowerCase().includes(lowerCaseQuery) ||
       (wo.drawing || '').toLowerCase().includes(lowerCaseQuery)
     );
-  }, [data, deferredSearchQuery, statusFilter, departmentFilter, canFilterByDepartment]);
+  }, [data, deferredSearchQuery, statusFilter, departmentFilter, canFilterByDepartment, orderDateFilter, orderCustomFrom, orderCustomTo]);
 
   useEffect(() => {
     setPage(1);
@@ -5111,89 +5220,40 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
 
   return (
     <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-300">
-      <div className="sticky top-16 md:top-0 z-20 bg-white/95 md:bg-gray-50/95 backdrop-blur px-3 md:px-1 py-3 md:py-2 rounded-3xl md:rounded-xl border border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-4 shadow-sm md:shadow-none">
-        <div className="flex items-center justify-between w-full md:w-auto gap-2">
-          <div>
-            <div className="md:hidden text-[10px] font-black uppercase tracking-widest text-blue-600">Factory Queue</div>
-            <h2 className="text-2xl font-black text-gray-800 tracking-tight">Work Orders</h2>
-          </div>
-          <Badge color="blue" className="md:hidden">{totalRows} Total</Badge>
-        </div>
-        
-        <div className="flex items-center gap-2 sm:gap-3 w-full md:w-auto">
-            {/* View Toggle */}
-            <div className="hidden sm:flex bg-white rounded-xl p-1 border border-gray-200 shadow-sm">
-                <button 
-                    onClick={() => setViewMode('table')} 
-                    className={`p-2 rounded-lg transition-all ${viewMode === 'table' ? 'bg-indigo-50 text-indigo-600 shadow-sm' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
-                    title="List View"
-                >
-                    <List size={20} />
-                </button>
-                <button 
-                    onClick={() => setViewMode('card')} 
-                    className={`p-2 rounded-lg transition-all ${viewMode === 'card' ? 'bg-indigo-50 text-indigo-600 shadow-sm' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
-                    title="Card View"
-                >
-                    <LayoutGrid size={20} />
-                </button>
-            </div>
-
-            <div className="relative flex-1 min-w-0 md:w-80">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-              <input
-                type="text"
-                placeholder="Search order, customer, job, drawing..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
-              />
-            </div>
-
-            {isOfficeUser && (
-              <button
-                onClick={() => setIsModalOpen(true)}
-                aria-label="New Order"
-                title="New Order"
-                className="w-11 h-11 sm:w-auto sm:h-auto bg-blue-600 text-white sm:px-6 sm:py-2.5 rounded-2xl sm:rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 hover:scale-105 hover:bg-blue-500 transition-all"
-              >
-                <Plus size={20} />
-                <span className="hidden sm:inline">New Order</span>
-              </button>
-            )}
-        </div>
-      </div>
-
       <div className="mb-3 sm:mb-6">
         <details className="md:hidden rounded-2xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
           <summary className="list-none cursor-pointer flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-500">
-            <span>Filters</span>
+            <span>Filters &amp; Search</span>
             <span className="text-blue-600">{statusFilter !== 'All' || departmentFilter !== 'All' ? 'Active' : 'Open'}</span>
           </summary>
           <div className="mt-2 grid gap-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+              <input type="text" placeholder="Search order, customer, job, drawing..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
+            </div>
             <div className="flex gap-1.5 flex-wrap">
               <button onClick={() => setStatusFilter('All')} className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${statusFilter === 'All' ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>All</button>
               {statusOptions.map(s => (
                 <button key={s} onClick={() => setStatusFilter(s)} className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${statusFilter === s ? (statusTabColors[s] || 'bg-slate-900 text-white') : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS[s] || s}</button>
               ))}
             </div>
-
             {canFilterByDepartment && (
-              <select
-                value={departmentFilter}
-                onChange={e => setDepartmentFilter(e.target.value)}
-                className="w-full min-w-0 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
-              >
+              <select value={departmentFilter} onChange={e => setDepartmentFilter(e.target.value)} className="w-full min-w-0 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="All">All Departments</option>
                 {departmentOptions.map(dept => (
                   <option key={dept} value={dept}>{dept.replace(/_/g, ' ')}</option>
                 ))}
               </select>
             )}
+            {isOfficeUser && (
+              <button onClick={() => setIsModalOpen(true)} className="w-full bg-blue-600 text-white px-4 py-2 rounded-xl font-bold flex items-center justify-center gap-2 text-sm">
+                <Plus size={16} /> New Order
+              </button>
+            )}
           </div>
         </details>
 
-        <div className={`hidden md:grid gap-2 ${canFilterByDepartment ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'}`}>
+        <div className="hidden md:flex flex-wrap items-center gap-3">
           <div className="flex gap-1.5 flex-wrap items-center">
             <button onClick={() => setStatusFilter('All')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === 'All' ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>All</button>
             {statusOptions.map(s => (
@@ -5201,17 +5261,44 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
             ))}
           </div>
 
+          <div className="relative flex-1 min-w-0 max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+            <input type="text" placeholder="Search order, customer, job, drawing..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-9 pr-3 py-1.5 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-xs" />
+          </div>
+
           {canFilterByDepartment && (
-            <select
-              value={departmentFilter}
-              onChange={e => setDepartmentFilter(e.target.value)}
-              className="w-full min-w-0 px-3 sm:px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
-            >
+            <select value={departmentFilter} onChange={e => setDepartmentFilter(e.target.value)} className="min-w-0 px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
               <option value="All">All Departments</option>
               {departmentOptions.map(dept => (
                 <option key={dept} value={dept}>{dept.replace(/_/g, ' ')}</option>
               ))}
             </select>
+          )}
+
+          <select value={orderDateFilter} onChange={e => { setOrderDateFilter(e.target.value); if (e.target.value !== 'custom') { setOrderCustomFrom(''); setOrderCustomTo(''); } }} className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700">
+            <option value="all">All Dates</option>
+            <option value="today">Today</option>
+            <option value="week">This Week</option>
+            <option value="month">This Month</option>
+            <option value="custom">Custom</option>
+          </select>
+          {orderDateFilter === 'custom' && (
+            <>
+              <input type="date" value={orderCustomFrom} onChange={e => setOrderCustomFrom(e.target.value)} className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs bg-white" />
+              <span className="text-gray-500 text-xs">to</span>
+              <input type="date" value={orderCustomTo} onChange={e => setOrderCustomTo(e.target.value)} className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs bg-white" />
+            </>
+          )}
+
+          <div className="hidden sm:flex bg-white rounded-xl p-1 border border-gray-200 shadow-sm">
+            <button onClick={() => setViewMode('table')} className={`p-1.5 rounded-lg transition-all ${viewMode === 'table' ? 'bg-indigo-50 text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-600 hover:bg-gray-50'}`} title="List View"><List size={16} /></button>
+            <button onClick={() => setViewMode('card')} className={`p-1.5 rounded-lg transition-all ${viewMode === 'card' ? 'bg-indigo-50 text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-600 hover:bg-gray-50'}`} title="Card View"><LayoutGrid size={16} /></button>
+          </div>
+
+          {isOfficeUser && (
+            <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-blue-500/20 hover:bg-blue-500 transition-all">
+              <Plus size={14} /> New Order
+            </button>
           )}
         </div>
       </div>
@@ -5220,7 +5307,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
         <form onSubmit={handleSave} className="space-y-4">
           {/* Customer */}
           <div>
-            <label className="text-[10px] font-black uppercase text-gray-400 mb-1 block tracking-widest">Customer</label>
+            <label className="text-[10px] font-black uppercase text-gray-500 mb-1 block tracking-widest">Customer</label>
             <select required value={customer} onChange={e => setCustomer(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border rounded-2xl focus:ring-2 focus:ring-blue-500 transition-all">
               <option value="">Select Customer</option>
               {customers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
@@ -5230,9 +5317,9 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
           {/* Desktop Table */}
           <div className="hidden sm:block">
             <div className="grid grid-cols-[1fr_100px_140px_40px] gap-2 items-center mb-2 px-1">
-              <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Item Master</span>
-              <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Qty</span>
-              <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">ETD</span>
+              <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Item Master</span>
+              <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Qty</span>
+              <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">ETD</span>
               <span></span>
             </div>
             {lineItems.map((item, idx) => (
@@ -5262,7 +5349,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                           >{i.name} ({i.customer_name})</button>
                         ))}
                         {customerFilteredItems.filter(i => i.name.toLowerCase().includes((itemSearchQueries[item.key] ?? '').toLowerCase())).length === 0 && (
-                          <div className="px-3 py-4 text-center text-xs text-gray-400">No items found</div>
+                          <div className="px-3 py-4 text-center text-xs text-gray-500">No items found</div>
                         )}
                       </div>
                     </>
@@ -5292,7 +5379,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
             {lineItems.map((item, idx) => (
               <div key={item.key} className="bg-gray-50 rounded-2xl p-3 border space-y-3">
                 <div className="relative">
-                  <label className="text-[9px] font-black uppercase text-gray-400 mb-1 block tracking-widest">Item Master</label>
+                  <label className="text-[10px] font-black uppercase text-gray-500 mb-1 block tracking-widest">Item Master</label>
                   <input
                     value={itemSearchQueries[item.key] ?? item.itemName}
                     onChange={e => { setItemSearchQueries(q => ({...q, [item.key]: e.target.value})); setOpenDropdownKey(item.key); }}
@@ -5317,7 +5404,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                           >{i.name} ({i.customer_name})</button>
                         ))}
                         {customerFilteredItems.filter(i => i.name.toLowerCase().includes((itemSearchQueries[item.key] ?? '').toLowerCase())).length === 0 && (
-                          <div className="px-3 py-4 text-center text-xs text-gray-400">No items found</div>
+                          <div className="px-3 py-4 text-center text-xs text-gray-500">No items found</div>
                         )}
                       </div>
                     </>
@@ -5325,7 +5412,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[9px] font-black uppercase text-gray-400 mb-1 block tracking-widest">Qty</label>
+                    <label className="text-[10px] font-black uppercase text-gray-500 mb-1 block tracking-widest">Qty</label>
                     <input type="number" min="1" placeholder="Qty"
                       value={item.qty}
                       onChange={e => { const newItems = [...lineItems]; newItems[idx] = {...newItems[idx], qty: e.target.value === '' ? '' as const : parseInt(e.target.value) || 1}; setLineItems(newItems); }}
@@ -5334,7 +5421,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                     />
                   </div>
                   <div>
-                    <label className="text-[9px] font-black uppercase text-gray-400 mb-1 block tracking-widest">ETD</label>
+                    <label className="text-[10px] font-black uppercase text-gray-500 mb-1 block tracking-widest">ETD</label>
                     <input type="date" value={item.etd}
                       onChange={e => { const newItems = [...lineItems]; newItems[idx] = {...newItems[idx], etd: e.target.value}; setLineItems(newItems); }}
                       className="w-full px-3 py-2.5 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
@@ -5359,7 +5446,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
           {/* Department Chips */}
           {unionDepartments.length > 0 ? (
             <div>
-              <label className="text-[10px] font-black uppercase text-gray-400 mb-1 block tracking-widest">Involved Departments</label>
+              <label className="text-[10px] font-black uppercase text-gray-500 mb-1 block tracking-widest">Involved Departments</label>
               <div className="flex flex-wrap gap-2">
                 {unionDepartments.map(dept => (
                   <span key={dept} className="px-3 py-1.5 rounded-xl text-[10px] font-bold bg-blue-600 text-white">{dept.replace(/_/g, ' ')}</span>
@@ -5367,7 +5454,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
               </div>
             </div>
           ) : customer && (
-            <div className="text-[10px] font-semibold text-gray-400 italic">Select items to auto-populate departments.</div>
+            <div className="text-[10px] font-semibold text-gray-500 italic font-semibold">Select items to auto-populate departments.</div>
           )}
 
           {/* Sticky Submit */}
@@ -5392,7 +5479,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                  </div>
                </div>
             ) : (
-               <p className="text-gray-400 italic py-10">No drawing PDF available.</p>
+               <p className="text-gray-500 italic font-semibold py-10">No drawing PDF available.</p>
             )}
          </div>
       </Modal>
@@ -5400,7 +5487,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
       {viewMode === 'table' ? (
         <Card className="hidden md:block p-0 overflow-x-auto shadow-md border border-gray-100">
                 <table className="w-full min-w-[1550px] text-left text-sm">
-                    <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-400 border-b border-gray-200">
+                    <thead className="bg-gray-50 text-xs font-black uppercase text-gray-500 border-b border-gray-200">
                         <tr>
                             <th className="px-4 py-2 whitespace-nowrap">Order #</th>
                             <th className="px-4 py-2 whitespace-nowrap">Customer</th>
@@ -5418,19 +5505,19 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                             <tr 
                                 key={wo.id} 
                                 onClick={() => onView(wo.id)} 
-                                className="hover:bg-blue-50/50 cursor-pointer transition-colors group"
+                                className={`hover:bg-blue-50/50 cursor-pointer transition-colors group ${isOrderOverdue(wo) ? 'bg-red-100/60' : ''}`}
                             >
-                                <td className="px-4 py-2 font-black text-indigo-600 text-xs whitespace-nowrap">
-                                  <div>#{wo.id}</div>
-                                  {wo.order_type === 'suborder' && <Badge color="purple" className="!text-[8px]">Suborder Of #{wo.parent_work_order_id || '-'}</Badge>}
+                                <td className="px-4 py-2 font-black text-indigo-600 text-sm whitespace-nowrap">
+                                  <div className="text-sm">#{wo.id}</div>
+                                  {wo.order_type === 'suborder' && <Badge color="purple" className="!text-xs">Suborder Of #{wo.parent_work_order_id || '-'}</Badge>}
                                 </td>
-                                <td className="px-4 py-2 font-bold text-gray-700 text-xs whitespace-nowrap">{wo.customer}</td>
-                                <td className="px-4 py-2 font-medium text-gray-800 text-xs whitespace-nowrap">
+                                <td className="px-4 py-2 font-bold text-gray-700 text-sm whitespace-nowrap">{wo.customer}</td>
+                                <td className="px-4 py-2 font-semibold text-gray-800 text-sm whitespace-nowrap">
                                   <div>{wo.job_details}</div>
                                 </td>
                                 <td className="px-4 py-2 whitespace-nowrap">
                                     <div className="flex items-center gap-2">
-                                        <span className="font-mono text-xs text-gray-500 font-bold">{wo.drawing || wo.itemInfo?.drawing_no || 'TBD'}</span>
+                                        <span className="font-mono text-sm text-gray-500 font-bold">{wo.drawing || wo.itemInfo?.drawing_no || 'TBD'}</span>
                                         {wo.itemInfo?.drawing_image_url && (
                                                 <button 
                                                     onClick={(e) => { 
@@ -5446,8 +5533,8 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                                         )}
                                     </div>
                                 </td>
-                                <td className="px-4 py-2 font-bold text-xs whitespace-nowrap">{wo.qty}</td>
-                                <td className="px-4 py-2 text-xs font-bold text-orange-600 whitespace-nowrap">{wo.etd || 'TBD'}</td>
+                                <td className="px-4 py-2 font-bold text-sm whitespace-nowrap">{wo.qty}</td>
+                                <td className="px-4 py-2 text-sm font-bold text-orange-600 whitespace-nowrap">{wo.etd || 'TBD'}</td>
                                 <td className="px-4 py-2 whitespace-nowrap">
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <StatusBadge status={wo.status} />
@@ -5456,7 +5543,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                                 </td>
                                 <td className="px-4 py-2 whitespace-nowrap">
                                     <div className="flex flex-nowrap gap-1">
-                                        {(wo.assigned_departments || []).map(d => <Badge key={d} color="indigo" className="!text-[9px]">{d.replace(/_/g, ' ')}</Badge>)}
+                                        {(wo.assigned_departments || []).map(d => <Badge key={d} color="indigo" className="!text-xs">{d.replace(/_/g, ' ')}</Badge>)}
                                     </div>
                                 </td>
                                 <td className="px-4 py-2 text-right whitespace-nowrap">
@@ -5472,23 +5559,23 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                         ))}
                     </tbody>
                 </table>
-            {filteredOrders.length === 0 && <div className="p-12 text-center text-gray-400 italic">No matching work orders found.</div>}
+            {filteredOrders.length === 0 && <div className="p-12 text-center text-gray-500 italic font-semibold">No matching work orders found.</div>}
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5 md:gap-3">
             {paginatedOrders.map(wo => (
             <div 
                 key={wo.id} 
-                className="group bg-white rounded-2xl md:rounded-xl border border-gray-100 p-3 md:p-3 space-y-1.5 md:space-y-2 shadow-sm hover:shadow-md hover:border-blue-100 transition-all active:scale-[0.99]"
+                className={`group ${isOrderOverdue(wo) ? 'bg-red-100' : 'bg-white'} rounded-2xl md:rounded-xl border border-gray-100 p-3 md:p-3 space-y-1.5 md:space-y-2 shadow-sm hover:shadow-md hover:border-blue-100 transition-all active:scale-[0.99]`}
             >
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <div className="flex items-center gap-1 flex-wrap">
-                      <span className="text-[10px] font-black text-indigo-600">#{wo.id}</span>
-                      {wo.order_type === 'suborder' && <Badge color="purple" className="!text-[8px]">Suborder Of #{wo.parent_work_order_id || '-'}</Badge>}
+                      <span className="text-xs font-black text-indigo-600">#{wo.id}</span>
+                      {wo.order_type === 'suborder' && <Badge color="purple" className="!text-xs">Suborder Of #{wo.parent_work_order_id || '-'}</Badge>}
                     </div>
-                    <h3 className="text-xs font-black text-slate-800 leading-tight mt-0.5 line-clamp-1 md:line-clamp-2">{wo.job_details}</h3>
-                    <p className="hidden md:block text-[10px] font-bold text-gray-400 uppercase">{wo.customer}</p>
+                    <h3 className="text-sm font-black text-slate-800 leading-tight mt-0.5 line-clamp-1 md:line-clamp-2">{wo.job_details}</h3>
+                    <p className="hidden md:block text-xs font-bold text-gray-500 uppercase">{wo.customer}</p>
                   </div>
                   <div className="flex flex-col items-end gap-1">
                     <StatusBadge status={wo.status} />
@@ -5498,23 +5585,23 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
 
                 <div className="hidden md:flex flex-wrap gap-1">
                   {(wo.assigned_departments || []).slice(0, 3).map(d => (
-                    <Badge key={d} color="indigo" className="!text-[8px]">{d.replace(/_/g, ' ')}</Badge>
+                    <Badge key={d} color="indigo" className="!text-xs">{d.replace(/_/g, ' ')}</Badge>
                   ))}
                   {(wo.assigned_departments || []).length > 3 && (
-                    <Badge color="gray" className="!text-[8px]">+{(wo.assigned_departments || []).length - 3}</Badge>
+                    <Badge color="gray" className="!text-xs">+{(wo.assigned_departments || []).length - 3}</Badge>
                   )}
                 </div>
 
-                <div className="flex items-center justify-between text-[10px] font-bold text-gray-600">
+                <div className="flex items-center justify-between text-xs font-bold text-gray-600">
                   <span>QTY: <span className="text-slate-800">{wo.qty}</span></span>
                   <span className="text-orange-600">ETD: {wo.etd || 'TBD'}</span>
                 </div>
 
                 <div className="flex items-center justify-between gap-2 pt-1 border-t border-gray-100">
                   <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="text-[9px] font-black text-gray-300 uppercase md:inline hidden">DRW</span>
-                    <span className="text-[10px] font-bold text-slate-500 truncate md:hidden">{wo.customer}</span>
-                    <span className="hidden md:inline text-[10px] font-mono font-bold text-slate-500 truncate">{wo.drawing || wo.itemInfo?.drawing_no || 'TBD'}</span>
+                    <span className="text-xs font-black text-gray-500 uppercase md:inline hidden">DRW</span>
+                    <span className="text-xs font-bold text-slate-500 truncate md:hidden">{wo.customer}</span>
+                    <span className="hidden md:inline text-xs font-mono font-bold text-slate-500 truncate">{wo.drawing || wo.itemInfo?.drawing_no || 'TBD'}</span>
                     {wo.itemInfo?.drawing_image_url && (
                       <button
                         onClick={() => { setSelectedImageUrl(wo.itemInfo!.drawing_image_url!); setIsImageModalOpen(true); }}
@@ -5527,7 +5614,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                   </div>
                   <button 
                     onClick={() => onView(wo.id)} 
-                    className="p-1.5 bg-gray-50 rounded-md text-gray-400 group-hover:text-blue-500 group-hover:bg-blue-50 transition-all"
+                    className="p-1.5 bg-gray-50 rounded-md text-gray-500 group-hover:text-blue-500 group-hover:bg-blue-50 transition-all"
                   >
                     <ChevronRight size={14} />
                   </button>
@@ -5543,7 +5630,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                 />
             </div>
             ))}
-            {filteredOrders.length === 0 && <div className="p-10 md:p-20 text-center text-gray-300 italic">No matching work orders found.</div>}
+            {filteredOrders.length === 0 && <div className="p-10 md:p-20 text-center text-gray-500 italic font-semibold">No matching work orders found.</div>}
         </div>
       )}
 
@@ -5712,15 +5799,15 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
     return norm !== 'Office' && norm !== 'Quality_Control' && norm !== 'Dispatch' && norm !== 'Plywood';
   });
 
-  const STATUS_FLOW = ['Not Started', 'Work Started', 'Ready for QC', 'Ready for despatch', 'Dispatched', 'Delivered'];
+  const STATUS_FLOW = ['Not Started', 'Work Started', 'Ready for QC', 'Ready for despatch', 'Dispatched'];
   const DEPT_FLOW = ['Not Started', 'Work Started', 'Ready for QC'];
   const QC_FLOW = ['Pending QC', 'QC Approved', 'QC Denied'];
-  const DISPATCH_FLOW = ['Ready for despatch', 'Dispatched', 'Delivered'];
+  const DISPATCH_FLOW = ['Ready for despatch', 'Dispatched'];
 
   return (
     <div className="space-y-3 sm:space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
       <div className="no-print">
-        <button onClick={onBack} className="flex items-center gap-2 text-[10px] font-black text-slate-300 md:text-gray-400 hover:text-indigo-600 transition-colors uppercase tracking-widest">
+        <button onClick={onBack} className="flex items-center gap-2 text-[10px] font-black text-slate-300 md:text-gray-500 hover:text-indigo-600 transition-colors uppercase tracking-widest">
           <ChevronLeft size={16}/> Back
         </button>
       </div>
@@ -5738,7 +5825,7 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                 </div>
                 <h1 className="text-lg md:text-2xl font-bold text-gray-800 mt-1.5 mb-0.5 break-words leading-tight line-clamp-2">{wo.job_details}</h1>
                 {wo.parent_work_order_id && <p className="text-xs font-semibold text-purple-500 uppercase tracking-wider">Parent Item: {wo.parent_item_name || 'Parent Item'}</p>}
-                <p className="text-xs md:text-sm font-medium text-gray-400 uppercase tracking-tight">{wo.customer}</p>
+                <p className="text-xs md:text-sm font-bold text-gray-500 uppercase tracking-tight">{wo.customer}</p>
               </div>
               <StatusBadge status={wo.status} />
             </div>
@@ -5761,7 +5848,7 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
             <div className="space-y-3">
                 {/* Compact Overall Header */}
                 <div className="flex items-center justify-between bg-white rounded-xl px-4 py-3 border border-gray-100 shadow-sm">
-                  <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Overall</span>
+                  <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Overall</span>
                   <div className="flex items-center gap-1.5">
                     {STATUS_FLOW.map((step, idx) => {
                       const currentStepIdx = STATUS_FLOW.indexOf(wo.status);
@@ -5787,7 +5874,8 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                   const deptStatus = (wo.department_statuses || []).find(
                     s => normalizeDepartment(s.department) === normalizeDepartment(dept)
                   );
-                  const currentStepIdx = DEPT_FLOW.indexOf(deptStatus?.status || 'Not Started');
+                  const isQcApproved = deptStatus?.qc_status === 'QC Approved';
+                  const currentStepIdx = isQcApproved ? DEPT_FLOW.length : DEPT_FLOW.indexOf(deptStatus?.status || 'Not Started');
 
                   const getDeptStepState = (stepIdx: number) => {
                     if (stepIdx < currentStepIdx) return 'completed';
@@ -5854,10 +5942,10 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                                   <p className={`text-sm font-bold leading-tight whitespace-nowrap ${
                                     state === 'completed' ? 'text-emerald-700' :
                                     state === 'current' ? 'text-blue-700' :
-                                    'text-gray-400'
+                                    'text-gray-500'
                                   }`}>{step}</p>
                                   {(state === 'completed' || state === 'current') && deptStatus?.updated_by && (
-                                    <span className="text-[9px] text-gray-400 truncate max-w-[130px]">
+                                    <span className="text-[10px] text-gray-500 font-semibold truncate max-w-[130px]">
                                       · by {deptStatus.updated_by} · {deptStatus.updated_at ? new Date(deptStatus.updated_at).toLocaleString('en-GB') : ''}
                                     </span>
                                   )}
@@ -5897,21 +5985,21 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                                       <div className="w-1.5 h-1.5 rounded-full bg-gray-300" />
                                     )}
                                   </div>
-                                  <span className={`text-[9px] font-semibold ${
+                                  <span className={`text-[10px] font-semibold ${
                                     qcState === 'current'
                                       ? isApproved ? 'text-emerald-700' :
                                         isDenied ? 'text-red-600' :
                                         'text-amber-700'
                                       : qcState === 'completed'
                                       ? 'text-emerald-600'
-                                      : 'text-gray-400'
+                                      : 'text-gray-500'
                                   }`}>{qcStep.replace('QC ', '') || qcStep}</span>
                                 </div>
                               );
                             })}
                           </div>
                           {deptStatus?.qc_status && deptStatus.updated_by && (
-                            <p className="text-[9px] text-gray-400 text-center mt-1.5">
+                            <p className="text-[10px] text-gray-500 font-semibold text-center mt-1.5">
                               by {deptStatus.updated_by} · {deptStatus.updated_at ? new Date(deptStatus.updated_at).toLocaleString('en-GB') : ''}
                             </p>
                           )}
@@ -6024,13 +6112,13 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                               <p className={`text-sm font-bold leading-tight whitespace-nowrap ${
                                 state === 'completed' ? 'text-emerald-700' :
                                 state === 'current' ? 'text-blue-700' :
-                                'text-gray-400'
+                                'text-gray-500'
                               }`}>{step}</p>
                               {(state === 'completed' || state === 'current') && (() => {
                                 const info = statusActorMap.get(step);
                                 if (!info) return null;
                                 return (
-                                  <span className="text-[9px] text-gray-400 truncate max-w-[180px]">
+                                  <span className="text-[10px] text-gray-500 font-semibold truncate max-w-[180px]">
                                     · by {info.actor_name} · {new Date(info.event_time).toLocaleString('en-GB')}
                                   </span>
                                 );
@@ -6050,22 +6138,22 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
         <div className="w-full xl:w-80 space-y-4">
           {/* Order Info Card */}
           <Card className="p-4 md:p-5 rounded-xl overflow-hidden">
-            <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-4">Order Info</h3>
+            <h3 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-4">Order Info</h3>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Batch Size</span>
-                <span className="text-base font-bold text-indigo-600">{wo.qty} <span className="text-[10px] text-gray-400 font-medium">PCS</span></span>
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Batch Size</span>
+                <span className="text-base font-bold text-indigo-600">{wo.qty} <span className="text-[10px] text-gray-500 font-semibold">PCS</span></span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Delivery ETD</span>
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Delivery ETD</span>
                 <span className="text-sm font-semibold text-orange-600 flex items-center gap-1"><Clock size={14}/> {wo.etd || 'N/A'}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Blueprint Ref</span>
-                <span className="text-[11px] font-mono font-medium text-gray-700 px-2 py-1 bg-gray-50 rounded break-all max-w-[140px] text-right">{wo.drawing || '—'}</span>
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Blueprint Ref</span>
+                <span className="text-[11px] font-mono font-semibold text-gray-700 px-2 py-1 bg-gray-50 rounded break-all max-w-[140px] text-right">{wo.drawing || '—'}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">QC/Ready Date</span>
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">QC/Ready Date</span>
                 <span className="text-sm font-semibold text-green-600">{wo.ready_date || 'In Progress'}</span>
               </div>
             </div>
@@ -6073,7 +6161,7 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
 
           {/* Actions Card */}
           <Card className="p-4 md:p-5 rounded-xl overflow-hidden no-print">
-            <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-4">Actions</h3>
+            <h3 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-4">Actions</h3>
             <div className="space-y-2">
               <button onClick={() => window.print()} className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2">
                 <Printer size={16}/> Print Job Card
@@ -6087,8 +6175,8 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                       Set to <span className="font-black">{pendingStatus}</span>?
                     </span>
                     <div className="flex gap-1.5">
-                      <button onClick={() => setPendingStatus(null)} className="px-2.5 py-1 rounded-md bg-white text-gray-600 text-[9px] font-black border border-gray-200 hover:bg-gray-50">Cancel</button>
-                      <button onClick={() => updateWODetailsStatus(wo as WorkOrder, pendingStatus)} disabled={isUpdatingStatus} className="px-2.5 py-1 rounded-md bg-indigo-600 text-white text-[9px] font-black hover:bg-indigo-700 disabled:opacity-50">{isUpdatingStatus ? '...' : 'Confirm'}</button>
+                      <button onClick={() => setPendingStatus(null)} className="px-2.5 py-1 rounded-md bg-white text-gray-600 text-[10px] font-black border border-gray-200 hover:bg-gray-50">Cancel</button>
+                      <button onClick={() => updateWODetailsStatus(wo as WorkOrder, pendingStatus)} disabled={isUpdatingStatus} className="px-2.5 py-1 rounded-md bg-indigo-600 text-white text-[10px] font-black hover:bg-indigo-700 disabled:opacity-50">{isUpdatingStatus ? '...' : 'Confirm'}</button>
                     </div>
                   </div>
                 );
@@ -6152,6 +6240,7 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
   const [bomMode, setBomMode] = useState<'unsaved' | 'saved'>('unsaved');
   const [bomSearchQuery, setBomSearchQuery] = useState('');
   const [bomCompanyFilter, setBomCompanyFilter] = useState('All');
+  const [bomDepartmentFilter, setBomDepartmentFilter] = useState('All');
   const [componentItem, setComponentItem] = useState<Item | null>(null);
   const [componentSearchQuery, setComponentSearchQuery] = useState('');
   const [bomNewComponentNames, setBomNewComponentNames] = useState('');
@@ -6253,25 +6342,35 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
     return Array.from(new Set([...fromUnsaved, ...fromSaved])).filter(Boolean).sort((a, b) => a.localeCompare(b));
   }, [unsavedRows, savedRows]);
 
+  const departmentOptions = useMemo(() => {
+    const unique = new Set<string>();
+    items.forEach((item: Item) => (item.departments || []).forEach(d => unique.add(d)));
+    return Array.from(unique).sort((a, b) => a.localeCompare(b));
+  }, [items]);
+
   const filteredUnsavedRows = useMemo(() => {
     const query = bomSearchQuery.trim().toLowerCase();
     return unsavedRows.filter(row => {
       const companyMatch = bomCompanyFilter === 'All' || row.company_name === bomCompanyFilter;
       if (!companyMatch) return false;
+      const deptMatch = bomDepartmentFilter === 'All' || (row.item_ref.departments || []).includes(bomDepartmentFilter);
+      if (!deptMatch) return false;
       if (!query) return true;
       return row.item_name.toLowerCase().includes(query) || row.company_name.toLowerCase().includes(query);
     });
-  }, [unsavedRows, bomSearchQuery, bomCompanyFilter]);
+  }, [unsavedRows, bomSearchQuery, bomCompanyFilter, bomDepartmentFilter]);
 
   const filteredSavedRows = useMemo(() => {
     const query = bomSearchQuery.trim().toLowerCase();
     return savedRows.filter(row => {
       const companyMatch = bomCompanyFilter === 'All' || row.company_name === bomCompanyFilter;
       if (!companyMatch) return false;
+      const deptMatch = bomDepartmentFilter === 'All' || (row.item_ref.departments || []).includes(bomDepartmentFilter);
+      if (!deptMatch) return false;
       if (!query) return true;
       return row.item_name.toLowerCase().includes(query) || row.company_name.toLowerCase().includes(query);
     });
-  }, [savedRows, bomSearchQuery, bomCompanyFilter]);
+  }, [savedRows, bomSearchQuery, bomCompanyFilter, bomDepartmentFilter]);
 
   const resetBuilder = () => {
     setEditingPlanId(null);
@@ -6714,21 +6813,13 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
 
   return (
     <div className="space-y-5">
-      <div className="sticky top-16 md:top-0 z-20 bg-gray-50/95 backdrop-blur p-2 rounded-xl border border-gray-100 flex flex-col md:flex-row gap-2 md:gap-3 md:items-center justify-between">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-black text-gray-800 tracking-tight">Custom BOM Planner</h2>
-          <p className="text-xs font-semibold text-gray-500 text-center sm:text-left">Create custom production plans by company with editable BOM.</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="inline-flex bg-white border border-gray-200 rounded-xl p-1">
+          <button onClick={() => setBomMode('unsaved')} className={`px-4 py-2 rounded-lg text-xs font-black ${bomMode === 'unsaved' ? 'bg-indigo-600 text-white' : 'text-gray-500'}`}>Unsaved BOM</button>
+          <button onClick={() => setBomMode('saved')} className={`px-4 py-2 rounded-lg text-xs font-black ${bomMode === 'saved' ? 'bg-indigo-600 text-white' : 'text-gray-500'}`}>Saved BOM</button>
         </div>
-      </div>
-
-      <div className="inline-flex bg-white border border-gray-200 rounded-xl p-1 w-full sm:w-auto">
-        <button onClick={() => setBomMode('unsaved')} className={`px-4 py-2 rounded-lg text-xs font-black ${bomMode === 'unsaved' ? 'bg-indigo-600 text-white' : 'text-gray-500'}`}>Unsaved BOM</button>
-        <button onClick={() => setBomMode('saved')} className={`px-4 py-2 rounded-lg text-xs font-black ${bomMode === 'saved' ? 'bg-indigo-600 text-white' : 'text-gray-500'}`}>Saved BOM</button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
           <input
             value={bomSearchQuery}
             onChange={e => setBomSearchQuery(e.target.value)}
@@ -6739,11 +6830,21 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
         <select
           value={bomCompanyFilter}
           onChange={e => setBomCompanyFilter(e.target.value)}
-          className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700"
+          className="px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700"
         >
           <option value="All">All Companies</option>
           {companyOptions.map(company => (
             <option key={company} value={company}>{company}</option>
+          ))}
+        </select>
+        <select
+          value={bomDepartmentFilter}
+          onChange={e => setBomDepartmentFilter(e.target.value)}
+          className="px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700"
+        >
+          <option value="All">All Departments</option>
+          {departmentOptions.map(dept => (
+            <option key={dept} value={dept}>{dept.replace(/_/g, ' ')}</option>
           ))}
         </select>
       </div>
@@ -6758,14 +6859,14 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
       <Card className="space-y-3">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
-            <label className="text-[10px] font-black uppercase text-gray-400 block mb-1">Company</label>
+            <label className="text-[10px] font-black uppercase text-gray-500 block mb-1">Company</label>
             <select value={selectedCompany} onChange={e => { setSelectedCompany(e.target.value); setPlanItems([]); }} className="w-full px-3 py-2.5 bg-gray-50 border rounded-xl">
               <option value="">Select Company</option>
               {customers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="text-[10px] font-black uppercase text-gray-400 block mb-1">Plan Name</label>
+            <label className="text-[10px] font-black uppercase text-gray-500 block mb-1">Plan Name</label>
             <input value={planName} onChange={e => setPlanName(e.target.value)} placeholder="Example: March Corrugation Plan" className="w-full px-3 py-2.5 bg-gray-50 border rounded-xl" />
           </div>
         </div>
@@ -6782,14 +6883,14 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
             <div key={item.local_id} className="border border-gray-200 rounded-xl p-3 space-y-3 bg-white">
               <div className="flex flex-col md:flex-row gap-2 md:items-end">
                 <div className="flex-1">
-                  <label className="text-[10px] font-black uppercase text-gray-400 block mb-1">Item #{idx + 1}</label>
+                  <label className="text-[10px] font-black uppercase text-gray-500 block mb-1">Item #{idx + 1}</label>
                   <select value={item.item_name} onChange={e => onSelectItem(item.local_id, e.target.value)} className="w-full px-3 py-2 bg-gray-50 border rounded-lg">
                     <option value="">Select Item</option>
                     {customerItems.map(ci => <option key={ci.id} value={ci.name}>{ci.name}</option>)}
                   </select>
                 </div>
                 <div className="w-full md:w-40">
-                  <label className="text-[10px] font-black uppercase text-gray-400 block mb-1">Item Qty</label>
+                  <label className="text-[10px] font-black uppercase text-gray-500 block mb-1">Item Qty</label>
                   <input type="number" min={1} value={item.item_qty} onChange={e => onItemQtyChange(item.local_id, parseInt(e.target.value) || 1)} className="w-full px-3 py-2 bg-gray-50 border rounded-lg" />
                 </div>
                 <button onClick={() => removePlanItem(item.local_id)} className="px-3 py-2 bg-red-50 text-red-500 rounded-lg text-xs font-black">Remove</button>
@@ -6807,7 +6908,7 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
 
                   <div className="hidden md:block overflow-x-auto border border-gray-100 rounded-lg">
                     <table className="w-full min-w-[700px] text-sm">
-                      <thead className="bg-gray-50 text-[10px] uppercase text-gray-400 font-black">
+                      <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black">
                         <tr>
                           <th className="px-3 py-2 text-left">Component</th>
                           <th className="px-3 py-2 text-left">Depts</th>
@@ -6834,7 +6935,7 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
                         ))}
                         {item.components.length === 0 && (
                           <tr>
-                            <td colSpan={5} className="px-3 py-4 text-center text-gray-400 italic text-xs">No components selected for this item.</td>
+                            <td colSpan={5} className="px-3 py-4 text-center text-gray-500 italic font-semibold text-xs">No components selected for this item.</td>
                           </tr>
                         )}
                       </tbody>
@@ -6868,7 +6969,7 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
                       </div>
                     ))}
                     {item.components.length === 0 && (
-                      <div className="px-2 py-4 text-center text-gray-400 italic text-xs">No components selected for this item.</div>
+                      <div className="px-2 py-4 text-center text-gray-500 italic font-semibold text-xs">No components selected for this item.</div>
                     )}
                   </div>
                 </div>
@@ -6882,11 +6983,11 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
       <Card className="p-0 overflow-hidden">
         <div className="px-4 py-3 border-b bg-gray-50 flex items-center justify-between">
           <h3 className="font-black text-gray-800">{bomMode === 'unsaved' ? 'Items Without BOM Components' : 'Items With Saved BOM Components'}</h3>
-          <span className="text-xs font-bold text-gray-400">{bomMode === 'unsaved' ? filteredUnsavedRows.length : filteredSavedRows.length} row(s)</span>
+          <span className="text-xs font-bold text-gray-500">{bomMode === 'unsaved' ? filteredUnsavedRows.length : filteredSavedRows.length} row(s)</span>
         </div>
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full min-w-[850px] text-sm">
-            <thead className="bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b">
+            <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b">
               <tr>
                 <th className="px-4 py-2 text-left">Item Name</th>
                 <th className="px-4 py-2 text-left">Company</th>
@@ -6913,7 +7014,7 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
                   <td className="px-4 py-2 font-black text-indigo-700">{row.item_name}</td>
                   <td className="px-4 py-2 font-semibold text-gray-700">{row.company_name}</td>
                   <td className="px-4 py-2">{row.default_qty}</td>
-                  <td className="px-4 py-2 text-xs text-gray-400">-</td>
+                  <td className="px-4 py-2 text-xs text-gray-500">-</td>
                   <td className="px-4 py-2 text-right">
                     <button onClick={() => createBomFromUnsavedRow(row)} className="px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg text-xs font-black">Create BOM</button>
                   </td>
@@ -6921,7 +7022,7 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
               ))}
               {(bomMode === 'saved' ? filteredSavedRows.length === 0 : filteredUnsavedRows.length === 0) && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-gray-400 italic">{bomMode === 'saved' ? 'No items with saved BOM components found.' : 'No items without BOM components found.'}</td>
+                  <td colSpan={5} className="px-4 py-10 text-center text-gray-500 italic font-semibold">{bomMode === 'saved' ? 'No items with saved BOM components found.' : 'No items without BOM components found.'}</td>
                 </tr>
               )}
             </tbody>
@@ -6964,7 +7065,7 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
           ))}
 
           {(bomMode === 'saved' ? filteredSavedRows.length === 0 : filteredUnsavedRows.length === 0) && (
-            <div className="py-10 text-center text-gray-400 italic text-sm">
+            <div className="py-10 text-center text-gray-500 italic font-semibold text-sm">
               {bomMode === 'saved' ? 'No items with saved BOM components found.' : 'No items without BOM components found.'}
             </div>
           )}
@@ -6975,7 +7076,7 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)]">
           <div className="space-y-3">
             <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
               <input
                 value={componentSearchQuery}
                 onChange={e => setComponentSearchQuery(e.target.value)}
@@ -6984,7 +7085,7 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
               />
             </div>
             <div className="max-h-[260px] overflow-y-auto rounded-xl border border-gray-200">
-              <div className="border-b bg-gray-50 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-gray-400">Available Library</div>
+              <div className="border-b bg-gray-50 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-gray-500">Available Library</div>
               <div className="space-y-1 p-2">
                 {filteredBomLibraryComponents.map(component => (
                   <div key={component.id} className="flex items-center justify-between rounded-lg border border-transparent p-3 transition-all hover:border-gray-200 hover:bg-gray-50">
@@ -6997,7 +7098,7 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
                     <button type="button" onClick={() => addLibraryComponentToItemBom(component)} className="rounded-lg bg-blue-600 p-2 text-white hover:bg-blue-700"><Plus size={16} /></button>
                   </div>
                 ))}
-                {filteredBomLibraryComponents.length === 0 && <div className="p-8 text-center text-sm font-semibold text-gray-400">No matching components found.</div>}
+                {filteredBomLibraryComponents.length === 0 && <div className="p-8 text-center text-sm font-bold text-gray-500">No matching components found.</div>}
               </div>
             </div>
             <div className="max-h-[260px] overflow-y-auto rounded-xl border border-indigo-100">
@@ -7007,7 +7108,7 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
                   <div key={item.id} className="flex items-center justify-between rounded-lg border border-transparent p-3 transition-all hover:border-indigo-100 hover:bg-indigo-50/50">
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-bold text-gray-800">{item.name}</div>
-                      <div className="text-[10px] font-semibold text-gray-400 truncate">{item.customer_name} {item.drawing_no ? `| ${item.drawing_no}` : ''}</div>
+                      <div className="text-[10px] font-bold text-gray-500 truncate">{item.customer_name} {item.drawing_no ? `| ${item.drawing_no}` : ''}</div>
                       <div className="mt-1 flex flex-wrap gap-1">
                         {(item.departments || []).map((dept: string) => <Badge key={dept} color="gray">{dept}</Badge>)}
                       </div>
@@ -7022,10 +7123,10 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
               <div className="space-y-5 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
                 <div>
                   <div className="text-base font-black text-gray-800">New Standard Component</div>
-                  <div className="mt-1 text-xs font-semibold text-gray-400">Add one or many components to the library and this BOM.</div>
+                  <div className="mt-1 text-xs font-bold text-gray-500">Add one or many components to the library and this BOM.</div>
                 </div>
                 <div>
-                  <label className="mb-2 ml-1 block text-[10px] font-black uppercase tracking-widest text-gray-400">Component name</label>
+                  <label className="mb-2 ml-1 block text-[10px] font-black uppercase tracking-widest text-gray-500">Component name</label>
                   <textarea
                     value={bomNewComponentNames}
                     onChange={e => setBomNewComponentNames(e.target.value)}
@@ -7034,7 +7135,7 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
                   />
                 </div>
                 <div>
-                  <label className="mb-3 ml-1 block text-[10px] font-black uppercase tracking-widest text-gray-400">Related departments (select at least one)</label>
+                  <label className="mb-3 ml-1 block text-[10px] font-black uppercase tracking-widest text-gray-500">Related departments (select at least one)</label>
                   <div className="flex flex-wrap gap-2">
                     {involvingDepartments.map(department => (
                       <button
@@ -7079,7 +7180,7 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
                     <button type="button" onClick={() => setComponentRows(prev => prev.filter((_, rowIndex) => rowIndex !== index))} className="p-1 text-red-400 hover:text-red-600"><X size={16} /></button>
                   </div>
                   <div className="mt-3 flex items-center gap-2">
-                    <span className="text-[10px] font-black uppercase text-gray-400">Qty per item</span>
+                    <span className="text-[10px] font-black uppercase text-gray-500">Qty per item</span>
                     <input type="number" min="1" value={component.qty} onChange={e => updateItemBomQty(index, e.target.value)} onBlur={e => { if (!e.target.value) updateItemBomQty(index, '1'); }} className="w-20 rounded-lg border px-2 py-1 text-center text-sm font-bold" />
                   </div>
                 </div>
@@ -7148,7 +7249,7 @@ const CustomBOMPrintView: React.FC<{ plan: any; onBack: () => void }> = ({ plan,
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 no-print">
-        <button onClick={onBack} className="flex items-center gap-2 text-xs font-black uppercase text-gray-400 hover:text-indigo-600">
+        <button onClick={onBack} className="flex items-center gap-2 text-xs font-black uppercase text-gray-500 hover:text-indigo-600">
           <ChevronLeft size={16} /> Back to Custom BOM
         </button>
         <div className="grid grid-cols-2 sm:flex gap-2 w-full sm:w-auto">
@@ -7309,28 +7410,20 @@ const ProductionPlanList: React.FC<{ onError: () => void; onGenerate: (ids: numb
 
   return (
     <div className="space-y-6">
-      <div className="sticky top-16 md:top-0 z-20 bg-gray-50/95 backdrop-blur px-1 py-2 rounded-xl border border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-black text-gray-800 tracking-tight">Production Planning</h2>
-          <p className="text-gray-500 font-medium">Select orders to generate a master plan.</p>
-        </div>
-        {selectedIds.length > 0 && (
-            <button 
-                onClick={() => onGenerate(selectedIds)}
-                className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-black shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2 animate-in fade-in zoom-in w-full md:w-auto justify-center"
-            >
-                <Calculator size={20} /> Generate Plan ({selectedIds.length})
-            </button>
-        )}
-      </div>
 
-      <div className="w-full md:w-auto">
+
+      <div className="flex flex-wrap items-center gap-2">
         <div className="flex gap-1.5 flex-wrap">
           <button onClick={() => setStatusFilter('All')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === 'All' ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>All</button>
           {statusOptions.map(s => (
             <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === s ? (statusTabColors[s] || 'bg-slate-900 text-white') : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS[s] || s}</button>
           ))}
         </div>
+        {selectedIds.length > 0 && (
+          <button onClick={() => onGenerate(selectedIds)} className="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-xs font-black shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-1.5">
+            <Calculator size={14} /> Generate Plan ({selectedIds.length})
+          </button>
+        )}
       </div>
 
       <Card className="p-0 overflow-hidden shadow-lg border-2 border-indigo-50">
@@ -7353,7 +7446,7 @@ const ProductionPlanList: React.FC<{ onError: () => void; onGenerate: (ids: numb
               {paginatedPlanOrders.map(wo => (
                 <tr key={wo.id} className={`hover:bg-indigo-50/30 group transition-all ${selectedIds.includes(wo.id) ? 'bg-indigo-50/50' : ''}`}>
                   <td className="px-6 py-4">
-                      <button onClick={() => toggleSelect(wo.id)} className="text-gray-400 hover:text-indigo-600">
+                      <button onClick={() => toggleSelect(wo.id)} className="text-gray-500 hover:text-indigo-600">
                           {selectedIds.includes(wo.id) ? <CheckSquare size={18} className="text-indigo-600"/> : <Square size={18}/>}
                       </button>
                   </td>
@@ -7370,7 +7463,7 @@ const ProductionPlanList: React.FC<{ onError: () => void; onGenerate: (ids: numb
               ))}
               {filteredPlanOrders.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-gray-400 italic">
+                  <td colSpan={5} className="px-6 py-12 text-center text-gray-500 italic font-semibold">
                     No orders found for selected status.
                   </td>
                 </tr>
@@ -7414,7 +7507,7 @@ const ProductionPlanList: React.FC<{ onError: () => void; onGenerate: (ids: numb
           ))}
 
           {filteredPlanOrders.length === 0 && (
-            <div className="py-12 text-center text-gray-400 italic">No orders found for selected status.</div>
+            <div className="py-12 text-center text-gray-500 italic font-semibold">No orders found for selected status.</div>
           )}
         </div>
 
@@ -7513,7 +7606,7 @@ const PlanGenerator: React.FC<{ ids: number[]; onBack: () => void }> = ({ ids, o
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between no-print">
-        <button onClick={onBack} className="flex items-center gap-2 font-black text-xs uppercase text-gray-400 hover:text-indigo-600 transition-colors">
+        <button onClick={onBack} className="flex items-center gap-2 font-black text-xs uppercase text-gray-500 hover:text-indigo-600 transition-colors">
           <ChevronLeft size={16}/> Back to Planning
         </button>
         <button 
@@ -7597,6 +7690,13 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [users, setUsers] = useState<User[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [userFilter, setUserFilter] = useState('All');
+  const [departmentFilter, setDepartmentFilter] = useState('All');
+  const [alertsDateFilter, setAlertsDateFilter] = useState('all');
+  const [alertsCustomFrom, setAlertsCustomFrom] = useState('');
+  const [alertsCustomTo, setAlertsCustomTo] = useState('');
   const activityOffsetRef = useRef(0);
   const notificationOffsetRef = useRef(0);
   const ACTIVITY_PAGE = 100;
@@ -7689,43 +7789,74 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
     fetchEvents();
   }, [fetchEvents]);
 
+  useEffect(() => {
+    supabase.from('users').select('*').then(({ data }) => { if (data) setUsers(data); });
+    supabase.from('departments').select('*').then(({ data }) => { if (data) setDepartments(data); });
+  }, []);
+
   const filteredEvents = useMemo(() => {
-    if (!searchQuery) return events;
     const q = searchQuery.toLowerCase();
-    return events.filter((ev: any) =>
-      String(ev.title || '').toLowerCase().includes(q) ||
-      String(ev.body || '').toLowerCase().includes(q) ||
-      String(getEventActor(ev)).toLowerCase().includes(q) ||
-      String(getEventType(ev)).toLowerCase().includes(q) ||
-      String(getEventAction(ev)).toLowerCase().includes(q) ||
-      String(ev.customer_name || '').toLowerCase().includes(q) ||
-      String(ev.item_name || '').toLowerCase().includes(q) ||
-      String(getEventDepartments(ev).join(',')).toLowerCase().includes(q) ||
-      String(ev.work_order_id || '').includes(q)
-    );
-  }, [events, searchQuery]);
+    return events.filter((ev: any) => {
+      if (searchQuery) {
+        const matchesSearch =
+          String(ev.title || '').toLowerCase().includes(q) ||
+          String(ev.body || '').toLowerCase().includes(q) ||
+          String(getEventActor(ev)).toLowerCase().includes(q) ||
+          String(getEventType(ev)).toLowerCase().includes(q) ||
+          String(getEventAction(ev)).toLowerCase().includes(q) ||
+          String(ev.customer_name || '').toLowerCase().includes(q) ||
+          String(ev.item_name || '').toLowerCase().includes(q) ||
+          String(getEventDepartments(ev).join(',')).toLowerCase().includes(q) ||
+          String(ev.work_order_id || '').includes(q);
+        if (!matchesSearch) return false;
+      }
+      if (userFilter !== 'All' && getEventActor(ev) !== userFilter) return false;
+      if (departmentFilter !== 'All') {
+        const evDepts = getEventDepartments(ev);
+        if (!evDepts.some(d => d.toLowerCase() === departmentFilter.toLowerCase())) return false;
+      }
+      if (!filterByDate(ev.event_time, alertsDateFilter, alertsCustomFrom, alertsCustomTo)) return false;
+      return true;
+    });
+  }, [events, searchQuery, userFilter, departmentFilter, alertsDateFilter, alertsCustomFrom, alertsCustomTo]);
 
   if (loading) return <LoadingState message="Loading activity log..." />;
 
   return (
     <div className="space-y-4">
-      <div className="rounded-[20px] bg-white p-5 text-slate-900 shadow-[0_2px_8px_rgba(15,23,42,0.12)] border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div>
-          <div className="md:hidden text-[10px] font-black uppercase tracking-widest text-blue-700">Alerts Center</div>
-          <h2 className="text-2xl font-black tracking-tight text-slate-900 md:text-gray-800">Alerts & Activity Log</h2>
-          <p className="text-xs font-semibold text-slate-600 md:text-gray-500 text-left">Recent order, master-data, dispatch, status, and push delivery events.</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-0 max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+          <input
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search events..."
+            className="w-full pl-9 pr-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500"
+          />
         </div>
-        <button onClick={fetchEvents} className="px-4 py-3 md:py-2 bg-blue-600 md:bg-slate-900 text-white rounded-2xl md:rounded-xl text-sm font-black">Refresh</button>
-      </div>
-
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-        <input
-          value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
-          placeholder="Search by title, action, user, department, customer, item, order id..."
-          className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm"
-        />
+        <select value={userFilter} onChange={e => setUserFilter(e.target.value)} className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="All">All Users</option>
+          {users.map(u => <option key={u.id} value={u.username}>{u.username}</option>)}
+        </select>
+        <select value={departmentFilter} onChange={e => setDepartmentFilter(e.target.value)} className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="All">All Departments</option>
+          {departments.map(d => <option key={d.id} value={d.name}>{d.name.replace(/_/g, ' ')}</option>)}
+        </select>
+        <select value={alertsDateFilter} onChange={e => { setAlertsDateFilter(e.target.value); if (e.target.value !== 'custom') { setAlertsCustomFrom(''); setAlertsCustomTo(''); } }} className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="all">All Dates</option>
+          <option value="today">Today</option>
+          <option value="week">This Week</option>
+          <option value="month">This Month</option>
+          <option value="custom">Custom</option>
+        </select>
+        {alertsDateFilter === 'custom' && (
+          <>
+            <input type="date" value={alertsCustomFrom} onChange={e => setAlertsCustomFrom(e.target.value)} className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs bg-white" />
+            <span className="text-gray-500 text-xs">to</span>
+            <input type="date" value={alertsCustomTo} onChange={e => setAlertsCustomTo(e.target.value)} className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs bg-white" />
+          </>
+        )}
+        <button onClick={fetchEvents} className="px-4 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-black hover:bg-blue-700 transition-colors">Refresh</button>
       </div>
 
       <div className="md:hidden space-y-2.5">
@@ -7740,7 +7871,7 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
             <div key={`${ev._source}-${ev.id}`} className={`rounded-2xl bg-white border border-gray-100 border-l-4 ${tone} p-3.5 shadow-sm`}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <div className="text-[10px] font-black uppercase tracking-widest text-gray-400">{formatEventTime(ev)}</div>
+                  <div className="text-[10px] font-black uppercase tracking-widest text-gray-500">{formatEventTime(ev)}</div>
                   <h3 className="mt-1 text-sm font-black text-slate-900 leading-tight">{ev.title}</h3>
                   <div className="mt-1 flex flex-wrap gap-1.5">
                     <Badge color="gray">{getEventType(ev)}</Badge>
@@ -7756,21 +7887,21 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
                 {departments.map((d: string) => <Badge key={d} color="gray">{String(d).replace(/_/g, ' ')}</Badge>)}
               </div>
               <div className="mt-3 grid grid-cols-4 gap-2 text-center">
-                <div className="rounded-xl bg-gray-50 px-2 py-2"><div className="text-[9px] font-black text-gray-400 uppercase">By</div><div className="text-[10px] font-black text-slate-700 truncate">{getEventActor(ev)}</div></div>
-                <div className="rounded-xl bg-gray-50 px-2 py-2"><div className="text-[9px] font-black text-gray-400 uppercase">Target</div><div className="text-[10px] font-black text-slate-700 truncate">{ev.target_label || ev.item_name || '-'}</div></div>
-                <div className="rounded-xl bg-emerald-50 px-2 py-2"><div className="text-[9px] font-black text-emerald-600 uppercase">Sent</div><div className="text-xs font-black text-emerald-700">{ev._source === 'notification' ? sent : '-'}</div></div>
-                <div className="rounded-xl bg-red-50 px-2 py-2"><div className="text-[9px] font-black text-red-600 uppercase">Failed</div><div className="text-xs font-black text-red-700">{ev._source === 'notification' ? failed : '-'}</div></div>
+                <div className="rounded-xl bg-gray-50 px-2 py-2"><div className="text-[10px] font-black text-gray-500 uppercase">By</div><div className="text-[10px] font-black text-slate-700 truncate">{getEventActor(ev)}</div></div>
+                <div className="rounded-xl bg-gray-50 px-2 py-2"><div className="text-[10px] font-black text-gray-500 uppercase">Target</div><div className="text-[10px] font-black text-slate-700 truncate">{ev.target_label || ev.item_name || '-'}</div></div>
+                <div className="rounded-xl bg-emerald-50 px-2 py-2"><div className="text-[10px] font-black text-emerald-600 uppercase">Sent</div><div className="text-xs font-black text-emerald-700">{ev._source === 'notification' ? sent : '-'}</div></div>
+                <div className="rounded-xl bg-red-50 px-2 py-2"><div className="text-[10px] font-black text-red-600 uppercase">Failed</div><div className="text-xs font-black text-red-700">{ev._source === 'notification' ? failed : '-'}</div></div>
               </div>
             </div>
           );
         })}
-        {filteredEvents.length === 0 && <div className="rounded-2xl bg-white p-8 text-center text-sm font-semibold text-gray-400">No activity events found.</div>}
+        {filteredEvents.length === 0 && <div className="rounded-2xl bg-white p-8 text-center text-sm font-bold text-gray-500">No activity events found.</div>}
       </div>
 
       <Card className="hidden md:block p-0 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1180px] text-sm">
-            <thead className="bg-gray-50 text-[10px] uppercase tracking-widest text-gray-400 font-black border-b">
+            <thead className="bg-gray-50 text-[10px] uppercase tracking-widest text-gray-500 font-black border-b">
               <tr>
                 <th className="px-4 py-2 text-left">Time</th>
                 <th className="px-4 py-2 text-left">Type</th>
@@ -7814,7 +7945,7 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
               })}
               {filteredEvents.length === 0 && (
                 <tr>
-                  <td colSpan={13} className="px-4 py-10 text-center text-gray-400 italic">No activity events found.</td>
+                  <td colSpan={13} className="px-4 py-10 text-center text-gray-500 italic font-semibold">No activity events found.</td>
                 </tr>
               )}
             </tbody>
@@ -7929,7 +8060,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
     const q = companySearch.trim().toLowerCase();
     const result: { component: string; parentItem: string; qtyUsed: number; company: string; orderId: number }[] = [];
     for (const order of orders) {
-      if (order.status !== 'Dispatched' && order.status !== 'Delivered') continue;
+      if (order.status !== 'Dispatched') continue;
       const d = order.etd ? parseDate(order.etd, true) : null;
       if (d && !inRange(d)) continue;
       const c = String(order.customer || 'Unknown');
@@ -7970,7 +8101,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
     const q = companySearch.trim().toLowerCase();
     const grouped = new Map<string, { item: string; orders: number; totalQty: number; companies: Set<string> }>();
     for (const order of orders) {
-      if (order.status !== 'Dispatched' && order.status !== 'Delivered') continue;
+      if (order.status !== 'Dispatched') continue;
       const d = order.etd ? parseDate(order.etd, true) : null;
       if (d && !inRange(d)) continue;
       const c = String(order.customer || 'Unknown');
@@ -8037,7 +8168,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
     const q = companySearch.trim().toLowerCase();
     const grouped = new Map<string, { company: string; totalWOs: number; totalQty: number; onTime: number; delayed: number }>();
     for (const order of orders) {
-      if (order.status !== 'Dispatched' && order.status !== 'Delivered') continue;
+      if (order.status !== 'Dispatched') continue;
       const d = order.etd ? parseDate(order.etd, true) : null;
       if (d && !inRange(d)) continue;
       const c = String(order.customer || 'Unknown');
@@ -8402,35 +8533,35 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
       {/* Stats cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
         <Card className="p-3">
-          <div className="text-[10px] uppercase font-black text-gray-400">Records</div>
+          <div className="text-[10px] uppercase font-black text-gray-500">Records</div>
           <div className="text-xl font-black text-gray-800 mt-1 tabular-nums">{reportRowsCount}</div>
         </Card>
         {reportType === 'component-usage' && (
           <Card className="p-3">
-            <div className="text-[10px] uppercase font-black text-gray-400">Total Qty Used</div>
+            <div className="text-[10px] uppercase font-black text-gray-500">Total Qty Used</div>
             <div className="text-xl font-black text-indigo-700 mt-1 tabular-nums">{componentUsageRows.reduce((s, r) => s + r.qtyUsed, 0)}</div>
           </Card>
         )}
         {reportType === 'item-usage' && (
           <Card className="p-3">
-            <div className="text-[10px] uppercase font-black text-gray-400">Total Qty</div>
+            <div className="text-[10px] uppercase font-black text-gray-500">Total Qty</div>
             <div className="text-xl font-black text-indigo-700 mt-1 tabular-nums">{itemUsageRows.reduce((s, r) => s + r.totalQty, 0)}</div>
           </Card>
         )}
         {reportType === 'on-time' && (
           <Card className="p-3">
-            <div className="text-[10px] uppercase font-black text-gray-400">Total Qty Dispatched</div>
+            <div className="text-[10px] uppercase font-black text-gray-500">Total Qty Dispatched</div>
             <div className="text-xl font-black text-green-700 mt-1 tabular-nums">{onTimeRows.reduce((s: number, r: any) => s + (Number(r.dispatch_qty) || 0), 0)}</div>
           </Card>
         )}
         {reportType === 'delayed' && (
           <>
             <Card className="p-3">
-              <div className="text-[10px] uppercase font-black text-gray-400">Total Qty Dispatched</div>
+              <div className="text-[10px] uppercase font-black text-gray-500">Total Qty Dispatched</div>
               <div className="text-xl font-black text-orange-700 mt-1 tabular-nums">{delayedRows.reduce((s: number, r: any) => s + (Number(r.dispatch_qty) || 0), 0)}</div>
             </Card>
             <Card className="p-3">
-              <div className="text-[10px] uppercase font-black text-gray-400">Avg Delay (Days)</div>
+              <div className="text-[10px] uppercase font-black text-gray-500">Avg Delay (Days)</div>
               <div className="text-xl font-black text-red-700 mt-1 tabular-nums">
                 {delayedRows.length > 0 ? (delayedRows.reduce((s: number, r: any) => s + (r.daysDelay || 0), 0) / delayedRows.length).toFixed(1) : 0}
               </div>
@@ -8440,11 +8571,11 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
         {reportType === 'dept-wise' && (
           <>
             <Card className="p-3">
-              <div className="text-[10px] uppercase font-black text-gray-400">Departments</div>
+              <div className="text-[10px] uppercase font-black text-gray-500">Departments</div>
               <div className="text-xl font-black text-gray-800 mt-1 tabular-nums">{deptWiseRows.length}</div>
             </Card>
             <Card className="p-3">
-              <div className="text-[10px] uppercase font-black text-gray-400">Total Hrs</div>
+              <div className="text-[10px] uppercase font-black text-gray-500">Total Hrs</div>
               <div className="text-xl font-black text-indigo-700 mt-1 tabular-nums">{deptWiseRows.reduce((s, r) => s + r.totalHrs, 0)}</div>
             </Card>
           </>
@@ -8452,11 +8583,11 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
         {reportType === 'company-performance' && (
           <>
             <Card className="p-3">
-              <div className="text-[10px] uppercase font-black text-gray-400">Total Qty</div>
+              <div className="text-[10px] uppercase font-black text-gray-500">Total Qty</div>
               <div className="text-xl font-black text-indigo-700 mt-1 tabular-nums">{companyPerfRows.reduce((s, r) => s + r.totalQty, 0)}</div>
             </Card>
             <Card className="p-3">
-              <div className="text-[10px] uppercase font-black text-gray-400">On-Time %</div>
+              <div className="text-[10px] uppercase font-black text-gray-500">On-Time %</div>
               <div className="text-xl font-black text-green-700 mt-1 tabular-nums">
                 {companyPerfRows.reduce((s, r) => s + r.totalWOs, 0) > 0
                   ? Math.round(companyPerfRows.reduce((s, r) => s + r.onTime, 0) / companyPerfRows.reduce((s, r) => s + r.totalWOs, 0) * 100) + '%'
@@ -8472,7 +8603,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
         <Card className="p-0 overflow-hidden shadow-sm border border-gray-200/60 rounded-xl">
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full min-w-[750px] text-sm">
-              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b-2 border-indigo-200">
+              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
                 <tr>
                   <th className="px-4 py-3 w-8"></th>
                   <th className={thClass} onClick={() => handleSort('component')}>Component <SortIcon col="component" /></th>
@@ -8489,7 +8620,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
                   return (
                     <Fragment key={row.component}>
                       <tr className={`hover:bg-indigo-50/40 transition-colors cursor-pointer ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`} onClick={() => setExpandedComponent(isExpanded ? null : row.component)}>
-                        <td className="px-4 py-3 text-gray-400 text-xs">{isExpanded ? '▼' : '▶'}</td>
+                        <td className="px-4 py-3 text-gray-500 text-xs">{isExpanded ? '▼' : '▶'}</td>
                         <td className="px-4 py-3 font-semibold text-gray-800">{row.component}</td>
                         <td className="px-4 py-3 font-black text-gray-800 text-right tabular-nums">{row.totalQty}</td>
                         <td className="px-4 py-3 text-gray-600 max-w-[200px] truncate" title={row.parentItemsList}>{row.parentItemsList}</td>
@@ -8501,7 +8632,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
                           <td colSpan={6} className="p-0 bg-indigo-50/20">
                             <table className="w-full text-xs">
                               <thead>
-                                <tr className="text-[9px] uppercase text-gray-400 font-black border-b border-indigo-200">
+                                <tr className="text-[10px] uppercase text-gray-500 font-black border-b border-indigo-200">
                                   <th className="px-4 py-2 text-left pl-8">Parent Item</th>
                                   <th className="px-4 py-2 text-right">Qty Used</th>
                                   <th className="px-4 py-2 text-left">Company</th>
@@ -8511,7 +8642,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
                               <tbody className="divide-y divide-gray-200/50">
                                 {applySortGeneric(detailRows.map((r: any) => ({ ...r }))).map((detail: any, di: number) => (
                                   <tr key={di} className={`hover:bg-indigo-50/20 ${di % 2 === 1 ? 'bg-gray-50/30' : ''}`}>
-                                    <td className="px-4 py-2 font-medium text-gray-700 pl-8">{detail.parentItem}</td>
+                                    <td className="px-4 py-2 font-semibold text-gray-700 pl-8">{detail.parentItem}</td>
                                     <td className="px-4 py-2 font-bold text-gray-800 text-right tabular-nums">{detail.qtyUsed}</td>
                                     <td className="px-4 py-2 text-gray-600">{detail.company}</td>
                                     <td className="px-4 py-2 font-semibold text-indigo-600 text-right tabular-nums">#{detail.orderId}</td>
@@ -8533,7 +8664,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
               <div key={row.component} className={`rounded-lg border border-gray-200 p-2.5 ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
                 <div className="flex items-center justify-between cursor-pointer" onClick={() => setExpandedComponent(expandedComponent === row.component ? null : row.component)}>
                   <div className="font-black text-sm text-gray-800">{row.component}</div>
-                  <span className="text-gray-400 text-xs">{expandedComponent === row.component ? '▼' : '▶'}</span>
+                  <span className="text-gray-500 text-xs">{expandedComponent === row.component ? '▼' : '▶'}</span>
                 </div>
                 <div className="text-xs text-gray-600 mt-0.5">Total Qty: <span className="font-bold text-gray-800 tabular-nums">{row.totalQty}</span></div>
                 <div className="text-xs text-gray-500 mt-0.5">{row.orderCount} orders · {row.companyCount} companies</div>
@@ -8550,7 +8681,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
               </div>
             ))}
           </div>
-          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-400 italic text-sm">No component usage data for the selected range.</div>}
+          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No component usage data for the selected range.</div>}
         </Card>
       )}
 
@@ -8559,7 +8690,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
         <Card className="p-0 overflow-hidden shadow-sm border border-gray-200/60 rounded-xl">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[600px] text-sm">
-              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b-2 border-indigo-200">
+              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
                 <tr>
                   <th className={thClass} onClick={() => handleSort('item')}>Item Name <SortIcon col="item" /></th>
                   <th className={`${thClass} text-right`} onClick={() => handleSort('orders')}>Orders <SortIcon col="orders" /></th>
@@ -8579,7 +8710,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
               </tbody>
             </table>
           </div>
-          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-400 italic text-sm">No item usage data for the selected range.</div>}
+          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No item usage data for the selected range.</div>}
         </Card>
       )}
 
@@ -8588,7 +8719,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
         <Card className="p-0 overflow-hidden shadow-sm border border-gray-200/60 rounded-xl">
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full min-w-[800px] text-sm">
-              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b-2 border-green-300">
+              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-green-300">
                 <tr>
                   <th className={thClass} onClick={() => handleSort('_date')}>Date <SortIcon col="_date" /></th>
                   <th className={`${thClass} text-right`} onClick={() => handleSort('work_order_id')}>WO <SortIcon col="work_order_id" /></th>
@@ -8624,7 +8755,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
               </div>
             ))}
           </div>
-          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-400 italic text-sm">No on-time deliveries for the selected range.</div>}
+          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No on-time deliveries for the selected range.</div>}
         </Card>
       )}
 
@@ -8633,7 +8764,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
         <Card className="p-0 overflow-hidden shadow-sm border border-gray-200/60 rounded-xl">
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full min-w-[900px] text-sm">
-              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b-2 border-red-300">
+              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-red-300">
                 <tr>
                   <th className={thClass} onClick={() => handleSort('_date')}>Date <SortIcon col="_date" /></th>
                   <th className={`${thClass} text-right`} onClick={() => handleSort('work_order_id')}>WO <SortIcon col="work_order_id" /></th>
@@ -8669,7 +8800,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
               </div>
             ))}
           </div>
-          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-400 italic text-sm">No delayed deliveries for the selected range.</div>}
+          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No delayed deliveries for the selected range.</div>}
         </Card>
       )}
 
@@ -8678,7 +8809,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
         <Card className="p-0 overflow-hidden shadow-sm border border-gray-200/60 rounded-xl">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[700px] text-sm">
-              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b-2 border-indigo-200">
+              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
                 <tr>
                   <th className={thClass} onClick={() => handleSort('dept')}>Department <SortIcon col="dept" /></th>
                   <th className={`${thClass} text-right`} onClick={() => handleSort('reports')}>Reports <SortIcon col="reports" /></th>
@@ -8702,7 +8833,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
               </tbody>
             </table>
           </div>
-          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-400 italic text-sm">No department-wise data for the selected range.</div>}
+          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No department-wise data for the selected range.</div>}
         </Card>
       )}
 
@@ -8711,7 +8842,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
         <Card className="p-0 overflow-hidden shadow-sm border border-gray-200/60 rounded-xl">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[700px] text-sm">
-              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b-2 border-indigo-200">
+              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
                 <tr>
                   <th className={thClass} onClick={() => handleSort('company')}>Company <SortIcon col="company" /></th>
                   <th className={`${thClass} text-right`} onClick={() => handleSort('totalWOs')}>Total WOs <SortIcon col="totalWOs" /></th>
@@ -8746,7 +8877,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
               </tbody>
             </table>
           </div>
-          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-400 italic text-sm">No company performance data for the selected range.</div>}
+          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No company performance data for the selected range.</div>}
         </Card>
       )}
     </div>
@@ -8754,6 +8885,29 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
 };
 
 // --- Production Entry ---
+
+const filterByDate = (dateStr: string | undefined, filter: string, customFrom: string, customTo: string): boolean => {
+  if (filter === 'all' || !dateStr) return true;
+  const reportDate = new Date(dateStr + 'T00:00:00');
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (filter === 'today') return reportDate.getTime() === today.getTime();
+  if (filter === 'week') {
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - today.getDay());
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    return reportDate >= weekStart && reportDate <= weekEnd;
+  }
+  if (filter === 'month') return reportDate.getMonth() === today.getMonth() && reportDate.getFullYear() === today.getFullYear();
+  if (filter === 'custom' && customFrom && customTo) {
+    const from = new Date(customFrom + 'T00:00:00');
+    const to = new Date(customTo + 'T00:00:00');
+    to.setHours(23, 59, 59, 999);
+    return reportDate >= from && reportDate <= to;
+  }
+  return true;
+};
 
 const formatDateDMY = (dateStr: string) => {
   if (!dateStr) return '';
@@ -8782,6 +8936,9 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [searchText, setSearchText] = useState('');
   const [filterDept, setFilterDept] = useState('');
+  const [dateFilter, setDateFilter] = useState('all');
+  const [customDateFrom, setCustomDateFrom] = useState('');
+  const [customDateTo, setCustomDateTo] = useState('');
   const [expandedOtherReports, setExpandedOtherReports] = useState<Set<number>>(new Set());
 
   // Entry form state
@@ -9198,17 +9355,17 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
           <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4">
             {/* LEFT: Report Info — compact inline */}
             <div className="flex flex-wrap gap-x-6 gap-y-0.5 text-sm">
-              <span><span className="text-gray-400 font-semibold">Date:</span><strong className="text-gray-800 ml-1">{formatDateDMY(r.date)}</strong></span>
-              <span><span className="text-gray-400 font-semibold">Dept:</span><strong className="text-gray-800 ml-1">{r.department}</strong></span>
-              <span><span className="text-gray-400 font-semibold">Report #:</span><strong className="text-gray-800 ml-1">{r.id}</strong></span>
-              <span><span className="text-gray-400 font-semibold">By:</span><strong className="text-gray-800 ml-1">{r.created_by || '-'}</strong></span>
+              <span><span className="text-gray-500 font-semibold">Date:</span><strong className="text-gray-800 ml-1">{formatDateDMY(r.date)}</strong></span>
+              <span><span className="text-gray-500 font-semibold">Dept:</span><strong className="text-gray-800 ml-1">{r.department}</strong></span>
+              <span><span className="text-gray-500 font-semibold">Report #:</span><strong className="text-gray-800 ml-1">{r.id}</strong></span>
+              <span><span className="text-gray-500 font-semibold">By:</span><strong className="text-gray-800 ml-1">{r.created_by || '-'}</strong></span>
             </div>
 
             {/* RIGHT: Work Breakdown — compact table */}
             <div>
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-[10px] font-black uppercase text-gray-400 border-b">
+                  <tr className="text-[10px] font-black uppercase text-gray-500 border-b">
                     <th className="text-left py-1 pr-4"></th>
                     <th className="text-center py-1 pr-3">Workers</th>
                     <th className="text-center py-1 pr-3">Hrs/Each</th>
@@ -9249,7 +9406,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-[10px] font-black uppercase text-gray-400 border-b">
+                    <tr className="text-[10px] font-black uppercase text-gray-500 border-b">
                       <th className="text-left py-1.5">Item</th>
                       <th className="text-center py-1.5 w-16">Qty</th>
                       <th className="text-left py-1.5">Metrics</th>
@@ -9277,7 +9434,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
             <div className="border-t border-gray-100 pt-2 mt-2">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-[10px] font-black uppercase text-gray-400 border-b">
+                  <tr className="text-[10px] font-black uppercase text-gray-500 border-b">
                     <th className="text-left py-1.5">Metric</th>
                     <th className="text-right py-1.5">Req / Unit</th>
                     <th className="text-right py-1.5">Total Qty</th>
@@ -9297,7 +9454,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
               </table>
             </div>
           ) : (
-            <div className="text-center py-4 text-gray-400 italic text-sm">No metric data for this report.</div>
+            <div className="text-center py-4 text-gray-500 italic font-semibold text-sm">No metric data for this report.</div>
           )}
         </Card>
 
@@ -9336,7 +9493,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
         </div>
         <div className="overflow-x-auto rounded-2xl border shadow-sm bg-white">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b">
+            <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b">
               <tr>
                 <th className="px-4 py-3 text-left w-44">Field</th>
                 {compareList.map(r => <th key={r.id} className="px-4 py-3 text-center min-w-[160px]">{formatDateDMY(r.date)}<br /><span className="text-gray-500 font-bold">{r.department}</span></th>)}
@@ -9432,7 +9589,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
         {/* Header */}
         <div className="flex items-center justify-between gap-3">
           <div>
-            <button onClick={() => { setMode('list'); resetForm(); }} className="text-xs font-black text-gray-400 hover:text-gray-600 uppercase tracking-widest mb-0.5 flex items-center gap-1">
+            <button onClick={() => { setMode('list'); resetForm(); }} className="text-xs font-black text-gray-500 hover:text-gray-600 uppercase tracking-widest mb-0.5 flex items-center gap-1">
               <ChevronLeft size={14}/> Back to List
             </button>
             <h2 className="text-xl font-black text-gray-800">{editingId ? 'Edit Production Report' : 'New Production Report'}</h2>
@@ -9451,14 +9608,14 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
 
           {/* Column 1 — Date & Department */}
           <Card className="p-4 rounded-xl">
-            <h3 className="text-xs font-black uppercase text-gray-400 tracking-wider mb-3">Date & Dept</h3>
+            <h3 className="text-xs font-black uppercase text-gray-500 tracking-wider mb-3">Date & Dept</h3>
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-black uppercase text-gray-400 block mb-0.5">Date</label>
+                <label className="text-xs font-black uppercase text-gray-500 block mb-0.5">Date</label>
                 <input type="date" value={reportDate} onChange={e => setReportDate(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-semibold focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all" />
               </div>
               <div>
-                <label className="text-xs font-black uppercase text-gray-400 block mb-0.5">Department</label>
+                <label className="text-xs font-black uppercase text-gray-500 block mb-0.5">Department</label>
                 <select value={selectedDept} onChange={e => setSelectedDept(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-semibold focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all">
                   <option value="">Select</option>
                   {departments.filter(d => !['Office', 'Quality Control', 'Dispatch', 'QC', 'QC Control', 'Quality_Control'].includes(d.name)).map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
@@ -9469,7 +9626,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
 
           {/* Column 2 — Labor Breakdown */}
           <Card className="p-4 rounded-xl">
-            <h3 className="text-xs font-black uppercase text-gray-400 tracking-wider mb-3">Labor</h3>
+            <h3 className="text-xs font-black uppercase text-gray-500 tracking-wider mb-3">Labor</h3>
             <div className="space-y-3">
               <div className="rounded-lg bg-blue-50/60 p-3 border border-blue-100">
                 <div className="flex items-center gap-1.5 mb-2">
@@ -9514,14 +9671,14 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
 
           {/* Column 3 — Items + Metrics */}
           <Card className="p-4 rounded-xl flex flex-col">
-            <h3 className="text-xs font-black uppercase text-gray-400 tracking-wider mb-3">Items</h3>
+            <h3 className="text-xs font-black uppercase text-gray-500 tracking-wider mb-3">Items</h3>
             <div className="space-y-2 flex-1 min-h-0">
               <div className="space-y-1.5 max-h-[140px] overflow-y-visible">
                 {entryItems.map((item, idx) => (
                   <div key={idx} className="flex items-center gap-1.5">
                     <div className="flex-1 relative">
                       {!selectedDept ? (
-                        <div className="w-full px-2.5 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-400">Select dept first</div>
+                        <div className="w-full px-2.5 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-500">Select dept first</div>
                       ) : (
                         <>
                           <input
@@ -9558,7 +9715,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
                                   >{i.name} ({i.customer_name})</button>
                                 ))}
                               {items.filter(i => (i.departments || []).includes(selectedDept!)).filter(i => !itemSearchText[idx] || i.name.toLowerCase().includes(itemSearchText[idx].toLowerCase())).filter(i => !entryItems.some((e, ei) => ei !== idx && e.itemId === i.id)).length === 0 && (
-                                <div className="px-2.5 py-1.5 text-sm text-gray-400 italic">No items match</div>
+                                <div className="px-2.5 py-1.5 text-sm text-gray-500 italic font-semibold">No items match</div>
                               )}
                             </div>
                           )}
@@ -9582,11 +9739,11 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
             {/* Metrics (inline compact) */}
             {metricResults.length > 0 && (
               <div className="mt-3 pt-3 border-t border-gray-100">
-                <h4 className="text-xs font-black uppercase text-gray-400 tracking-wider mb-1.5">Metrics</h4>
+                <h4 className="text-xs font-black uppercase text-gray-500 tracking-wider mb-1.5">Metrics</h4>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="text-[10px] font-black uppercase text-gray-400 border-b border-gray-200">
+                      <tr className="text-[10px] font-black uppercase text-gray-500 border-b border-gray-200">
                         <th className="text-left py-1">Metric</th>
                         <th className="text-right py-1">Unit</th>
                         <th className="text-right py-1">Total</th>
@@ -9631,36 +9788,43 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center gap-4">
-        <h2 className="text-xl font-black text-gray-800">Production Entry</h2>
-        <div className="flex items-center gap-2">
-          {compareIds.length >= 2 && (
-            <button onClick={() => setMode('compare')} className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg hover:bg-emerald-700 transition-colors text-sm flex items-center gap-1">
-              Compare ({compareIds.length})
-            </button>
-          )}
-          <button onClick={() => setMode('entry')} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg hover:bg-indigo-700 transition-colors flex items-center gap-2">
-            <Plus size={18} /> New Entry
-          </button>
-        </div>
-      </div>
-
-      {/* Search & Filter */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
           <input type="text" placeholder="Search by item name..." value={searchText} onChange={e => setSearchText(e.target.value)} className="w-full pl-9 pr-4 py-2.5 border rounded-xl text-sm bg-white" />
         </div>
         <select value={filterDept} onChange={e => setFilterDept(e.target.value)} className="px-4 py-2.5 border rounded-xl text-sm bg-white">
           <option value="">All Departments</option>
           {departments.filter(d => !['Office', 'Quality Control', 'Dispatch', 'QC', 'QC Control', 'Quality_Control'].includes(d.name)).map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
         </select>
+        <select value={dateFilter} onChange={e => { setDateFilter(e.target.value); if (e.target.value !== 'custom') { setCustomDateFrom(''); setCustomDateTo(''); } }} className="px-4 py-2.5 border rounded-xl text-sm bg-white">
+          <option value="all">All Dates</option>
+          <option value="today">Today</option>
+          <option value="week">This Week</option>
+          <option value="month">This Month</option>
+          <option value="custom">Custom</option>
+        </select>
+        {dateFilter === 'custom' && (
+          <>
+            <input type="date" value={customDateFrom} onChange={e => setCustomDateFrom(e.target.value)} className="px-3 py-2.5 border rounded-xl text-sm bg-white" />
+            <span className="text-gray-500 text-sm">to</span>
+            <input type="date" value={customDateTo} onChange={e => setCustomDateTo(e.target.value)} className="px-3 py-2.5 border rounded-xl text-sm bg-white" />
+          </>
+        )}
+        {compareIds.length >= 2 && (
+          <button onClick={() => setMode('compare')} className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg hover:bg-emerald-700 transition-colors text-sm flex items-center gap-1 whitespace-nowrap">
+            Compare ({compareIds.length})
+          </button>
+        )}
+        <button onClick={() => setMode('entry')} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 whitespace-nowrap">
+          <Plus size={18} /> New Entry
+        </button>
       </div>
 
       {loading ? (
         <LoadingState />
       ) : reports.length === 0 ? (
-        <div className="text-center py-20 text-gray-400 italic">No production reports yet.</div>
+        <div className="text-center py-20 text-gray-500 italic font-semibold">No production reports yet.</div>
       ) : (
         <>
         {(() => {
@@ -9671,14 +9835,15 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
               const itemMatch = r.items ? r.items.some(it => it.item_name.toLowerCase().includes(q)) : r.item_name.toLowerCase().includes(q);
               if (!itemMatch) return false;
             }
+            if (!filterByDate(r.date, dateFilter, customDateFrom, customDateTo)) return false;
             return true;
           });
           return filtered.length === 0 ? (
-            <div className="text-center py-20 text-gray-400 italic">No reports match your search.</div>
+            <div className="text-center py-20 text-gray-500 italic font-semibold">No reports match your search.</div>
           ) : (
         <div className="overflow-x-auto rounded-2xl border shadow-sm bg-white">
           <table className="w-full min-w-[900px] text-sm">
-            <thead className="bg-gray-50 text-[10px] uppercase text-gray-400 font-black border-b">
+            <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b">
               <tr>
                 <th className="px-2 py-3 text-center w-8">
                   <input type="checkbox" checked={compareIds.length === reports.length} onChange={e => setCompareIds(e.target.checked ? reports.map(r => r.id) : [])} className="cursor-pointer" />
@@ -9722,7 +9887,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
           );
         })()}
         {compareIds.length > 0 && (
-          <div className="text-xs text-gray-400 text-right">Compare ({compareIds.length} selected) <button onClick={() => setCompareIds([])} className="text-red-400 hover:text-red-600 ml-2">Clear</button></div>
+          <div className="text-xs text-gray-500 text-right">Compare ({compareIds.length} selected) <button onClick={() => setCompareIds([])} className="text-red-400 hover:text-red-600 ml-2">Clear</button></div>
         )}
         </>
       )}
@@ -9801,6 +9966,10 @@ export default function App() {
     return 'dashboard';
   };
   const [view, setView] = useState<AppView>(initialView);
+  const [canGoBack, setCanGoBack] = useState(false);
+  const [showMaintenance, setShowMaintenance] = useState(false);
+  const [migrating, setMigrating] = useState(false);
+  const [openNavGroup, setOpenNavGroup] = useState<string | null>(null);
   const [loggedInUser, setLoggedInUser] = useState<User | null>(null);
   const [clientUser, setClientUser] = useState<any>(null);
   const [liveScreenUser, setLiveScreenUser] = useState<any>(null);
@@ -10068,6 +10237,13 @@ export default function App() {
   }, [loggedInUser]);
 
   useEffect(() => {
+    if (!openNavGroup) return;
+    const handler = (e: MouseEvent) => { setOpenNavGroup(null); };
+    window.addEventListener('click', handler);
+    return () => window.removeEventListener('click', handler);
+  }, [openNavGroup]);
+
+  useEffect(() => {
     const loadUser = async () => {
       const authUser = getCurrentAuthUser();
       if (!authUser) { localStorage.removeItem('excell_erp_user'); return; }
@@ -10141,6 +10317,7 @@ export default function App() {
       window.history.replaceState(historyState, '');
     } else {
       window.history.pushState(historyState, '');
+      setCanGoBack(true);
     }
   }, [applyNavigationPayload, buildHistoryState]);
 
@@ -10164,6 +10341,45 @@ export default function App() {
   const handleClientLogout = () => { setClientUser(null); navigateTo('client-login'); };
   const handleLiveScreenLogin = (user: any) => { setLiveScreenUser(user); navigateTo('live-screen'); };
   const handleLiveScreenLogout = () => { setLiveScreenUser(null); navigateTo('live-screen-login'); };
+
+  const handleMigrateDeliveredToDispatched = async () => {
+    if (!confirm('Migrate all "Delivered" records to "Dispatched"? This is safe to run multiple times.')) return;
+    setMigrating(true);
+    try {
+      const wo = await pb.collection('work_orders').getFullList({
+        filter: 'status="Delivered"',
+        requestKey: null
+      });
+      for (const r of wo) {
+        await pb.collection('work_orders').update(r.id, { status: 'Dispatched' }, { requestKey: null });
+      }
+
+      const evNew = await pb.collection('activity_events').getFullList({
+        filter: 'new_value="Delivered"',
+        requestKey: null
+      });
+      for (const r of evNew) {
+        await pb.collection('activity_events').update(r.id, { new_value: 'Dispatched' }, { requestKey: null });
+      }
+
+      const evOld = await pb.collection('activity_events').getFullList({
+        filter: 'old_value="Delivered"',
+        requestKey: null
+      });
+      for (const r of evOld) {
+        await pb.collection('activity_events').update(r.id, { old_value: 'Dispatched' }, { requestKey: null });
+      }
+
+      alert(`Migration complete!\n\n` +
+        `• ${wo.length} work_orders updated\n` +
+        `• ${evNew.length} activity events (new_value) updated\n` +
+        `• ${evOld.length} activity events (old_value) updated`);
+    } catch (err: any) {
+      alert('Migration failed: ' + (err?.message || String(err)));
+    } finally {
+      setMigrating(false);
+    }
+  };
 
   const handleNavClick = (viewId: AppView) => {
     navigateTo(viewId);
@@ -10872,39 +11088,6 @@ export default function App() {
             animation: erpShimmer 1.4s ease-in-out infinite;
           }
 
-          .liquid-app .liquid-sidebar {
-            background: linear-gradient(180deg, #032d60 0%, #083b7a 55%, #062b5f 100%) !important;
-            border-right: 1px solid rgba(255,255,255,0.12) !important;
-            box-shadow: 0 14px 40px rgba(3,45,96,0.24) !important;
-          }
-
-          .liquid-app .liquid-sidebar .liquid-brand,
-          .liquid-app .liquid-sidebar .liquid-brand span {
-            color: #ffffff !important;
-          }
-
-          .liquid-app .liquid-sidebar .liquid-nav-group {
-            border-color: rgba(255,255,255,0.14) !important;
-            background: rgba(255,255,255,0.04) !important;
-          }
-
-          .liquid-app .liquid-sidebar .liquid-nav-head {
-            background: rgba(255,255,255,0.06) !important;
-            color: #dbeafe !important;
-          }
-
-          .liquid-app .liquid-sidebar .liquid-nav-body {
-            background: rgba(0,0,0,0.05) !important;
-          }
-
-          .liquid-app .liquid-sidebar .liquid-nav-item:not(.liquid-active) {
-            color: #d7e8ff !important;
-          }
-
-          .liquid-app .liquid-sidebar .liquid-muted-icon {
-            color: #b9d7ff !important;
-          }
-
           .liquid-app .liquid-glass-surface {
             background: #ffffff !important;
             border-color: #d8dde6 !important;
@@ -10932,58 +11115,6 @@ export default function App() {
           }
         }
       `}</style>
-
-      {/* Desktop Sidebar */}
-      <aside className="liquid-sidebar hidden lg:flex w-24 bg-[#032d60] flex-col fixed h-full z-40 no-print transition-all duration-300">
-        <div className="flex h-[54px] w-[95px] flex-col items-center justify-center border-b border-white/10">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/20 bg-[#0176d3] text-white shadow-lg shadow-blue-950/20" aria-label="Excell Packaging">
-            <Package size={25} strokeWidth={2.4} />
-          </div>
-        </div>
-        <nav className="flex-1 px-2 py-4 space-y-4 overflow-y-auto">
-          {navGroups.map((group) => {
-            const isOpen = mobileNavOpen[group.key] ?? group.items.some(item => item.id === view);
-            const hasActiveItem = group.items.some(item => item.id === view);
-            return (
-              <section key={group.key} className="space-y-1.5 border-b border-white/10 pb-3 last:border-b-0 last:pb-0">
-                <button
-                  onClick={() => setMobileNavOpen(prev => {
-                    const closed = Object.fromEntries(Object.keys(prev).map(k => [k, false]));
-                    return { ...closed, [group.key]: !(prev[group.key] ?? false) };
-                  })}
-                  className={`w-full rounded-lg px-1 py-2 text-center text-[9px] font-black uppercase tracking-[0.16em] transition-colors ${hasActiveItem ? 'bg-white/12 text-white' : 'text-blue-100/75 hover:bg-white/10 hover:text-white'}`}
-                  title={`${isOpen ? 'Hide' : 'Show'} ${group.label}`}
-                >
-                  <span className="flex items-center justify-center gap-1">
-                    {group.label}
-                    <ChevronRight size={11} className={`transition-transform ${isOpen ? 'rotate-90' : ''}`} />
-                  </span>
-                </button>
-                {isOpen && (
-                  <div className="erp-stagger space-y-1.5">
-                    {group.items.map((item) => {
-                  const isActive = view === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => handleNavClick(item.id as AppView)}
-                    className={`group w-full min-h-[70px] rounded-xl flex flex-col items-center justify-center gap-1.5 text-center font-semibold text-[11px] leading-tight transition-all ${isActive ? 'text-white' : 'text-blue-50 hover:bg-white/10 hover:text-white'}`}
-                      title={`${group.label}: ${item.label}`}
-                    >
-                      <span className={`flex h-10 w-14 items-center justify-center rounded-xl transition-all ${isActive ? 'erp-active-pulse border-2 border-white bg-white/10 shadow-inner' : 'border border-transparent group-hover:border-white/30'}`}>
-                        <item.icon size={25} strokeWidth={2.3} className="text-current" />
-                      </span>
-                      <span className="max-w-[82px] px-0.5">{item.label}</span>
-                    </button>
-                  );
-                    })}
-                  </div>
-                )}
-              </section>
-            );
-          })}
-        </nav>
-      </aside>
 
       {/* Mobile Sidebar (Drawer) */}
       {isMobileMenuOpen && (
@@ -11018,7 +11149,7 @@ export default function App() {
                     })}
                       className="liquid-nav-head w-full flex items-center justify-between px-3 py-2.5 bg-white/60 text-slate-600"
                     >
-                      <span className="text-[10px] font-medium uppercase tracking-widest">{group.label}</span>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{group.label}</span>
                       <ChevronRight size={14} className={`transition-transform ${isOpen ? 'rotate-90' : ''}`} />
                     </button>
                     {isOpen && (
@@ -11027,7 +11158,7 @@ export default function App() {
                           <button
                             key={item.id}
                             onClick={() => handleNavClick(item.id as AppView)}
-                            className={`liquid-nav-item ${view === item.id ? 'liquid-active' : ''} w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg font-normal text-[13px] transition-all ${view === item.id ? 'bg-blue-600 text-white shadow-xl shadow-blue-200/70' : item.highlight ? 'text-indigo-600 hover:bg-white/80 bg-white/40 border border-indigo-100' : 'text-slate-600 hover:bg-white/80'}`}
+                            className={`liquid-nav-item ${view === item.id ? 'liquid-active' : ''} w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg font-semibold text-xs transition-all ${view === item.id ? 'bg-blue-600 text-white shadow-xl shadow-blue-200/70' : item.highlight ? 'text-indigo-600 hover:bg-white/80 bg-white/40 border border-indigo-100' : 'text-slate-600 hover:bg-white/80'}`}
                           >
                             <item.icon size={18} className={view === item.id ? 'text-white' : item.highlight ? 'text-indigo-500' : 'liquid-muted-icon text-slate-500'} />
                             {item.label}
@@ -11054,84 +11185,155 @@ export default function App() {
         </div>
       )}
 
-      <main className="flex-1 min-w-0 lg:ml-24 flex flex-col min-h-screen transition-all duration-300">
-          <div className="hidden lg:flex h-[54px] bg-[#0176d3] text-white items-center justify-center px-5 no-print shadow-sm relative">
-            <div className="flex items-center gap-2">
-            <div className="relative w-[560px] max-w-[52vw]">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input
-                type="text"
-                value={globalSearchQuery}
-                onChange={e => {
-                  setGlobalSearchQuery(e.target.value);
-                  setIsGlobalSearchOpen(true);
-                }}
-                onFocus={() => setIsGlobalSearchOpen(true)}
-                onBlur={() => window.setTimeout(() => setIsGlobalSearchOpen(false), 140)}
-                onKeyDown={e => {
-                  if (e.key === 'Escape') setIsGlobalSearchOpen(false);
-                  if (e.key === 'Enter' && globalSearchResults[0]) openGlobalSearchResult(globalSearchResults[0]);
-                }}
-                placeholder="Search orders, customers, items, users..."
-                className="w-full rounded-full border border-white/30 bg-white pl-11 pr-11 py-2.5 text-sm font-semibold text-slate-800 shadow-sm outline-none transition-all placeholder:text-slate-400 focus:border-white focus:ring-4 focus:ring-white/20"
-              />
-              {globalSearchQuery && (
-                <button
-                  onClick={() => {
-                    setGlobalSearchQuery('');
-                    setGlobalSearchResults([]);
-                  }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                  aria-label="Clear search"
-                >
-                  <X size={16} />
+      <main className="flex-1 min-w-0 lg:pt-14 flex flex-col min-h-screen transition-all duration-300">
+          {/* Desktop Top Nav */}
+          <div className="hidden lg:flex h-14 bg-[#032d60] fixed top-0 left-0 right-0 z-40 no-print shadow-sm items-center px-4">
+            <div className="flex items-center gap-1">
+              <div className="flex items-center gap-2.5 mr-4">
+                <div className="w-8 h-8 rounded-lg bg-[#0176d3] flex items-center justify-center text-white shadow-lg shadow-blue-950/30">
+                  <Package size={20} strokeWidth={2.4} />
+                </div>
+                <span className="font-black tracking-widest text-base text-white">EXCELL</span>
+              </div>
+
+              {canGoBack && (
+                <button onClick={() => window.history.back()}
+                  className="flex items-center justify-center w-8 h-8 rounded-lg text-blue-100/80 hover:bg-white/10 hover:text-white transition-all mr-1"
+                  aria-label="Go back" title="Back">
+                  <ChevronLeft size={18} />
                 </button>
               )}
 
-              {isGlobalSearchOpen && globalSearchQuery.trim().length >= 2 && (
-                <div className="erp-scale-in absolute left-0 right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-800 shadow-2xl shadow-blue-950/20">
-                  {globalSearchLoading && (
-                    <div className="flex items-center gap-2 px-4 py-3 text-sm font-bold text-slate-500">
-                      <Loader2 size={16} className="animate-spin text-blue-600" /> Searching...
-                    </div>
-                  )}
-                  {!globalSearchLoading && globalSearchResults.length === 0 && (
-                    <div className="px-4 py-3 text-sm font-bold text-slate-500">No results found</div>
-                  )}
-                  {!globalSearchLoading && (
-                    <div className="erp-search-results">
-                      {globalSearchResults.map(result => {
-                        const ResultIcon = result.icon;
-                        return (
-                          <button
-                            key={result.key}
-                            onMouseDown={e => e.preventDefault()}
-                            onClick={() => openGlobalSearchResult(result)}
-                            className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-blue-50"
-                          >
-                            <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
-                              <ResultIcon size={18} />
-                            </span>
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate text-sm font-black text-slate-900">{result.title}</span>
-                              <span className="block truncate text-xs font-semibold text-slate-500">{result.subtitle}</span>
-                            </span>
-                            <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500">
-                              {result.type}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
+              {navGroups.map(group => {
+                const isGroupOpen = openNavGroup === group.key;
+                const hasActiveInGroup = group.items.some(i => i.id === view);
+                return (
+                  <div key={group.key} className="relative" onClick={e => e.stopPropagation()}>
+                    <button
+                      onClick={() => setOpenNavGroup(isGroupOpen ? null : group.key)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${
+                        hasActiveInGroup ? 'bg-white/15 text-white' : 'text-blue-100/80 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      {group.label}
+                      {hasActiveInGroup && (
+                        <span className="text-blue-200/60 font-semibold">· {group.items.find(i => i.id === view)?.label}</span>
+                      )}
+                      <ChevronDown size={14} className={`transition-transform duration-200 ${isGroupOpen ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {isGroupOpen && (
+                      <div className="absolute top-full left-0 mt-1.5 w-52 rounded-xl bg-white shadow-2xl shadow-blue-950/20 border border-slate-200 py-1.5 erp-scale-in overflow-hidden">
+                        {group.items.map(item => {
+                          const isItemActive = view === item.id;
+                          return (
+                            <button
+                              key={item.id}
+                              onClick={() => { setOpenNavGroup(null); handleNavClick(item.id as AppView); }}
+                              className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm font-bold transition-colors ${
+                                isItemActive
+                                  ? 'bg-blue-50 text-blue-700'
+                                  : 'text-slate-700 hover:bg-slate-50'
+                              }`}
+                            >
+                              <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+                                isItemActive ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'
+                              }`}>
+                                <item.icon size={16} />
+                              </span>
+                              {item.label}
+                              {isItemActive && (
+                                <span className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-600" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-            </div>
-            <div className="absolute right-5 flex items-center gap-2">
+
+            <div className="ml-auto flex items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                <input
+                  type="text"
+                  value={globalSearchQuery}
+                  onChange={e => {
+                    setGlobalSearchQuery(e.target.value);
+                    setIsGlobalSearchOpen(true);
+                  }}
+                  onFocus={() => setIsGlobalSearchOpen(true)}
+                  onBlur={() => window.setTimeout(() => setIsGlobalSearchOpen(false), 140)}
+                  onKeyDown={e => {
+                    if (e.key === 'Escape') setIsGlobalSearchOpen(false);
+                    if (e.key === 'Enter' && globalSearchResults[0]) openGlobalSearchResult(globalSearchResults[0]);
+                  }}
+                  placeholder="Search orders, customers, items..."
+                  className="w-56 rounded-full border border-white/20 bg-white/10 pl-9 pr-3 py-1.5 text-xs font-semibold text-white placeholder:text-blue-200/60 outline-none transition-all focus:bg-white focus:text-slate-800 focus:border-white focus:w-72 focus:ring-2 focus:ring-white/20"
+                />
+                {globalSearchQuery && (
+                  <button
+                    onClick={() => {
+                      setGlobalSearchQuery('');
+                      setGlobalSearchResults([]);
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-blue-200 hover:text-white"
+                    aria-label="Clear search"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+
+                {isGlobalSearchOpen && globalSearchQuery.trim().length >= 2 && (
+                  <div className="erp-scale-in absolute right-0 top-[calc(100%+8px)] z-50 w-96 overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-800 shadow-2xl shadow-blue-950/20">
+                    {globalSearchLoading && (
+                      <div className="flex items-center gap-2 px-4 py-3 text-sm font-bold text-slate-500">
+                        <Loader2 size={16} className="animate-spin text-blue-600" /> Searching...
+                      </div>
+                    )}
+                    {!globalSearchLoading && globalSearchResults.length === 0 && (
+                      <div className="px-4 py-3 text-sm font-bold text-slate-500">No results found</div>
+                    )}
+                    {!globalSearchLoading && (
+                      <div className="erp-search-results">
+                        {globalSearchResults.map(result => {
+                          const ResultIcon = result.icon;
+                          return (
+                            <button
+                              key={result.key}
+                              onMouseDown={e => e.preventDefault()}
+                              onClick={() => openGlobalSearchResult(result)}
+                              className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-blue-50"
+                            >
+                              <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
+                                <ResultIcon size={18} />
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-sm font-black text-slate-900">{result.title}</span>
+                                <span className="block truncate text-xs font-semibold text-slate-500">{result.subtitle}</span>
+                              </span>
+                              <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                {result.type}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
               <button onClick={refreshNotificationHealth} className="rounded-full bg-white/15 p-2 hover:bg-white/25 transition-colors" aria-label="Refresh notification status">
                 <RefreshCw size={17} />
               </button>
+              {loggedInUser && normalizeDepartment(loggedInUser.department) === 'Office' && (
+                <button onClick={() => setShowMaintenance(true)} className="rounded-full bg-white/15 p-2 hover:bg-white/25 transition-colors" aria-label="Maintenance tools" title="Maintenance tools">
+                  <Wrench size={17} />
+                </button>
+              )}
               <button onClick={handleLogout} className="rounded-full bg-white/15 p-2 hover:bg-white/25 transition-colors" aria-label="Sign out" title="Sign out">
                 <LogOut size={17} />
               </button>
@@ -11294,7 +11496,7 @@ export default function App() {
                 <button
                   key={item.id}
                   onClick={() => handleNavClick(item.id as AppView)}
-                  className={`min-h-14 rounded-2xl flex flex-col items-center justify-center gap-1 text-[10px] font-normal transition-colors ${view === item.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-200/80' : 'text-slate-500 hover:bg-white/80 hover:text-slate-900'}`}
+                  className={`min-h-14 rounded-2xl flex flex-col items-center justify-center gap-1 text-[10px] font-semibold transition-colors ${view === item.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-200/80' : 'text-slate-500 hover:bg-white/80 hover:text-slate-900'}`}
                 >
                   <item.icon size={18} />
                   <span className="truncate max-w-full px-1">{item.label}</span>
@@ -11316,10 +11518,41 @@ export default function App() {
                   </div>
                   <button onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))} className="text-slate-400 hover:text-slate-600 text-lg leading-none">✕</button>
                 </div>
-                <div className="mt-1 text-xs font-semibold text-slate-600 line-clamp-1 ml-7">{t.body || '-'}</div>
+                 <div className="mt-1 text-xs font-semibold text-slate-600 line-clamp-1 ml-7">{t.body || '-'}</div>
               </div>
             ))}
           </div>
+
+          {/* Maintenance Tools Modal */}
+          {showMaintenance && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setShowMaintenance(false)}>
+              <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                    <Wrench size={18} className="text-orange-500" />
+                    Maintenance Tools
+                  </h3>
+                  <button onClick={() => setShowMaintenance(false)} className="text-gray-500 hover:text-gray-700 transition-colors">
+                    <X size={18} />
+                  </button>
+                </div>
+                <p className="text-xs text-gray-600 mb-4">One-time data migration tools. Safe to re-run.</p>
+                <div className="border-t border-gray-200 pt-4">
+                  <p className="text-xs font-black text-amber-700 mb-2 uppercase tracking-widest">⚠️ Migrate Old Data</p>
+                  <p className="text-xs text-gray-600 mb-3">
+                    Convert any old "Delivered" records to "Dispatched" in <code className="bg-gray-100 px-1 rounded">work_orders</code> and <code className="bg-gray-100 px-1 rounded">activity_events</code>.
+                  </p>
+                  <button
+                    onClick={handleMigrateDeliveredToDispatched}
+                    disabled={migrating}
+                    className="w-full py-2.5 bg-orange-600 text-white rounded-xl font-black hover:bg-orange-700 disabled:opacity-50 transition-all"
+                  >
+                    {migrating ? 'Migrating…' : 'Migrate Old "Delivered" → "Dispatched"'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
        </main>
     </div>
   );

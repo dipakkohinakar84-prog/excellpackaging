@@ -90,7 +90,7 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
           <div className="text-center mb-6">
             <Package size={40} className="text-blue-600 mx-auto mb-2" />
             <h1 className="text-xl font-black text-gray-800">Client Portal</h1>
-            <p className="text-sm text-gray-400 mt-1">Sign in to place your orders</p>
+            <p className="text-sm text-gray-500 mt-1">Sign in to place your orders</p>
           </div>
           {loginError && <div className="mb-4 px-3 py-2 rounded-lg bg-red-50 text-red-600 text-xs font-semibold">{loginError}</div>}
           <div className="space-y-3">
@@ -114,7 +114,7 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
           <Package size={20} className="text-blue-600" />
           <div>
             <h1 className="text-sm font-black text-gray-800">{customerName}</h1>
-            <p className="text-[10px] text-gray-400 font-semibold">Client Portal</p>
+            <p className="text-[10px] text-gray-500 font-semibold">Client Portal</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -137,14 +137,14 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
         <div className="lg:col-span-2 space-y-4">
           <h2 className="text-sm font-black text-gray-700 flex items-center gap-2"><Package size={16}/> Our Products</h2>
           {items.length === 0 ? (
-            <div className="text-center py-10 text-sm font-semibold text-gray-400">No products available for your company.</div>
+            <div className="text-center py-10 text-sm font-bold text-gray-500">No products available for your company.</div>
           ) : (
             <div className="grid sm:grid-cols-2 gap-2.5">
               {items.map(item => (
                 <div key={item.id} className="bg-white border border-gray-200 rounded-xl p-3.5 shadow-sm">
                   <h3 className="font-bold text-gray-800 text-sm mb-1">{item.name}</h3>
-                  <p className="text-[10px] text-gray-400 font-medium mb-2">Drawing: {item.drawing_no || 'N/A'}</p>
-                  {item.remarks && <p className="text-[10px] text-gray-500 mb-2 line-clamp-2">{item.remarks}</p>}
+                  <p className="text-[10px] text-gray-500 font-semibold mb-2">Drawing: {item.drawing_no || 'N/A'}</p>
+                  {item.remarks && <p className="text-[10px] text-gray-500 font-semibold mb-2 line-clamp-2">{item.remarks}</p>}
                   <button onClick={() => addToCart(item)} className="w-full py-2 rounded-lg bg-blue-50 text-blue-600 text-xs font-bold hover:bg-blue-100 transition-colors flex items-center justify-center gap-1.5">
                     <Plus size={14}/> Add to Order
                   </button>
@@ -157,7 +157,7 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
         <div className="space-y-4">
           <h2 className="text-sm font-black text-gray-700 flex items-center gap-2"><ShoppingCart size={16}/> Cart ({cart.length})</h2>
           {cart.length === 0 ? (
-            <div className="text-center py-8 text-sm font-semibold text-gray-400 bg-white rounded-xl border border-gray-200">Cart is empty</div>
+            <div className="text-center py-8 text-sm font-bold text-gray-500 bg-white rounded-xl border border-gray-200">Cart is empty</div>
           ) : (
             <div className="space-y-2">
               {cart.map(c => (
@@ -178,7 +178,7 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
 
           <h2 className="text-sm font-black text-gray-700 flex items-center gap-2 mt-4"><Clock size={16}/> Order History</h2>
           {orders.length === 0 ? (
-            <div className="text-center py-6 text-sm font-semibold text-gray-400 bg-white rounded-xl border border-gray-200">No orders yet</div>
+            <div className="text-center py-6 text-sm font-bold text-gray-500 bg-white rounded-xl border border-gray-200">No orders yet</div>
           ) : (
             <div className="space-y-2">
               {orders.map(o => (
@@ -187,7 +187,7 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
                     <span className="text-xs font-bold text-gray-800">Order #{o.id}</span>
                     <StatusBadge status={o.status} />
                   </div>
-                  <p className="text-[10px] text-gray-500">{o.items.length} item(s) · {new Date(o.created_at).toLocaleDateString('en-GB')}</p>
+                  <p className="text-[10px] text-gray-500 font-semibold">{o.items.length} item(s) · {new Date(o.created_at).toLocaleDateString('en-GB')}</p>
                   {o.status === 'Rejected' && o.rejection_reason && (
                     <p className="text-[10px] text-red-500 mt-1">Reason: {o.rejection_reason}</p>
                   )}

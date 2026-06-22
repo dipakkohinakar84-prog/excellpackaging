@@ -185,8 +185,8 @@ const Login: React.FC<{ onLogin: (user: User) => void; onNavigate?: (v: string) 
         <div className="mx-auto flex h-[72px] w-[72px] items-center justify-center rounded-[24px] bg-[#0176d3] text-white shadow-lg shadow-blue-200">
           <Package size={38} strokeWidth={2.2} />
         </div>
-        <h1 className="mt-8 text-center text-[28px] font-normal tracking-tight text-[#032d60]">Enter your Passkey</h1>
-        <div className="mt-8 flex items-center gap-3 text-sm font-medium text-slate-700">
+        <h1 className="mt-8 text-center text-[28px] font-bold tracking-tight text-[#032d60]">Enter your Passkey</h1>
+        <div className="mt-8 flex items-center gap-3 text-sm font-semibold text-slate-700">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#032d60] via-[#0176d3] to-emerald-400 text-white">
             <Package size={20} />
           </div>
@@ -195,14 +195,14 @@ const Login: React.FC<{ onLogin: (user: User) => void; onNavigate?: (v: string) 
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-5">
           {error && (
-            <div className="flex items-center gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-medium text-red-700 animate-in fade-in slide-in-from-top-1">
+            <div className="flex items-center gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-700 animate-in fade-in slide-in-from-top-1">
               <AlertCircle size={18} />
               {error}
             </div>
           )}
 
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Registered Mobile</label>
+            <label className="mb-1.5 block text-sm font-semibold text-slate-700">Registered Mobile</label>
             <div className="relative">
               <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
               <input
@@ -218,7 +218,7 @@ const Login: React.FC<{ onLogin: (user: User) => void; onNavigate?: (v: string) 
           </div>
 
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Passkey</label>
+            <label className="mb-1.5 block text-sm font-semibold text-slate-700">Passkey</label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
               <input
@@ -261,7 +261,7 @@ const Login: React.FC<{ onLogin: (user: User) => void; onNavigate?: (v: string) 
       </div>
 
       <div className="border-t border-slate-200 bg-slate-50 px-8 py-5 text-center sm:px-10">
-        <div className="text-xs font-medium text-slate-500">Authorized Excell Packaging users only</div>
+        <div className="text-xs font-semibold text-slate-500">Authorized Excell Packaging users only</div>
         {onNavigate && (
           <button onClick={() => onNavigate('client-login')} className="mt-2 text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors">
             Client Portal &rarr;
@@ -277,33 +277,33 @@ const Login: React.FC<{ onLogin: (user: User) => void; onNavigate?: (v: string) 
         <div className="mx-auto flex h-[72px] w-[72px] items-center justify-center rounded-[24px] bg-[#0176d3] text-white shadow-lg shadow-blue-200">
           <ShieldCheck size={38} strokeWidth={2.2} />
         </div>
-        <h1 className="mt-8 text-center text-[28px] font-normal tracking-tight text-[#032d60]">Check Your Email</h1>
-        <p className="mt-2 text-center text-sm font-medium text-slate-500">
+        <h1 className="mt-8 text-center text-[28px] font-bold tracking-tight text-[#032d60]">Check Your Email</h1>
+        <p className="mt-2 text-center text-sm font-semibold text-slate-500">
           A verification link was sent to <span className="font-bold text-slate-700">{email}</span>
         </p>
 
         <div className="mt-8 space-y-5">
           {verifyError && (
-            <div className="flex items-center gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-medium text-red-700 animate-in fade-in">
+            <div className="flex items-center gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-700 animate-in fade-in">
               <AlertCircle size={18} />
               {verifyError}
             </div>
           )}
 
           {polling && (
-            <div className="flex items-center justify-center gap-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-4 text-sm font-medium text-blue-700 animate-in fade-in">
+            <div className="flex items-center justify-center gap-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-4 text-sm font-semibold text-blue-700 animate-in fade-in">
               <Loader2 className="animate-spin" size={20} />
               Waiting for you to click the link in the email...
             </div>
           )}
 
           {!polling && verifyMessage && !verifyError && (
-            <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm font-medium text-blue-700 animate-in fade-in">{verifyMessage}</div>
+            <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm font-semibold text-blue-700 animate-in fade-in">{verifyMessage}</div>
           )}
 
           <button
             onClick={() => { setStep('credentials'); setPolling(false); setVerifyError(''); }}
-            className="flex items-center justify-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors mx-auto"
+            className="flex items-center justify-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors mx-auto"
           >
             <ChevronLeft size={16} /> Back to Login
           </button>
@@ -311,7 +311,7 @@ const Login: React.FC<{ onLogin: (user: User) => void; onNavigate?: (v: string) 
       </div>
 
       <div className="border-t border-slate-200 bg-slate-50 px-8 py-5 text-center sm:px-10">
-        <div className="text-xs font-medium text-slate-500">Authorized Excell Packaging users only</div>
+        <div className="text-xs font-semibold text-slate-500">Authorized Excell Packaging users only</div>
       </div>
     </>
   );
@@ -322,21 +322,21 @@ const Login: React.FC<{ onLogin: (user: User) => void; onNavigate?: (v: string) 
         <div className="mx-auto flex h-[72px] w-[72px] items-center justify-center rounded-[24px] bg-[#0176d3] text-white shadow-lg shadow-blue-200">
           <Lock size={38} strokeWidth={2.2} />
         </div>
-        <h1 className="mt-8 text-center text-[28px] font-normal tracking-tight text-[#032d60]">Forgot Passkey</h1>
-        <p className="mt-2 text-center text-sm font-medium text-slate-500">
+        <h1 className="mt-8 text-center text-[28px] font-bold tracking-tight text-[#032d60]">Forgot Passkey</h1>
+        <p className="mt-2 text-center text-sm font-semibold text-slate-500">
           Enter your registered email to reset your passkey.
         </p>
 
         <div className="mt-8 space-y-5">
           {verifyError && (
-            <div className="flex items-center gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-medium text-red-700 animate-in fade-in">
+            <div className="flex items-center gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-700 animate-in fade-in">
               <AlertCircle size={18} />
               {verifyError}
             </div>
           )}
 
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Registered Email</label>
+            <label className="mb-1.5 block text-sm font-semibold text-slate-700">Registered Email</label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
               <input
@@ -360,7 +360,7 @@ const Login: React.FC<{ onLogin: (user: User) => void; onNavigate?: (v: string) 
 
           <button
             onClick={() => { setStep('credentials'); setVerifyError(''); }}
-            className="flex items-center justify-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors mx-auto"
+            className="flex items-center justify-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors mx-auto"
           >
             <ChevronLeft size={16} /> Back to Login
           </button>
@@ -368,7 +368,7 @@ const Login: React.FC<{ onLogin: (user: User) => void; onNavigate?: (v: string) 
       </div>
 
       <div className="border-t border-slate-200 bg-slate-50 px-8 py-5 text-center sm:px-10">
-        <div className="text-xs font-medium text-slate-500">Authorized Excell Packaging users only</div>
+        <div className="text-xs font-semibold text-slate-500">Authorized Excell Packaging users only</div>
       </div>
     </>
   );
@@ -379,21 +379,21 @@ const Login: React.FC<{ onLogin: (user: User) => void; onNavigate?: (v: string) 
         <div className="mx-auto flex h-[72px] w-[72px] items-center justify-center rounded-[24px] bg-[#0176d3] text-white shadow-lg shadow-blue-200">
           <Lock size={38} strokeWidth={2.2} />
         </div>
-        <h1 className="mt-8 text-center text-[28px] font-normal tracking-tight text-[#032d60]">Reset Passkey</h1>
-        <p className="mt-2 text-center text-sm font-medium text-slate-500">
+        <h1 className="mt-8 text-center text-[28px] font-bold tracking-tight text-[#032d60]">Reset Passkey</h1>
+        <p className="mt-2 text-center text-sm font-semibold text-slate-500">
           Enter your new passkey.
         </p>
 
         <div className="mt-8 space-y-5">
           {verifyError && (
-            <div className="flex items-center gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-medium text-red-700 animate-in fade-in">
+            <div className="flex items-center gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-700 animate-in fade-in">
               <AlertCircle size={18} />
               {verifyError}
             </div>
           )}
 
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">New Passkey</label>
+            <label className="mb-1.5 block text-sm font-semibold text-slate-700">New Passkey</label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
               <input
@@ -408,7 +408,7 @@ const Login: React.FC<{ onLogin: (user: User) => void; onNavigate?: (v: string) 
           </div>
 
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Confirm Passkey</label>
+            <label className="mb-1.5 block text-sm font-semibold text-slate-700">Confirm Passkey</label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
               <input
@@ -432,7 +432,7 @@ const Login: React.FC<{ onLogin: (user: User) => void; onNavigate?: (v: string) 
 
           <button
             onClick={() => { setStep('forgot-email'); setVerifyError(''); }}
-            className="flex items-center justify-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors mx-auto"
+            className="flex items-center justify-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors mx-auto"
           >
             <ChevronLeft size={16} /> Back
           </button>
@@ -440,7 +440,7 @@ const Login: React.FC<{ onLogin: (user: User) => void; onNavigate?: (v: string) 
       </div>
 
       <div className="border-t border-slate-200 bg-slate-50 px-8 py-5 text-center sm:px-10">
-        <div className="text-xs font-medium text-slate-500">Authorized Excell Packaging users only</div>
+        <div className="text-xs font-semibold text-slate-500">Authorized Excell Packaging users only</div>
       </div>
     </>
   );
@@ -478,7 +478,7 @@ const Login: React.FC<{ onLogin: (user: User) => void; onNavigate?: (v: string) 
           <h2 className="mt-5 max-w-3xl text-[52px] font-black leading-[1.05] tracking-tight xl:text-[64px]">
             {step === 'credentials' ? 'Control every order from planning to dispatch.' : 'Secure two-factor authentication.'}
           </h2>
-          <p className="mt-7 max-w-3xl text-xl font-medium leading-8 text-blue-50/90">
+          <p className="mt-7 max-w-3xl text-xl font-semibold leading-8 text-blue-50/90">
             {step === 'credentials'
               ? 'Real-time production visibility, department queues, QC approvals, alerts, and dispatch tracking in one secure workspace.'
               : 'Every login is verified with a secure email link for enhanced security.'}

@@ -14,27 +14,18 @@ interface PageDef {
   label: string;
   status: string;
   icon: React.ReactNode;
-  accent: string;
-  dotColor: string;
 }
 
 const PAGES: PageDef[] = [
-  { key: 'wip', label: 'Work In Progress', status: 'Work Started', icon: <PlayCircle size={22} />, accent: 'text-yellow-400', dotColor: 'bg-yellow-400' },
-  { key: 'qc', label: 'Ready For QC', status: 'Ready for QC', icon: <ListChecks size={22} />, accent: 'text-green-400', dotColor: 'bg-green-400' },
-  { key: 'pending', label: 'Pending Orders', status: 'Not Started', icon: <Clock size={22} />, accent: 'text-slate-100', dotColor: 'bg-slate-100' },
+  { key: 'wip', label: 'Work In Progress', status: 'Work Started', icon: <PlayCircle size={22} /> },
+  { key: 'qc', label: 'Ready For QC', status: 'Ready for QC', icon: <ListChecks size={22} /> },
+  { key: 'pending', label: 'Pending Orders', status: 'Not Started', icon: <Clock size={22} /> },
 ];
 
 const DEPT_COLUMNS = [
-  { key: 'Wood_Work', label: 'Wood Work', color: 'text-amber-300', border: 'border-l-amber-500/60', dot: 'bg-amber-400/70' },
-  { key: 'Corrugation', label: 'Corrugation', color: 'text-blue-300', border: 'border-l-blue-500/60', dot: 'bg-blue-400/70' },
+  { key: 'Wood_Work', label: 'Wood Work' },
+  { key: 'Corrugation', label: 'Corrugation' },
 ];
-
-function formatDate(d: Date): string {
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const yyyy = d.getFullYear();
-  return `${dd}/${mm}/${yyyy}`;
-}
 
 function formatElapsed(dateStr: string | undefined): string {
   if (!dateStr) return '';
@@ -116,7 +107,7 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
   }, [playing, fetchData]);
 
   useEffect(() => {
-    const iv = setInterval(() => setTick(t => t + 1), 60000);
+    const iv = setInterval(() => setTick(t => t + 1), 1000);
     return () => clearInterval(iv);
   }, []);
 
@@ -170,25 +161,35 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
   const page = PAGES[currentPage];
 
   return (
-    <div className="fixed inset-0 z-50 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex flex-col">
+    <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'repeating-linear-gradient(0deg, rgba(255,255,255,0.015) 0, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 56px), repeating-linear-gradient(90deg, rgba(255,255,255,0.015) 0, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 56px), #15171a' }}>
       <style>{`
-        @keyframes marqueeScroll { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+        @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+        *{font-family:'IBM Plex Sans',sans-serif}
+        @keyframes marqueeScroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
         .marquee-track{display:flex;white-space:nowrap;animation:marqueeScroll var(--marquee-duration,30s) linear infinite}
-        .row-hover:hover{background:rgba(30,41,59,0.4)}
         .scrollbar-thin::-webkit-scrollbar{width:4px}
         .scrollbar-thin::-webkit-scrollbar-track{background:transparent}
-        .scrollbar-thin::-webkit-scrollbar-thumb{background:#334155;border-radius:4px}
+        .scrollbar-thin::-webkit-scrollbar-thumb{background:#34393e;border-radius:4px}
         @keyframes fadeSlideIn{0%{opacity:0;transform:translateY(12px)}100%{opacity:1;transform:translateY(0)}}
         @keyframes pulseSlow{0%,100%{opacity:1}50%{opacity:0.4}}
         @keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.25)}60%{transform:scale(0.9)}100%{transform:scale(1)}}
+        @keyframes dotPulse{0%{box-shadow:0 0 0 0 rgba(226,70,47,.55)}70%{box-shadow:0 0 0 10px rgba(226,70,47,0)}100%{box-shadow:0 0 0 0 rgba(226,70,47,0)}}
+        @keyframes fillbar{from{width:0%}to{width:100%}}
+        @keyframes cardSlideUp{0%{opacity:0;transform:translateY(16px) scale(0.97)}100%{opacity:1;transform:translateY(0) scale(1)}}
         .animate-fade-in{animation:fadeSlideIn .35s ease-out}
         .animate-pulse-slow{animation:pulseSlow 3s ease-in-out infinite}
         .animate-pop{animation:pop .35s ease-out}
+        .animate-dot-pulse{animation:dotPulse 1.6s infinite}
+        .animate-card-in{animation:cardSlideUp .4s ease-out both}
+        .pager-dot{position:relative;height:6px;border-radius:3px;background:#23262b;border:1px solid #34393e;overflow:hidden;flex:1;max-width:80px}
+        .pager-fill{position:absolute;left:0;top:0;bottom:0;border-radius:3px}
+        .pager-dot.active .pager-fill{animation:fillbar 8s linear forwards}
+        .stage-badge{font-family:'IBM Plex Mono',monospace;font-weight:600;padding:6px 18px;border-radius:6px}
       `}</style>
 
       {/* Notice Marquee */}
       {activeNotices.length > 0 && (
-        <div className="shrink-0 mx-4 mt-3 mb-1 overflow-hidden rounded-lg bg-gradient-to-r from-amber-500/15 via-yellow-500/15 to-amber-500/15 border border-amber-500/20 h-8 flex items-center" style={{ maskImage: 'linear-gradient(to right, transparent, black 3%, black 97%, transparent)', WebkitMaskImage: 'linear-gradient(to right, transparent, black 3%, black 97%, transparent)' }}>
+        <div className="shrink-0 mx-4 mt-3 mb-1 overflow-hidden rounded-xl bg-gradient-to-r from-amber-500/20 via-yellow-500/25 to-amber-500/20 border border-amber-500/30 h-9 flex items-center shadow-[0_0_15px_rgba(234,179,8,0.1)]" style={{ maskImage: 'linear-gradient(to right, transparent, black 3%, black 97%, transparent)', WebkitMaskImage: 'linear-gradient(to right, transparent, black 3%, black 97%, transparent)' }}>
           <div className="marquee-track flex items-center h-full" style={{ '--marquee-duration': `${Math.max(15, activeNotices.length * 8)}s` } as React.CSSProperties}>
             {[...Array(4)].flatMap(() => activeNotices).map((notice, i) => (
               <span key={`${notice.id}-${i}`} className="inline-flex items-center gap-2 mx-6 text-amber-300/80 font-bold text-sm tracking-wide">
@@ -200,102 +201,150 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
         </div>
       )}
 
-      {/* Top Controls */}
+      {/* Clock State */}
+      {(() => {
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString('en-GB');
+        const dateStr = new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(now).toUpperCase();
+        return (
       <div className="shrink-0 px-4 pt-3 pb-1 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            {onBack && (
+              <button onClick={onBack} className="px-2 py-1 rounded-lg bg-white/5 text-gray-500 hover:bg-white/10 transition-all" style={{fontFamily:'IBM Plex Mono',monospace:true}}>
+                <ArrowLeft size={14} />
+              </button>
+            )}
+            <span className="text-sm" style={{fontFamily:'IBM Plex Mono,monospace',color:'#9aa0a6'}}>
+              ERP · <b style={{color:'#f3f4f6',fontWeight:600}}>{(liveScreenUser || loggedInUser)?.username || 'Live Screen'}</b>
+            </span>
+          </div>
+          <div className="flex items-center gap-2" style={{fontFamily:'IBM Plex Mono,monospace',fontSize:'12px',fontWeight:600,color:'#e2462f',letterSpacing:'0.14em',textTransform:'uppercase'}}>
+            <div style={{width:'10px',height:'10px',borderRadius:'50%',background:'#e2462f',animation:'dotPulse 1.6s infinite'}} />
+            Live
+          </div>
+        </div>
         <div className="flex items-center gap-2">
-          {onBack && (
-            <button onClick={onBack} className="px-2 py-1.5 rounded-lg bg-white/5 text-gray-500 hover:bg-white/10 text-xs font-bold">
-              <ArrowLeft size={15} />
-            </button>
-          )}
-          <span className="text-[11px] font-semibold text-gray-600 tracking-wider">
-            {liveScreenUser ? `Live: ${liveScreenUser.username}` : loggedInUser ? `ERP: ${loggedInUser.username}` : 'Live Screen'}
-          </span>
           {loggedInUser && (
-            <button onClick={() => setShowNoticeManager(true)} className="px-2 py-1.5 rounded-lg bg-amber-500/10 text-amber-400/70 hover:bg-amber-500/20 text-[11px] font-bold flex items-center gap-1">
+            <button onClick={() => setShowNoticeManager(true)} style={{padding:'4px 10px',borderRadius:'6px',fontSize:'12px',fontWeight:700,background:'rgba(255,176,32,0.1)',color:'#ffb020',border:'1px solid rgba(255,176,32,0.3)'}} className="flex items-center gap-1.5 hover:bg-amber-500/20 transition-all">
               <Megaphone size={12} /> Notice
             </button>
           )}
-        </div>
-        <div className="flex items-center gap-1">
-          <button onClick={() => setPlaying(!playing)} className="p-2 rounded-lg bg-white/5 text-gray-400 hover:bg-white/10 transition-all">
-            {playing ? <Pause size={14} /> : <Play size={14} />}
+          <button onClick={() => setPlaying(!playing)} className="p-1.5 rounded-lg" style={{background:'rgba(255,255,255,0.04)',color:'#5e6469'}}>
+            {playing ? <Pause size={13} /> : <Play size={13} />}
           </button>
-          <button onClick={toggleFullscreen} className="p-2 rounded-lg bg-white/5 text-gray-400 hover:bg-white/10 transition-all">
-            {fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+          <button onClick={toggleFullscreen} className="p-1.5 rounded-lg" style={{background:'rgba(255,255,255,0.04)',color:'#5e6469'}}>
+            {fullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
           </button>
-          <button onClick={() => { fetchData(); setTick(t => t + 1); }} className="p-2 rounded-lg bg-white/5 text-gray-400 hover:bg-white/10 transition-all">
-            <RefreshCw size={14} />
+          <button onClick={() => { fetchData(); setTick(t => t + 1); }} className="p-1.5 rounded-lg" style={{background:'rgba(255,255,255,0.04)',color:'#5e6469'}}>
+            <RefreshCw size={13} />
           </button>
+          <div style={{fontFamily:'IBM Plex Mono,monospace',fontSize:'12px',color:'#5e6469',textAlign:'right',marginLeft:'8px'}}>
+            <div style={{fontFamily:'inherit'}}>{dateStr}</div>
+            <b style={{fontFamily:'inherit',display:'block',color:'#f3f4f6',fontSize:'22px',fontWeight:600,letterSpacing:'0.03em'}}>{timeStr}</b>
+          </div>
         </div>
       </div>
+        );
+      })()}
 
       {/* Page Content */}
-      <div className="flex-1 flex flex-col min-h-0 px-4 pt-1 pb-1">
-        {/* Page Header */}
-        <div className="shrink-0 flex items-center justify-center pb-2 border-b border-slate-800/60 mb-2 relative">
-          <div className="flex items-center gap-2.5">
-            <span className={page.accent}>{page.icon}</span>
-            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">{page.label}</h1>
-            <span className={`px-2.5 py-1 rounded-full text-sm font-bold ${page.accent} bg-white/5 ${badgePop ? 'animate-pop' : ''}`}>
-              {pageOrders.length}
-            </span>
+      <div className="flex-1 flex flex-col min-h-0 px-4 pt-1 pb-1" style={{fontFamily:'IBM Plex Sans,sans-serif'}}>
+        {/* Page Header - Stage Panel */}
+        <div className="shrink-0 flex items-center gap-3 mb-3" style={{background:'#23262b',border:'1px solid #34393e',borderRadius:'8px',padding:'8px 16px',overflow:'hidden',position:'relative',justifyContent:'center'}}>
+          <div style={{position:'absolute',left:0,top:0,bottom:0,width:'10px',background:page.key === 'wip' ? 'repeating-linear-gradient(135deg, #ffb020 0 8px, #15171a 8px 16px)' : page.key === 'qc' ? 'repeating-linear-gradient(135deg, #49b16b 0 8px, #15171a 8px 16px)' : 'repeating-linear-gradient(135deg, #5e6469 0 8px, #15171a 8px 16px)'}} />
+          <div style={{display:'flex',alignItems:'center',flexShrink:0}}>
+            <span style={{color:page.key === 'wip' ? '#ffb020' : page.key === 'qc' ? '#49b16b' : '#9aa0a6',fontSize:'18px'}}>{page.icon}</span>
           </div>
-          <div className="absolute right-0 text-sm font-bold text-gray-500 tabular-nums">{formatDate(new Date())}</div>
+          <h1 style={{fontFamily:'Oswald,sans-serif',fontWeight:600,textTransform:'uppercase',fontSize:'26px',letterSpacing:'0.02em',color:'#f3f4f6'}}>{page.label}</h1>
+          <span className={`stage-badge ${badgePop ? 'animate-pop' : ''}`} style={{
+            fontFamily:'IBM Plex Mono,monospace',
+            fontWeight:600,
+            fontSize:'14px',
+            background: page.key === 'wip' ? '#ffb020' : page.key === 'qc' ? '#49b16b' : '#5e6469',
+            color:'#15171a',
+            padding:'4px 12px',
+            borderRadius:'6px',
+            flexShrink:0
+          }}>
+            {pageOrders.length} {pageOrders.length === 1 ? 'ORDER' : 'ORDERS'}
+          </span>
         </div>
 
         {/* Order Columns */}
         <div key={currentPage} className="flex-1 flex flex-col min-h-0 animate-fade-in">
         {pageOrders.length === 0 ? (
           <div className="flex-1 flex items-center justify-center">
-            <div className="text-gray-600 text-lg font-semibold flex flex-col items-center gap-2">
-              <span className={page.accent}>{page.icon}</span>
-              <span>No {page.label.toLowerCase()}.</span>
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'16px',color:'#5e6469'}}>
+              <div style={{width:'70px',height:'70px',border:'3px dashed #34393e',borderRadius:'12px',display:'flex',alignItems:'center',justifyContent:'center',color:'#5e6469'}}>
+                <PlayCircle size={30} />
+              </div>
+              <div style={{fontFamily:'Oswald,sans-serif',fontSize:'24px',fontWeight:600,letterSpacing:'0.1em',textTransform:'uppercase',color:'#9aa0a6'}}>Station Idle</div>
+              <div style={{fontSize:'15px',opacity:0.7}}>No active jobs queued</div>
             </div>
           </div>
         ) : (
           (() => {
-            const rowColor = page.key === 'wip' ? 'text-yellow-300' : page.key === 'qc' ? 'text-green-300' : 'text-white';
-            const rowColorMuted = page.key === 'wip' ? 'text-yellow-300/70' : page.key === 'qc' ? 'text-green-300/70' : 'text-white/70';
-            const rowDot = page.key === 'wip' ? 'bg-yellow-400/70' : page.key === 'qc' ? 'bg-green-400/70' : 'bg-white/70';
-            const rowBorder = page.key === 'wip' ? 'border-l-yellow-500/60' : page.key === 'qc' ? 'border-l-green-500/60' : 'border-l-white/60';
+            const accentColor = page.key === 'wip' ? '#ffb020' : page.key === 'qc' ? '#49b16b' : '#9aa0a6';
+            const textColor = page.key === 'wip' ? '#ffb020' : page.key === 'qc' ? '#49b16b' : '#f3f4f6';
+            const getUrgency = (wo: WorkOrder) => {
+              if (!wo.etd) return null;
+              const etd = new Date(wo.etd + 'T12:00:00');
+              if (Number.isNaN(etd.getTime())) return null;
+              const diff = etd.getTime() - Date.now();
+              const days = Math.ceil(diff / 86400000);
+              if (days < 0) return { label: `Overdue ${Math.abs(days)}d`, state: 'overdue', color: '#e2462f', border: '8px solid #e2462f' };
+              if (days <= 3) return { label: `${days}d left`, state: 'urgent', color: '#ffb020', border: '8px solid #ffb020' };
+              return { label: `${days}d left`, state: 'ok', color: '#49b16b', border: '8px solid #49b16b' };
+            };
             return (
           <div className="flex-1 grid grid-cols-2 gap-3 min-h-0 overflow-hidden">
             {DEPT_COLUMNS.map(col => {
               const colOrders = columnOrders[col.key];
               return (
-                <div key={col.key} className="flex flex-col min-h-0 rounded-xl border border-slate-800/30 bg-[#0b1220]/60 overflow-hidden">
+                <div key={col.key} className="flex flex-col min-h-0 overflow-hidden" style={{background:'#1d2024',border:'1px solid #34393e',borderRadius:'8px'}}>
                   {/* Column Header */}
-                  <div className="shrink-0 flex items-center justify-center gap-2 px-4 py-3 border-b border-slate-800/40">
-                    <span className={`w-3 h-3 rounded-full ${rowDot}`} />
-                    <span className={`text-2xl font-black ${rowColor}`}>{col.label}</span>
-                    <span className="px-2 py-0.5 rounded text-sm font-bold bg-white/5 text-gray-400">{colOrders.length}</span>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'12px',padding:'14px 16px',borderBottom:'1px solid #34393e',background:'#23262b'}}>
+                    <div style={{width:'12px',height:'12px',borderRadius:'50%',background:accentColor,animation:'pulseSlow 3s ease-in-out infinite'}} />
+                    <span style={{fontFamily:'Oswald,sans-serif',fontWeight:600,textTransform:'uppercase',fontSize:'20px',letterSpacing:'0.04em',color:'#f3f4f6'}}>{col.label}</span>
+                    <span style={{fontFamily:'IBM Plex Mono,monospace',fontWeight:600,fontSize:'13px',padding:'3px 12px',borderRadius:'5px',background:accentColor,color:'#15171a'}}>{colOrders.length}</span>
                   </div>
                   {/* Column Body */}
-                  <div className="flex-1 overflow-y-auto scrollbar-thin">
+                  <div className="flex-1 overflow-y-auto scrollbar-thin" style={{padding:'4px'}}>
                     {colOrders.length === 0 ? (
-                      <div className="flex items-center justify-center h-full py-12 text-gray-600 text-sm font-semibold">No orders</div>
+                      <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'40px 0',gap:'10px',color:'#5e6469'}}>
+                        <PlayCircle size={24} style={{opacity:0.5}} />
+                        <span style={{fontSize:'14px',fontWeight:600}}>No orders in {col.label}</span>
+                      </div>
                     ) : (
-                      colOrders.map((wo, idx) => (
-                        <div key={wo.id} style={{ animation: `fadeSlideIn 0.35s ease-out ${idx * 60}ms both` }} className={`px-4 py-4 row-hover transition-colors border-t border-slate-800/30 first:border-t-0 border-l-[3px] ${rowBorder}`}>
-                          <div className="flex items-center gap-2">
-                            <span className={`w-4 h-4 rounded-full shrink-0 ${rowDot}`} />
-                            <span className="text-xl font-bold text-gray-500 shrink-0 w-16 tabular-nums">#{wo.id}</span>
-                            <div className="flex-1 min-w-0">
-                              <div className={`text-2xl font-bold truncate leading-tight ${rowColor}`}>{wo.customer}</div>
+                      colOrders.map((wo, idx) => {
+                        const urgency = getUrgency(wo);
+                        return (
+                        <div key={wo.id} className="animate-card-in" style={{margin:'4px',animationDelay:`${idx * 50}ms`}}>
+                          <div style={{background:'#1d2024',border:`1px solid #34393e`,borderLeft:`8px solid ${accentColor}`,borderRadius:'8px',padding:'16px 20px',transition:'all 0.2s'}}
+                            onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.3)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; }}
+                          >
+                            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'8px',marginBottom:'4px'}}>
+                              <span style={{fontFamily:'IBM Plex Mono,monospace',fontWeight:700,fontSize:'20px',color:'#f3f4f6'}}>#{wo.id}</span>
+                              <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+                                {urgency && (
+                                  <span style={{fontFamily:'IBM Plex Mono,monospace',fontSize:'12px',fontWeight:700,letterSpacing:'0.04em',textTransform:'uppercase',padding:'3px 10px',borderRadius:'5px',background: urgency.state === 'overdue' ? 'rgba(226,70,47,0.16)' : urgency.state === 'urgent' ? 'rgba(255,176,32,0.14)' : 'rgba(73,177,107,0.14)',color:accentColor,border:`1px solid ${urgency.state === 'overdue' ? 'rgba(226,70,47,0.45)' : urgency.state === 'urgent' ? 'rgba(255,176,32,0.4)' : 'rgba(73,177,107,0.4)'}`}}>{urgency.label}</span>
+                                )}
+                              </div>
                             </div>
-                            <div className="flex-1 min-w-0">
-                               <div className={`text-xl ${rowColor} font-bold truncate leading-tight`}>{wo.job_details}</div>
+                            <div style={{display:'grid',gridTemplateColumns:'1fr auto auto auto',gap:'20px',alignItems:'center',marginBottom:'6px'}}>
+                              <span style={{fontWeight:600,fontSize:'24px',color:textColor,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{wo.customer}</span>
+                              <span style={{fontWeight:600,fontSize:'24px',color:textColor,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{wo.job_details}</span>
+                              <span style={{fontWeight:600,fontSize:'24px',color:textColor}}>{wo.qty}</span>
+                              <span style={{fontFamily:'IBM Plex Mono,monospace',fontSize:'16px',fontWeight:600,color:'#9aa0a6',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:'4px'}}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>{wo.etd || 'TBD'}
+                              </span>
                             </div>
-                            <div className={`text-2xl font-semibold tabular-nums shrink-0 ${rowColor}`}>{wo.qty}</div>
-                            <div className={`text-lg font-bold font-mono tabular-nums shrink-0 w-28 text-right ${rowColor}`}>{wo.etd}</div>
-                          </div>
-                          <div className="flex items-center justify-end gap-1.5 mt-1 pr-1">
-                            <Clock size={16} className="text-gray-600 animate-pulse-slow" />
-                            <span className="text-base font-bold tabular-nums text-gray-500 animate-pulse-slow">{formatElapsed((wo as any).updated_at)}</span>
                           </div>
                         </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
                 </div>
@@ -307,16 +356,12 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
         )}
         </div>
 
-        {/* Page Dots */}
-        <div className="shrink-0 flex items-center justify-center gap-3 pt-3 pb-2">
+        {/* Pager Dots */}
+        <div className="shrink-0 flex items-center justify-center gap-3 pt-2 pb-2">
           {PAGES.map((p, i) => (
-            <button
-              key={p.key}
-              onClick={() => setCurrentPage(i)}
-              className={`w-3 h-3 rounded-full transition-all duration-300 ${
-                i === currentPage ? `${p.dotColor} scale-125` : 'bg-slate-700 hover:bg-slate-600'
-              }`}
-            />
+            <div key={p.key} className={`pager-dot ${i < currentPage ? 'done' : i === currentPage ? 'active' : ''}`} style={{cursor:'pointer'}} onClick={() => setCurrentPage(i)}>
+              <div className="pager-fill" style={{background: i < currentPage ? '#5e6469' : p.key === 'wip' ? '#ffb020' : p.key === 'qc' ? '#49b16b' : '#9aa0a6', width: i < currentPage ? '100%' : undefined}} />
+            </div>
           ))}
         </div>
       </div>
