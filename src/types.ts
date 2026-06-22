@@ -26,7 +26,8 @@ export type AppView =
   | 'client-login'
   | 'client-dashboard'
   | 'client-orders'
-  | 'verify';
+  | 'verify'
+  | 'vehicles';
 
 export interface User {
   id: number;
@@ -53,6 +54,7 @@ export interface User {
   can_access_components?: boolean;
   can_access_custom_bom?: boolean;
   can_access_production_entry?: boolean;
+  can_access_vehicles?: boolean;
 }
 
 export const FEATURE_FLAG_MAP: Record<string, keyof User> = {
@@ -77,6 +79,7 @@ export const FEATURE_FLAG_MAP: Record<string, keyof User> = {
   'live-screen': 'can_access_live_screen',
   'live-screen-login': 'can_access_live_screen',
   'client-orders': 'can_access_client_orders',
+  vehicles: 'can_access_vehicles',
 };
 
 export const FEATURE_FLAG_GROUPS = [
@@ -100,6 +103,7 @@ export const FEATURE_FLAG_GROUPS = [
       { key: 'can_access_customers', label: 'Clients' },
       { key: 'can_access_items', label: 'Items' },
       { key: 'can_access_components', label: 'Components' },
+      { key: 'can_access_vehicles', label: 'Vehicles' },
     ],
   },
   {
@@ -139,6 +143,13 @@ export interface Customer {
   type: string;
   reference: string;
   remarks: string;
+}
+
+export interface Vehicle {
+  id: number;
+  vehicle_no: string;
+  driver_name?: string;
+  is_active?: boolean;
 }
 
 export type BomChildType = 'component' | 'item';

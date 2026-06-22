@@ -61,10 +61,9 @@ import {
   ListTodo,
   Monitor,
   ShoppingCart,
-  CalendarDays,
-  Wrench
+  CalendarDays
 } from 'lucide-react';
-import { AppView, User, Customer, Item, WorkOrder, Department, WOStatus, ChildItem, DepartmentStatus, Metric, FEATURE_FLAG_GROUPS } from './types';
+import { AppView, User, Customer, Item, WorkOrder, Department, WOStatus, ChildItem, DepartmentStatus, Metric, Vehicle, FEATURE_FLAG_GROUPS } from './types';
 import { supabase, supabaseAnonKey, pb, loginWithMobilePassword, getCurrentAuthUser, logoutAuth, mapAuthRecordToUser } from './supabase';
 import Login from './LoginComponent';
 import { canAccessView, filterWorkOrdersByDepartment, getQCApprovalProgress, sendNotification, normalizeDepartment } from './utils';
@@ -787,7 +786,7 @@ const WorkOrderCardActions: React.FC<{
                     : `${getRadioColor(status)} border border-transparent hover:border-current`
                 } disabled:opacity-60`}
               >
-                <span className={`text-[10px] ${isCurrent ? '' : 'opacity-40'}`}>{isCurrent ? '●' : '○'}</span>
+                <span className={`text-[10px] ${isCurrent ? '' : 'opacity-40'}`}>{isCurrent ? (status === 'Dispatched' ? '✓' : '●') : '○'}</span>
                 {STATUS_LABELS[status] || status}
               </button>
             );
@@ -1384,9 +1383,8 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
     const openOrders = analyticsOrders.filter(wo => wo.status !== 'Dispatched').length;
     const dispatchedOrders = analyticsOrders.filter(wo => wo.status === 'Dispatched').length;
     const overdue = analyticsOrders.filter(wo => {
-      if (!wo.etd) return false;
-      const etd = new Date(`${wo.etd}T12:00:00`);
-      return !Number.isNaN(etd.getTime()) && etd < new Date() && wo.status !== 'Dispatched';
+      if (!wo.etd || wo.status === 'Dispatched') return false;
+      return wo.etd < new Date().toISOString().slice(0, 10);
     }).length;
     return { totalOrders, openOrders, dispatchedOrders, overdue };
   }, [analyticsOrders]);
@@ -1819,7 +1817,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
   const [data, setData] = useState<(WorkOrder & { itemInfo?: Item })[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All');
+  const [statusFilter, setStatusFilter] = useState<'Ready for despatch' | 'Dispatched'>('Ready for despatch');
   const [dispatchDateFilter, setDispatchDateFilter] = useState('all');
   const [dispatchCustomFrom, setDispatchCustomFrom] = useState('');
   const [dispatchCustomTo, setDispatchCustomTo] = useState('');
@@ -1827,7 +1825,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
   const [dispatchLogsMap, setDispatchLogsMap] = useState<Map<number, any[]>>(new Map());
   const [page, setPage] = useState(1);
   const deferredSearchQuery = useDeferredValue(searchQuery);
-  const [vehicleOptions, setVehicleOptions] = useState<string[]>([]);
+  const [vehicleOptions, setVehicleOptions] = useState<Vehicle[]>([]);
   const [isDispatchMetaModalOpen, setIsDispatchMetaModalOpen] = useState(false);
   const todayDateStr = new Date().toISOString().slice(0, 10);
   const [dispatchMeta, setDispatchMeta] = useState({ invoiceNo: '', vehicleNo: '', dispatchDate: todayDateStr });
@@ -1841,10 +1839,10 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [woResult, itemRes, usersRes, logsRes] = await Promise.all([
+      const [woResult, itemRes, vehiclesRes, logsRes] = await Promise.all([
         supabase.from('work_orders').select('*').order('id', { ascending: false }),
         loadCachedCollection<Item>('items'),
-        loadCachedCollection<User>('users', 'id', 200),
+        loadCachedCollection<Vehicle>('vehicles', 'vehicle_no'),
         supabase.from('dispatch_logs').select('*').order('dispatch_date', { ascending: true }),
       ]);
       const { data: woRes, error: woErr } = woResult;
@@ -1878,10 +1876,8 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
 
         setData(dispatchOrders);
 
-        const dispatchVehicles = (usersRes || [])
-          .filter((u: any) => normalizeDepartment(u.department) === 'Dispatch' && (u.vehicle_number || '').trim() !== '')
-          .map((u: any) => String(u.vehicle_number).trim());
-        setVehicleOptions(Array.from(new Set(dispatchVehicles)));
+        const activeVehicles = (vehiclesRes || []).filter((v: Vehicle) => v.is_active !== false);
+        setVehicleOptions(activeVehicles);
       }
     } catch (e) { 
       console.error('Error fetching dispatch orders:', e);
@@ -2047,7 +2043,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
       return;
     }
 
-    setDispatchMeta({ invoiceNo: '', vehicleNo: vehicleOptions[0] || '', dispatchDate: todayDateStr });
+    setDispatchMeta({ invoiceNo: '', vehicleNo: vehicleOptions[0]?.vehicle_no || '', dispatchDate: todayDateStr });
     setIsDispatchMetaModalOpen(true);
   };
 
@@ -2064,7 +2060,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
   }, [data]);
 
   const filteredOrders = useMemo(() => {
-    const statusFiltered = statusFilter === 'All' ? data.filter(wo => wo.status !== 'Dispatched') : data.filter(wo => wo.status === statusFilter);
+    const statusFiltered = statusFilter === 'Ready for despatch' ? data.filter(wo => wo.status === 'Ready for despatch' || (wo.status === 'Dispatched' && (wo.qty - (wo.qty_dispatched || 0)) > 0)) : data.filter(wo => wo.status === 'Dispatched');
     const companyFiltered = dispatchCompanyFilter === 'All' ? statusFiltered : statusFiltered.filter(wo => wo.customer === dispatchCompanyFilter);
     const dateFiltered = companyFiltered.filter(wo => {
       const logs = dispatchLogsMap.get(wo.id) || [];
@@ -2081,11 +2077,6 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
       wo.job_details.toLowerCase().includes(lowerQuery)
     );
   }, [data, deferredSearchQuery, statusFilter, dispatchDateFilter, dispatchCustomFrom, dispatchCustomTo, dispatchCompanyFilter, dispatchLogsMap]);
-
-  const statusOptions = useMemo(() => {
-    const uniqueStatuses = Array.from(new Set(data.map(wo => wo.status))).filter(s => s !== 'QC Approved');
-    return sortStatuses(uniqueStatuses);
-  }, [data]);
 
   useEffect(() => {
     setPage(1);
@@ -2115,10 +2106,8 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
             className="w-full pl-9 pr-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
-        <button onClick={() => setStatusFilter('All')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === 'All' ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>All</button>
-        {statusOptions.map(s => (
-          <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === s ? (statusTabColors[s] || 'bg-slate-900 text-white') : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS[s] || s}</button>
-        ))}
+        <button onClick={() => setStatusFilter('Ready for despatch')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === 'Ready for despatch' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>Ready For Dispatch</button>
+        <button onClick={() => setStatusFilter('Dispatched')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === 'Dispatched' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>Dispatched</button>
         <select value={dispatchCompanyFilter} onChange={e => setDispatchCompanyFilter(e.target.value)} className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
           <option value="All">All Companies</option>
           {dispatchCompanyOptions.map(c => <option key={c} value={c}>{c}</option>)}
@@ -2177,7 +2166,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                 className="w-full px-4 py-3 bg-gray-50 border rounded-xl"
               >
                 <option value="">Select Vehicle</option>
-                {vehicleOptions.map(v => <option key={v} value={v}>{v}</option>)}
+                {vehicleOptions.map(v => <option key={v.id} value={v.vehicle_no}>{v.vehicle_no}{v.driver_name ? ` — ${v.driver_name}` : ''}</option>)}
               </select>
               <input
                 value={dispatchMeta.vehicleNo}
@@ -2239,12 +2228,17 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                 <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Order #</th>
                 <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Customer</th>
                 <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Job Details</th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Drawing No</th>
                 <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Total Qty</th>
                 <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Dispatched</th>
                 <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Remaining</th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Invoice</th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Vehicle</th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Dispatch Date</th>
+                {statusFilter === 'Dispatched' && (
+                  <>
+                    <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Invoice</th>
+                    <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Vehicle</th>
+                    <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Dispatch Date</th>
+                  </>
+                )}
                 {dispatchMode && (
                   <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Dispatch Qty</th>
                 )}
@@ -2284,6 +2278,9 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                       <div className="text-gray-700">{wo.job_details}</div>
                     </td>
                     <td className="px-6 py-4">
+                      <span className="font-mono text-xs font-bold text-gray-500 break-all max-w-[200px] inline-block">{wo.drawing || wo.itemInfo?.drawing_no || '-'}</span>
+                    </td>
+                    <td className="px-6 py-4">
                       <div className="font-bold text-gray-800">{wo.qty}</div>
                     </td>
                     <td className="px-6 py-4">
@@ -2294,9 +2291,11 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                         {remaining}
                       </div>
                     </td>
-                    <td className="px-6 py-4"><span className="text-xs font-bold text-gray-600">{wo.last_invoice_no || '-'}</span></td>
-                    <td className="px-6 py-4"><span className="text-xs font-bold text-gray-600">{wo.last_vehicle_no || '-'}</span></td>
-                    <td className="px-6 py-4">
+                    {statusFilter === 'Dispatched' && (
+                      <>
+                        <td className="px-6 py-4"><span className="text-xs font-bold text-gray-600">{wo.last_invoice_no || '-'}</span></td>
+                        <td className="px-6 py-4"><span className="text-xs font-bold text-gray-600">{wo.last_vehicle_no || '-'}</span></td>
+                        <td className="px-6 py-4">
                       {editingDispatchDate === wo.id ? (
                         <div className="flex flex-col gap-1">
                           {(dispatchLogsMap.get(wo.id) || []).map((log: any) => (
@@ -2333,6 +2332,8 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                         </div>
                       )}
                     </td>
+                      </>
+                    )}
                     {dispatchMode && (
                       <td className="px-6 py-4">
                         {isSelected ? (
@@ -3002,58 +3003,58 @@ const DepartmentList: React.FC<{ onError: () => void }> = ({ onError }) => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {data.map(d => (
-          <Card key={d.id} className="hover:border-purple-200 transition-all border-l-4 border-l-purple-500">
-            <div className="flex justify-between items-start mb-2">
-              <h3 className="text-lg font-black text-gray-800">{d.name}</h3>
-              <div className="flex gap-1">
-                <button onClick={() => { setEditingDepartment(d); setFormData({ name: d.name, incharge: d.incharge || '', supervisor: d.supervisor || '', info: d.info || '', metrics: d.metrics || [] }); setIsModalOpen(true); }} className="text-blue-500 hover:text-blue-700 transition-colors"><Edit size={16} /></button>
-                <button onClick={async () => {
-                  const deptName = d.name;
-                  const lower = deptName.trim().toLowerCase();
-                  if (lower === 'dispatch' || lower === 'quality control' || lower === 'quality_control') {
-                    alert(`"${deptName}" is a system-required department and cannot be deleted.`);
-                    return;
-                  }
-                  const [{ data: users }, { data: allItems }, { data: allChildItems }] = await Promise.all([
-                    supabase.from('erp_users').select('*').eq('department', deptName),
-                    supabase.from('items').select('*'),
-                    supabase.from('child_items').select('*'),
-                  ]);
-                  const linkedUsers = (users || []).filter((u: any) => u.department === deptName);
-                  const linkedItems = (allItems || []).filter((i: Item) => i.departments?.includes(deptName));
-                  const linkedComponents = (allChildItems || []).filter((c: ChildItem) => c.departments?.includes(deptName));
-                  if (linkedUsers.length > 0 || linkedItems.length > 0 || linkedComponents.length > 0) {
-                    let msg = 'Cannot delete this department:\n';
-                    if (linkedUsers.length > 0) msg += `\n- ${linkedUsers.length} user(s) are assigned to this department`;
-                    if (linkedItems.length > 0) msg += `\n- ${linkedItems.length} item(s) use this department`;
-                    if (linkedComponents.length > 0) msg += `\n- ${linkedComponents.length} component(s) use this department`;
-                    msg += '\n\nRemove these associations first.';
-                    alert(msg);
-                    return;
-                  }
-                  if(confirm("Delete?")) { await supabase.from('departments').delete().eq('id', d.id); void logActivity({ eventType: 'department', action: 'deleted', title: 'Department Deleted', body: `Deleted department: ${d.name}`, actor: getStoredLoggedInUser(), targetCollection: 'departments', targetId: d.id, targetLabel: d.name, department: d.name, severity: 'warning' }); invalidateCollectionCache('departments'); fetchData(); }
-                }} className="text-red-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
-              </div>
+          <Card key={d.id} className="relative border-l-4 border-l-purple-500 hover:shadow-lg transition-all group overflow-hidden">
+            <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+              <button onClick={() => { setEditingDepartment(d); setFormData({ name: d.name, incharge: d.incharge || '', supervisor: d.supervisor || '', info: d.info || '', metrics: d.metrics || [] }); setIsModalOpen(true); }} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg bg-white shadow-sm"><Edit size={15} /></button>
+              <button onClick={async () => {
+                const deptName = d.name;
+                const lower = deptName.trim().toLowerCase();
+                if (lower === 'dispatch' || lower === 'quality control' || lower === 'quality_control') {
+                  alert(`"${deptName}" is a system-required department and cannot be deleted.`);
+                  return;
+                }
+                const [{ data: users }, { data: allItems }, { data: allChildItems }] = await Promise.all([
+                  supabase.from('erp_users').select('*').eq('department', deptName),
+                  supabase.from('items').select('*'),
+                  supabase.from('child_items').select('*'),
+                ]);
+                const linkedUsers = (users || []).filter((u: any) => u.department === deptName);
+                const linkedItems = (allItems || []).filter((i: Item) => i.departments?.includes(deptName));
+                const linkedComponents = (allChildItems || []).filter((c: ChildItem) => c.departments?.includes(deptName));
+                if (linkedUsers.length > 0 || linkedItems.length > 0 || linkedComponents.length > 0) {
+                  let msg = 'Cannot delete this department:\n';
+                  if (linkedUsers.length > 0) msg += `\n- ${linkedUsers.length} user(s) are assigned to this department`;
+                  if (linkedItems.length > 0) msg += `\n- ${linkedItems.length} item(s) use this department`;
+                  if (linkedComponents.length > 0) msg += `\n- ${linkedComponents.length} component(s) use this department`;
+                  msg += '\n\nRemove these associations first.';
+                  alert(msg);
+                  return;
+                }
+                if(confirm("Delete?")) { await supabase.from('departments').delete().eq('id', d.id); void logActivity({ eventType: 'department', action: 'deleted', title: 'Department Deleted', body: `Deleted department: ${d.name}`, actor: getStoredLoggedInUser(), targetCollection: 'departments', targetId: d.id, targetLabel: d.name, department: d.name, severity: 'warning' }); invalidateCollectionCache('departments'); fetchData(); }
+              }} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg bg-white shadow-sm"><Trash2 size={15} /></button>
             </div>
-            <div className="space-y-2 mt-4">
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 font-bold text-[10px] uppercase tracking-wider">In-charge</span>
-                <span className="font-bold text-gray-700">{d.incharge || 'N/A'}</span>
-              </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 font-bold text-[10px] uppercase tracking-wider">Supervisor</span>
-                <span className="font-bold text-gray-700">{d.supervisor || 'N/A'}</span>
+            <div>
+              <h3 className="text-base font-black text-gray-800 pr-16">{d.name}</h3>
+            </div>
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <span className="text-gray-400 font-semibold text-[10px] uppercase tracking-wider block">In-charge</span>
+                  <span className="font-semibold text-gray-700">{d.incharge || '—'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 font-semibold text-[10px] uppercase tracking-wider block">Supervisor</span>
+                  <span className="font-semibold text-gray-700">{d.supervisor || '—'}</span>
+                </div>
               </div>
             </div>
             {d.metrics && d.metrics.length > 0 && (
-              <div className="border-t pt-3 mt-3">
-                <span className="text-gray-500 font-bold text-[10px] uppercase tracking-wider">📊 Metrics</span>
-                {d.metrics.map((m, i) => (
-                  <div key={i} className="flex justify-between text-sm text-gray-700 mt-1">
-                    <span className="font-semibold">{m.type}</span>
-                    <span className="text-gray-500">{m.unit}</span>
-                  </div>
-                ))}
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <div className="flex flex-wrap gap-2">
+                  {d.metrics.map((m, i) => (
+                    <span key={i} className="text-[11px] font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md">{m.type} ({m.unit})</span>
+                  ))}
+                </div>
               </div>
             )}
           </Card>
@@ -3201,31 +3202,55 @@ const CustomerManagement: React.FC<{ onError: () => void; editingId?: number }> 
         </form>
       </Modal>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {data.map(c => (
-          <Card key={c.id} className="relative group hover:border-green-200 transition-all">
-            <div className="flex justify-between items-start mb-4 pr-10">
-              <div>
-                <h3 className="text-lg font-black text-gray-800 leading-tight">{c.name}</h3>
-                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mt-1 flex items-center gap-1">
-                   <MapPin size={10} /> {c.city || 'Location N/A'}
-                </p>
+      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full min-w-[900px] text-left text-sm">
+            <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-500 border-b">
+              <tr>
+                <th className="px-6 py-4 whitespace-nowrap">Client Name</th>
+                <th className="px-6 py-4 whitespace-nowrap">City</th>
+                <th className="px-6 py-4 whitespace-nowrap">Contact</th>
+                <th className="px-6 py-4 whitespace-nowrap">Email</th>
+                <th className="px-6 py-4 whitespace-nowrap">GST</th>
+                <th className="px-6 py-4 whitespace-nowrap">Type</th>
+                <th className="px-6 py-4 text-right whitespace-nowrap">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {data.map(c => (
+                <tr key={c.id} className="hover:bg-gray-50/80 transition-colors group">
+                  <td className="px-6 py-4 font-bold text-gray-800">{c.name}</td>
+                  <td className="px-6 py-4 text-gray-600">{c.city || '—'}</td>
+                  <td className="px-6 py-4 text-gray-600">{c.contact || '—'}</td>
+                  <td className="px-6 py-4 text-gray-600 truncate max-w-[200px]">{c.email || '—'}</td>
+                  <td className="px-6 py-4 font-mono text-xs text-gray-600">{c.gst || '—'}</td>
+                  <td className="px-6 py-4"><Badge color="green">{c.type}</Badge></td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => { setEditingCustomer(c); setFormData({ name: c.name || '', proprietor: c.proprietor || '', address: c.address || '', city: c.city || '', contact: c.contact || '', email: c.email || '', gst: c.gst || '', type: c.type || 'Direct', reference: c.reference || '', remarks: c.remarks || '' }); setIsModalOpen(true); }} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg"><Edit size={15} /></button>
+                      <button onClick={() => deleteCustomer(c)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={15} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="block md:hidden divide-y">
+          {data.map(c => (
+            <div key={c.id} className="px-4 py-3 space-y-1">
+              <div className="font-bold text-gray-800">{c.name}</div>
+              <div className="text-xs text-gray-500">{c.city || '—'} · {c.contact || '—'}</div>
+              <div className="flex justify-between items-center">
+                <Badge color="green">{c.type}</Badge>
+                <div className="flex gap-1">
+                  <button onClick={() => { setEditingCustomer(c); setFormData({ name: c.name || '', proprietor: c.proprietor || '', address: c.address || '', city: c.city || '', contact: c.contact || '', email: c.email || '', gst: c.gst || '', type: c.type || 'Direct', reference: c.reference || '', remarks: c.remarks || '' }); setIsModalOpen(true); }} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg"><Edit size={14} /></button>
+                  <button onClick={() => deleteCustomer(c)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={14} /></button>
+                </div>
               </div>
-              <Badge color="green">{c.type}</Badge>
             </div>
-            <div className="space-y-2 text-sm text-gray-600">
-              <div className="flex items-center gap-2"><Phone size={14} className="text-green-500" /> {c.contact || 'No phone'}</div>
-              <div className="flex items-center gap-2"><Mail size={14} className="text-blue-500" /> {c.email || 'No email'}</div>
-              <div className="flex items-center gap-2 font-mono text-[10px] bg-gray-100 px-2 py-1 rounded inline-flex mt-2">
-                 <Tag size={12} /> GST: {c.gst || 'N/A'}
-              </div>
-            </div>
-            <div className="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-              <button onClick={() => { setEditingCustomer(c); setFormData({ name: c.name || '', proprietor: c.proprietor || '', address: c.address || '', city: c.city || '', contact: c.contact || '', email: c.email || '', gst: c.gst || '', type: c.type || 'Direct', reference: c.reference || '', remarks: c.remarks || '' }); setIsModalOpen(true); }} className="p-2 text-blue-500 hover:text-blue-700 bg-blue-50 rounded-lg"><Edit size={16} /></button>
-              <button onClick={() => deleteCustomer(c)} className="p-2 text-red-300 hover:text-red-500 bg-red-50 rounded-lg"><Trash2 size={16} /></button>
-            </div>
-          </Card>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -4540,6 +4565,170 @@ const ChildItemListView: React.FC<{ onError: () => void; editingId?: number | st
   );
 };
 
+// --- Vehicle Management ---
+
+const VehicleList: React.FC<{ onError: () => void }> = ({ onError }) => {
+  const [data, setData] = useState<Vehicle[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+  const [formData, setFormData] = useState<{ vehicle_no: string; driver_name: string; is_active: boolean }>({ vehicle_no: '', driver_name: '', is_active: true });
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const res = await loadCachedCollection<Vehicle>('vehicles', 'vehicle_no');
+      setData(res);
+    } catch (e) { onError(); }
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchData(); }, []);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.vehicle_no.trim()) { alert('Vehicle number is required'); return; }
+
+    const payload = { vehicle_no: formData.vehicle_no.trim(), driver_name: formData.driver_name.trim(), is_active: formData.is_active };
+    const result = editingVehicle
+      ? await supabase.from('vehicles').update(payload).eq('id', editingVehicle.id)
+      : await supabase.from('vehicles').insert([payload]);
+    const { error } = result;
+    if (error) {
+      alert(error.message);
+    } else {
+      void logActivity({
+        eventType: 'vehicle',
+        action: editingVehicle ? 'updated' : 'created',
+        title: editingVehicle ? 'Vehicle Updated' : 'Vehicle Created',
+        body: `${editingVehicle ? 'Updated' : 'Created'} vehicle: ${payload.vehicle_no}`,
+        actor: getStoredLoggedInUser(),
+        targetCollection: 'vehicles',
+        targetId: editingVehicle?.id,
+        targetLabel: payload.vehicle_no,
+        severity: 'info',
+      });
+      setIsModalOpen(false);
+      setEditingVehicle(null);
+      setFormData({ vehicle_no: '', driver_name: '', is_active: true });
+      invalidateCollectionCache('vehicles');
+      fetchData();
+    }
+  };
+
+  if (loading && data.length === 0) return <LoadingState />;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-xl font-black text-gray-800">Vehicles</h2>
+        <button onClick={() => { setEditingVehicle(null); setFormData({ vehicle_no: '', driver_name: '', is_active: true }); setIsModalOpen(true); }} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg hover:bg-blue-700 transition-colors">
+          <Plus size={18} /> <span className="hidden sm:inline">Add Vehicle</span><span className="sm:hidden">Add</span>
+        </button>
+      </div>
+
+      <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingVehicle(null); }} title={editingVehicle ? "Edit Vehicle" : "New Vehicle"}>
+        <form onSubmit={handleSave} className="space-y-4">
+          <div>
+            <label className="text-[10px] font-black uppercase text-gray-500 block mb-1 tracking-widest">Vehicle Number <span className="text-red-500">*</span></label>
+            <input required placeholder="e.g. MH-12-AB-1234" value={formData.vehicle_no} onChange={e => setFormData({...formData, vehicle_no: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl" />
+          </div>
+          <div>
+            <label className="text-[10px] font-black uppercase text-gray-500 block mb-1 tracking-widest">Driver / Transport Name</label>
+            <input placeholder="e.g. Rajesh Transport" value={formData.driver_name} onChange={e => setFormData({...formData, driver_name: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl" />
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={formData.is_active} onChange={e => setFormData({...formData, is_active: e.target.checked})} className="rounded" />
+            <span className="text-sm font-bold text-gray-700">Active</span>
+          </label>
+          <button type="submit" className="w-full py-4 bg-blue-600 text-white rounded-xl font-black shadow-lg">{editingVehicle ? 'Update Vehicle' : 'Add Vehicle'}</button>
+        </form>
+      </Modal>
+
+      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full min-w-[600px] text-left text-sm">
+            <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-500 border-b">
+              <tr>
+                <th className="px-6 py-4 whitespace-nowrap">Vehicle No</th>
+                <th className="px-6 py-4 whitespace-nowrap">Driver / Transport</th>
+                <th className="px-6 py-4 whitespace-nowrap">Status</th>
+                <th className="px-6 py-4 text-right whitespace-nowrap">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {data.map(v => (
+                <tr key={v.id} className="hover:bg-gray-50/80 transition-colors group">
+                  <td className="px-6 py-4 font-bold text-gray-800">{v.vehicle_no}</td>
+                  <td className="px-6 py-4 text-gray-600">{v.driver_name || '—'}</td>
+                  <td className="px-6 py-4">
+                    <span className={`font-bold text-xs px-2.5 py-1 rounded-full ${v.is_active !== false ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{v.is_active !== false ? 'Active' : 'Inactive'}</span>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => { setEditingVehicle(v); setFormData({ vehicle_no: v.vehicle_no, driver_name: v.driver_name || '', is_active: v.is_active !== false }); setIsModalOpen(true); }} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg"><Edit size={15} /></button>
+                      <button onClick={async () => {
+                        if (!confirm(`Delete vehicle "${v.vehicle_no}"?`)) return;
+                        const { error } = await supabase.from('vehicles').delete().eq('id', v.id);
+                        if (error) { alert(error.message); return; }
+                        void logActivity({
+                          eventType: 'vehicle',
+                          action: 'deleted',
+                          title: 'Vehicle Deleted',
+                          body: `Deleted vehicle: ${v.vehicle_no}`,
+                          actor: getStoredLoggedInUser(),
+                          targetCollection: 'vehicles',
+                          targetId: v.id,
+                          targetLabel: v.vehicle_no,
+                          severity: 'warning',
+                        });
+                        invalidateCollectionCache('vehicles');
+                        fetchData();
+                      }} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={15} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="block md:hidden divide-y">
+          {data.map(v => (
+            <div key={v.id} className="px-4 py-3 space-y-1">
+              <div className="font-bold text-gray-800">{v.vehicle_no}</div>
+              <div className="text-xs text-gray-500">{v.driver_name || '—'}</div>
+              <div className="flex justify-between items-center">
+                <span className={`font-bold text-xs px-2 py-0.5 rounded-full ${v.is_active !== false ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{v.is_active !== false ? 'Active' : 'Inactive'}</span>
+                <div className="flex gap-1">
+                  <button onClick={() => { setEditingVehicle(v); setFormData({ vehicle_no: v.vehicle_no, driver_name: v.driver_name || '', is_active: v.is_active !== false }); setIsModalOpen(true); }} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg"><Edit size={14} /></button>
+                  <button onClick={async () => {
+                    if (!confirm(`Delete vehicle "${v.vehicle_no}"?`)) return;
+                    const { error } = await supabase.from('vehicles').delete().eq('id', v.id);
+                    if (error) { alert(error.message); return; }
+                    void logActivity({
+                      eventType: 'vehicle',
+                      action: 'deleted',
+                      title: 'Vehicle Deleted',
+                      body: `Deleted vehicle: ${v.vehicle_no}`,
+                      actor: getStoredLoggedInUser(),
+                      targetCollection: 'vehicles',
+                      targetId: v.id,
+                      targetLabel: v.vehicle_no,
+                      severity: 'warning',
+                    });
+                    invalidateCollectionCache('vehicles');
+                    fetchData();
+                  }} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={14} /></button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // --- Worker Dashboard ---
 
 const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => void; onViewPlan: (id: number) => void; loggedInUser: User }> = ({ onError, onView, onViewPlan, loggedInUser }) => {
@@ -4836,8 +5025,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
 
   const isOrderOverdue = (wo: WorkOrder & { itemInfo?: Item }) => {
     if (!wo.etd || wo.status === 'Dispatched') return false;
-    const etd = new Date(`${wo.etd}T12:00:00`);
-    return !Number.isNaN(etd.getTime()) && etd < new Date();
+    return wo.etd < new Date().toISOString().slice(0, 10);
   };
 
   useEffect(() => {
@@ -5909,7 +6097,7 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                   <div className="flex items-center gap-1.5">
                     {STATUS_FLOW.map((step, idx) => {
                       const currentStepIdx = STATUS_FLOW.indexOf(wo.status);
-                      const state = idx < currentStepIdx ? 'completed' : idx === currentStepIdx ? 'current' : 'upcoming';
+                      const state = (idx < currentStepIdx || wo.status === 'Dispatched') ? 'completed' : idx === currentStepIdx ? 'current' : 'upcoming';
                       return (
                         <div key={step}
                           className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
@@ -5963,7 +6151,6 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                              normalizeDepartment(dept).replace(/_/g, ' ')}
                           </span>
                         </div>
-                        <StatusBadge status={(deptStatus?.status || 'Not Started') as WOStatus} />
                       </div>
 
                       {/* Vertical Steps */}
@@ -6134,12 +6321,11 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                       </div>
                       <span className="text-sm font-bold text-gray-800">Dispatch</span>
                     </div>
-                    <StatusBadge status={wo.status} />
                   </div>
                   <div className="px-4 py-3">
                     {DISPATCH_FLOW.map((step, stepIdx) => {
                       const currentDispatchIdx = DISPATCH_FLOW.indexOf(wo.status);
-                      const state = stepIdx < currentDispatchIdx ? 'completed' : stepIdx === currentDispatchIdx ? 'current' : 'upcoming';
+                      const state = (stepIdx < currentDispatchIdx || wo.status === 'Dispatched') ? 'completed' : stepIdx === currentDispatchIdx ? 'current' : 'upcoming';
                       return (
                         <div key={step} className="flex items-start gap-3 pb-5 last:pb-0 relative">
                           {stepIdx < DISPATCH_FLOW.length - 1 && (
@@ -10020,12 +10206,12 @@ export default function App() {
     const host = window.location.hostname.toLowerCase();
     if (host === 'portal.excellpackaging.in' || host.startsWith('portal.')) return 'client-login';
     if (window.location.hash.startsWith('#/verify')) return 'verify';
+    const savedView = sessionStorage.getItem('excell_erp_view') as AppView | null;
+    if (savedView) return savedView;
     return 'dashboard';
   };
   const [view, setView] = useState<AppView>(initialView);
   const [canGoBack, setCanGoBack] = useState(false);
-  const [showMaintenance, setShowMaintenance] = useState(false);
-  const [migrating, setMigrating] = useState(false);
   const [openNavGroup, setOpenNavGroup] = useState<string | null>(null);
   const [loggedInUser, setLoggedInUser] = useState<User | null>(null);
   const [clientUser, setClientUser] = useState<any>(null);
@@ -10052,6 +10238,11 @@ export default function App() {
       setReadIds(new Set<number>(stored ? JSON.parse(stored) : []));
     } catch { setReadIds(new Set()); }
   }, [loggedInUser]);
+
+  // Persist current view across page reloads
+  useEffect(() => {
+    sessionStorage.setItem('excell_erp_view', view);
+  }, [view]);
 
   // Save read IDs to localStorage
   useEffect(() => {
@@ -10399,45 +10590,6 @@ export default function App() {
   const handleLiveScreenLogin = (user: any) => { setLiveScreenUser(user); navigateTo('live-screen'); };
   const handleLiveScreenLogout = () => { setLiveScreenUser(null); navigateTo('live-screen-login'); };
 
-  const handleMigrateDeliveredToDispatched = async () => {
-    if (!confirm('Migrate all "Delivered" records to "Dispatched"? This is safe to run multiple times.')) return;
-    setMigrating(true);
-    try {
-      const wo = await pb.collection('work_orders').getFullList({
-        filter: 'status="Delivered"',
-        requestKey: null
-      });
-      for (const r of wo) {
-        await pb.collection('work_orders').update(r.id, { status: 'Dispatched' }, { requestKey: null });
-      }
-
-      const evNew = await pb.collection('activity_events').getFullList({
-        filter: 'new_value="Delivered"',
-        requestKey: null
-      });
-      for (const r of evNew) {
-        await pb.collection('activity_events').update(r.id, { new_value: 'Dispatched' }, { requestKey: null });
-      }
-
-      const evOld = await pb.collection('activity_events').getFullList({
-        filter: 'old_value="Delivered"',
-        requestKey: null
-      });
-      for (const r of evOld) {
-        await pb.collection('activity_events').update(r.id, { old_value: 'Dispatched' }, { requestKey: null });
-      }
-
-      alert(`Migration complete!\n\n` +
-        `• ${wo.length} work_orders updated\n` +
-        `• ${evNew.length} activity events (new_value) updated\n` +
-        `• ${evOld.length} activity events (old_value) updated`);
-    } catch (err: any) {
-      alert('Migration failed: ' + (err?.message || String(err)));
-    } finally {
-      setMigrating(false);
-    }
-  };
-
   const handleNavClick = (viewId: AppView) => {
     navigateTo(viewId);
     setIsMobileMenuOpen(false);
@@ -10622,6 +10774,7 @@ export default function App() {
           { id: 'customers' as AppView, label: 'Clients', icon: UserCircle },
           { id: 'items' as AppView, label: 'Items', icon: Package },
           { id: 'child-items' as AppView, label: 'Components', icon: Layers },
+          { id: 'vehicles' as AppView, label: 'Vehicles', icon: Truck },
         ],
       },
        {
@@ -10938,6 +11091,7 @@ export default function App() {
       case 'customers': return <CustomerManagement onError={onError} editingId={(window as any)._id} />;
       case 'items': return <ItemList onError={onError} editingId={(window as any)._id} />;
       case 'child-items': return <ChildItemListView onError={onError} editingId={(window as any)._id} />;
+      case 'vehicles': return <VehicleList onError={onError} />;
       case 'work-orders': return <WorkOrderList onError={onError} onView={id => navigateTo('wo-details', { payload: { id } })} onViewPlan={id => navigateTo('plan-generator', { payload: { ids: [id], backView: 'work-orders' } })} loggedInUser={loggedInUser} />;
       case 'wo-details': return <WODetails id={(window as any)._id} onBack={() => {
          const normDept = normalizeDepartment(loggedInUser.department);
@@ -11386,11 +11540,6 @@ export default function App() {
               <button onClick={refreshNotificationHealth} className="rounded-full bg-white/15 p-2 hover:bg-white/25 transition-colors" aria-label="Refresh notification status">
                 <RefreshCw size={17} />
               </button>
-              {loggedInUser && normalizeDepartment(loggedInUser.department) === 'Office' && (
-                <button onClick={() => setShowMaintenance(true)} className="rounded-full bg-white/15 p-2 hover:bg-white/25 transition-colors" aria-label="Maintenance tools" title="Maintenance tools">
-                  <Wrench size={17} />
-                </button>
-              )}
               <button onClick={handleLogout} className="rounded-full bg-white/15 p-2 hover:bg-white/25 transition-colors" aria-label="Sign out" title="Sign out">
                 <LogOut size={17} />
               </button>
@@ -11580,37 +11729,7 @@ export default function App() {
             ))}
           </div>
 
-          {/* Maintenance Tools Modal */}
-          {showMaintenance && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setShowMaintenance(false)}>
-              <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
-                    <Wrench size={18} className="text-orange-500" />
-                    Maintenance Tools
-                  </h3>
-                  <button onClick={() => setShowMaintenance(false)} className="text-gray-500 hover:text-gray-700 transition-colors">
-                    <X size={18} />
-                  </button>
-                </div>
-                <p className="text-xs text-gray-600 mb-4">One-time data migration tools. Safe to re-run.</p>
-                <div className="border-t border-gray-200 pt-4">
-                  <p className="text-xs font-black text-amber-700 mb-2 uppercase tracking-widest">⚠️ Migrate Old Data</p>
-                  <p className="text-xs text-gray-600 mb-3">
-                    Convert any old "Delivered" records to "Dispatched" in <code className="bg-gray-100 px-1 rounded">work_orders</code> and <code className="bg-gray-100 px-1 rounded">activity_events</code>.
-                  </p>
-                  <button
-                    onClick={handleMigrateDeliveredToDispatched}
-                    disabled={migrating}
-                    className="w-full py-2.5 bg-orange-600 text-white rounded-xl font-black hover:bg-orange-700 disabled:opacity-50 transition-all"
-                  >
-                    {migrating ? 'Migrating…' : 'Migrate Old "Delivered" → "Dispatched"'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-       </main>
+        </main>
     </div>
   );
 }

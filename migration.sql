@@ -110,3 +110,16 @@ CREATE TABLE IF NOT EXISTS notification_events (
 
 CREATE INDEX IF NOT EXISTS idx_notification_events_created_at
   ON notification_events(created_at DESC);
+
+-- Vehicles master table
+CREATE TABLE IF NOT EXISTS vehicles (
+  id BIGSERIAL PRIMARY KEY,
+  vehicle_no TEXT NOT NULL UNIQUE,
+  driver_name TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_vehicles_vehicle_no
+  ON vehicles(vehicle_no);

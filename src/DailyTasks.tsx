@@ -239,11 +239,13 @@ const DailyTasks: React.FC<Props> = ({ loggedInUser }) => {
                   </div>
                 )}
               </div>
-              <div className="flex gap-1.5 mt-3 pt-3 border-t border-gray-100">
-                {allStatuses.filter(s => s !== task.status).map(s => (
-                  <button key={s} onClick={() => handleStatusChange(task.id, s)} className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-colors ${changeBtnColors[s]}`}>{statusLabels[s]}</button>
-                ))}
-              </div>
+              {task.status !== 'completed' && (
+                <div className="flex gap-1.5 mt-3 pt-3 border-t border-gray-100">
+                  {allStatuses.filter(s => s !== task.status).map(s => (
+                    <button key={s} onClick={() => handleStatusChange(task.id, s)} className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-colors ${changeBtnColors[s]}`}>{statusLabels[s]}</button>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>

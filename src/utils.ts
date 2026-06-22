@@ -102,7 +102,7 @@ export const requestNotificationPermission = () => {
 export const canAccessView = (user: User | null, view: string): boolean => {
   if (!user) return false;
 
-  if (view === 'worker-dashboard') return true;
+  if (view === 'worker-dashboard' || view === 'my-tasks') return true;
 
   const normDept = normalizeDepartment(user.department);
 
@@ -127,7 +127,7 @@ export const canAccessView = (user: User | null, view: string): boolean => {
   }
 
   if (normDept === 'Office' && (user.level === '3-Staff' || user.level === '2-Supervisor')) {
-    return ['dashboard', 'customers', 'items', 'work-orders', 'wo-details', 'child-items', 'production-plan', 'plan-generator', 'custom-bom-plan', 'custom-bom-print', 'reports', 'production-reports', 'notification-audit', 'departments', 'daily-tasks', 'live-screen', 'live-screen-login', 'client-orders'].includes(view);
+    return ['dashboard', 'customers', 'items', 'work-orders', 'wo-details', 'child-items', 'vehicles', 'production-plan', 'plan-generator', 'custom-bom-plan', 'custom-bom-print', 'reports', 'production-reports', 'notification-audit', 'departments', 'daily-tasks', 'live-screen', 'live-screen-login', 'client-orders'].includes(view);
   }
 
   const productionDepts = ['Wood_Work', 'Plywood', 'Corrugation', 'Trading_Consumables', 'Foam_Plastic_bags'];
