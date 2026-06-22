@@ -2078,38 +2078,54 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
 
   return (
     <div className="space-y-6 custom-bom-print">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={20} />
-          <input 
-            type="text" 
-            placeholder="Search by order, customer, or job..." 
-            value={searchQuery} 
-            onChange={e => setSearchQuery(e.target.value)} 
-            className="w-full pl-12 pr-4 py-3 bg-white border rounded-xl" 
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+          <input
+            type="text"
+            placeholder="Search by order, customer, or job..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
-        <div className="flex gap-1.5 flex-wrap items-center">
-          <button onClick={() => setStatusFilter('All')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === 'All' ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>All</button>
-          {statusOptions.map(s => (
-            <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === s ? (statusTabColors[s] || 'bg-slate-900 text-white') : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS[s] || s}</button>
-          ))}
-          {!dispatchMode && (
-            <button onClick={() => setDispatchMode(true)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 transition-colors flex items-center gap-1.5">
-              <Package size={14} /> Bulk Dispatch
+        <button onClick={() => setStatusFilter('All')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === 'All' ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>All</button>
+        {statusOptions.map(s => (
+          <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === s ? (statusTabColors[s] || 'bg-slate-900 text-white') : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS[s] || s}</button>
+        ))}
+        <select value={dispatchCompanyFilter} onChange={e => setDispatchCompanyFilter(e.target.value)} className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="All">All Companies</option>
+          {dispatchCompanyOptions.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select value={dispatchDateFilter} onChange={e => { setDispatchDateFilter(e.target.value); if (e.target.value !== 'custom') { setDispatchCustomFrom(''); setDispatchCustomTo(''); } }} className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="all">All Dates</option>
+          <option value="today">Today</option>
+          <option value="week">This Week</option>
+          <option value="month">This Month</option>
+          <option value="custom">Custom</option>
+        </select>
+        {dispatchDateFilter === 'custom' && (
+          <>
+            <input type="date" value={dispatchCustomFrom} onChange={e => setDispatchCustomFrom(e.target.value)} className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs bg-white" />
+            <span className="text-gray-500 text-xs">to</span>
+            <input type="date" value={dispatchCustomTo} onChange={e => setDispatchCustomTo(e.target.value)} className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs bg-white" />
+          </>
+        )}
+        {!dispatchMode && (
+          <button onClick={() => setDispatchMode(true)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-1.5">
+            <Package size={14} /> Bulk Dispatch
+          </button>
+        )}
+        {dispatchMode && (
+          <>
+            <button onClick={() => { setDispatchMode(false); setSelectedOrders({}); }} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">
+              Cancel
             </button>
-          )}
-          {dispatchMode && (
-            <>
-              <button onClick={() => { setDispatchMode(false); setSelectedOrders({}); }} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors">
-                Cancel
-              </button>
-              <button onClick={handleBulkDispatch} disabled={Object.keys(selectedOrders).length === 0} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
-                <Check size={14} /> Dispatch ({Object.keys(selectedOrders).length})
-              </button>
-            </>
-          )}
-        </div>
+            <button onClick={handleBulkDispatch} disabled={Object.keys(selectedOrders).length === 0} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
+              <Check size={14} /> Dispatch ({Object.keys(selectedOrders).length})
+            </button>
+          </>
+        )}
       </div>
 
       <Modal isOpen={isDispatchMetaModalOpen} onClose={() => { if (!isSubmittingDispatch) setIsDispatchMetaModalOpen(false); }} title="Dispatch Details">
@@ -3773,27 +3789,6 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
                         )}
                         <button type="button" onClick={() => { const updated = [...(itemRows[index].metric_requirements || []), { metric: '', unit: '', qtyPerUnit: 0 }]; updateItemRow(index, 'metric_requirements', updated); }} className="text-purple-600 text-sm font-bold hover:text-purple-800 flex items-center gap-1"><Plus size={14} /> Add Metric Requirement</button>
         </div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <select value={dispatchCompanyFilter} onChange={e => setDispatchCompanyFilter(e.target.value)} className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
-          <option value="All">All Companies</option>
-          {dispatchCompanyOptions.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <select value={dispatchDateFilter} onChange={e => { setDispatchDateFilter(e.target.value); if (e.target.value !== 'custom') { setDispatchCustomFrom(''); setDispatchCustomTo(''); } }} className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
-          <option value="all">All Dates</option>
-          <option value="today">Today</option>
-          <option value="week">This Week</option>
-          <option value="month">This Month</option>
-          <option value="custom">Custom</option>
-        </select>
-        {dispatchDateFilter === 'custom' && (
-          <>
-            <input type="date" value={dispatchCustomFrom} onChange={e => setDispatchCustomFrom(e.target.value)} className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs bg-white" />
-            <span className="text-gray-500 text-xs">to</span>
-            <input type="date" value={dispatchCustomTo} onChange={e => setDispatchCustomTo(e.target.value)} className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs bg-white" />
-          </>
-        )}
       </div>
                 </div>
               </div>
