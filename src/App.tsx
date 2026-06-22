@@ -5780,7 +5780,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                                 </td>
                                 <td className="px-4 py-2 font-bold text-sm whitespace-nowrap">{wo.qty}</td>
                                 <td className="px-4 py-2 text-sm font-bold text-orange-600 whitespace-nowrap">{wo.etd || 'TBD'}</td>
-                                <td className="px-4 py-2 whitespace-nowrap">
+                <td className="px-4 py-2 whitespace-nowrap">
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <StatusBadge status={wo.status} />
                                     {getQCApprovalProgress(wo) === 'partial' && <Badge color="orange">Partially Approved</Badge>}
@@ -6049,6 +6049,56 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
   const QC_FLOW = ['Pending QC', 'QC Approved', 'QC Denied'];
   const DISPATCH_FLOW = ['Ready for despatch', 'Dispatched'];
 
+  const getStatusDisplayLabel = (status: string): string => {
+    if (status === 'Not Started') return 'Order Entry';
+    if (status === 'Work Started') return 'Work Started';
+    if (status === 'Ready for QC') return 'Work done';
+    if (status === 'Ready for despatch') return 'Ready for Despatch';
+    if (status === 'Dispatched') return 'Dispatched';
+    return status;
+  };
+
+  const getOverallStatusLabel = (workOrder: WorkOrder): string => {
+    const status = workOrder.status;
+    if (status === 'Ready for QC') {
+      const deptStatuses = Array.isArray(workOrder.department_statuses) ? workOrder.department_statuses : [];
+      if (deptStatuses.length > 0) {
+        const allApproved = deptStatuses.every(ds => ds.qc_status === 'QC Approved');
+        const allDenied = deptStatuses.every(ds => ds.qc_status === 'QC Denied');
+        if (allApproved) return 'QC Approved';
+        if (allDenied) return 'QC Denied';
+      }
+      return 'Work done';
+    }
+    return getStatusDisplayLabel(status);
+  };
+
+  const isAllQcApproved = (workOrder: WorkOrder): boolean => {
+    const deptStatuses = Array.isArray(workOrder.department_statuses) ? workOrder.department_statuses : [];
+    if (deptStatuses.length === 0) return false;
+    return deptStatuses.every(ds => ds.qc_status === 'QC Approved');
+  };
+
+  const renderStatusBadge = () => {
+    const status = wo.status;
+    const displayLabel = getOverallStatusLabel(wo as WorkOrder);
+    const styles: Record<string, { bg: string; text: string }> = {
+      'Not Started': { bg: 'bg-gray-100', text: 'text-gray-600' },
+      'Work Started': { bg: 'bg-blue-100', text: 'text-blue-600' },
+      'Work done': { bg: 'bg-yellow-100', text: 'text-yellow-600' },
+      'QC Approved': { bg: 'bg-emerald-100', text: 'text-emerald-600' },
+      'QC Denied': { bg: 'bg-red-100', text: 'text-red-600' },
+      'Ready for despatch': { bg: 'bg-purple-100', text: 'text-purple-600' },
+      'Dispatched': { bg: 'bg-indigo-100', text: 'text-indigo-600' },
+    };
+    const style = styles[displayLabel] || styles[status] || styles['Not Started'];
+    return (
+      <span className={`px-3 py-1 rounded-full text-xs font-bold ${style.bg} ${style.text}`}>
+        {displayLabel}
+      </span>
+    );
+  };
+
   return (
     <div className="space-y-3 sm:space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
       <div className="no-print">
@@ -6072,7 +6122,7 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                 {wo.parent_work_order_id && <p className="text-xs font-semibold text-purple-500 uppercase tracking-wider">Parent Item: {wo.parent_item_name || 'Parent Item'}</p>}
                 <p className="text-xs md:text-sm font-bold text-gray-500 uppercase tracking-tight">{wo.customer}</p>
               </div>
-              <StatusBadge status={wo.status} />
+              {renderStatusBadge()}
             </div>
           </Card>
 
@@ -6108,7 +6158,7 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                         />
                       );
                     })}
-                    <span className="ml-2 text-xs font-bold text-gray-500">{wo.status}</span>
+                    <span className="ml-2 text-xs font-bold text-gray-500">{getOverallStatusLabel(wo as WorkOrder)}</span>
                   </div>
                 </div>
 
@@ -6157,11 +6207,23 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                       <div className="px-3 py-3">
                         {DEPT_FLOW.map((step, stepIdx) => {
                           const state = getDeptStepState(stepIdx);
+                          let displayLabel: string;
+                          if (step === 'Not Started') {
+                            displayLabel = 'Order Entry';
+                          } else if (step === 'Work Started') {
+                            displayLabel = state === 'completed' ? 'Work done' : 'Work in progress';
+                          } else if (step === 'Ready for QC') {
+                            displayLabel = deptStatus?.qc_status || 'Ready for QC';
+                          } else {
+                            displayLabel = step;
+                          }
+                          const isCurrentDenied = state === 'current' && deptStatus?.qc_status === 'QC Denied';
                           return (
                             <div key={step} className="flex items-start gap-3 pb-5 last:pb-0 relative">
                               {stepIdx < DEPT_FLOW.length - 1 && (
                                 <div className={`absolute left-[11px] top-5 w-0.5 -z-0 transition-all duration-500 ${
                                   stepIdx < currentStepIdx ? 'bg-emerald-400' :
+                                  isCurrentDenied ? 'bg-red-400/40' :
                                   stepIdx === currentStepIdx ? 'bg-emerald-400/40' :
                                   'bg-gray-200'
                                 }`} style={{ height: 'calc(100% + 4px)' }} />
@@ -6169,12 +6231,16 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                               <div className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center z-10 transition-all duration-300 ${
                                 state === 'completed'
                                   ? 'bg-emerald-100 text-emerald-600 animate-check-pop'
+                                  : isCurrentDenied
+                                  ? 'bg-red-100 text-red-600 ring-4 ring-red-50'
                                   : state === 'current'
                                   ? 'bg-blue-100 text-blue-600 ring-4 ring-blue-50'
                                   : 'bg-gray-100 text-gray-300'
                               }`}>
                                 {state === 'completed' ? (
                                   <Check size={13} strokeWidth={3} />
+                                ) : isCurrentDenied ? (
+                                  <X size={13} strokeWidth={3} />
                                 ) : state === 'current' ? (
                                   <div className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse-dot" />
                                 ) : (
@@ -6185,9 +6251,10 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <p className={`text-sm font-bold leading-tight whitespace-nowrap ${
                                     state === 'completed' ? 'text-emerald-700' :
+                                    isCurrentDenied ? 'text-red-700' :
                                     state === 'current' ? 'text-blue-700' :
                                     'text-gray-500'
-                                  }`}>{step}</p>
+                                  }`}>{displayLabel}</p>
                                   {(state === 'completed' || state === 'current') && deptStatus?.updated_by && (
                                     <span className="text-[10px] text-gray-500 font-semibold truncate max-w-[130px]">
                                       · by {deptStatus.updated_by} · {deptStatus.updated_at ? new Date(deptStatus.updated_at).toLocaleString('en-GB') : ''}
@@ -6273,15 +6340,27 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                               </div>
                             );
 
+                            if (currentQcStatus === 'QC Denied') {
+                              if (pendingDeptAction?.dept === dept && pendingDeptAction.status === 'Work Started') {
+                                return renderConfirm(getStatusDisplayLabel('Work Started'), 'Work Started');
+                              }
+                              return (
+                                <button onClick={() => setPendingDeptAction({ dept, status: 'Work Started' })}
+                                  className="w-full py-1.5 px-3 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg text-xs font-bold transition-all border border-red-100">
+                                  Change status to {getStatusDisplayLabel('Work Started')}
+                                </button>
+                              );
+                            }
+
                             if (currentQcStatus) return null;
 
                             if (nextStepIndex < DEPT_FLOW.length) {
                               const nextStatus = DEPT_FLOW[nextStepIndex];
-                              if (pendingDeptAction?.dept === dept && pendingDeptAction.status === nextStatus) return renderConfirm(nextStatus, nextStatus);
+                              if (pendingDeptAction?.dept === dept && pendingDeptAction.status === nextStatus) return renderConfirm(getStatusDisplayLabel(nextStatus), nextStatus);
                               return (
                                 <button onClick={() => setPendingDeptAction({ dept, status: nextStatus })}
                                   className="w-full py-1.5 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold transition-all border border-indigo-100">
-                                  Change status to {nextStatus}
+                                  Change status to {getStatusDisplayLabel(nextStatus)}
                                 </button>
                               );
                             }
@@ -6312,67 +6391,84 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                 )}
 
                 {/* Dispatch/Delivery Card — vertical */}
-                <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden animate-fade-slide-up"
-                  style={{ animationDelay: `${(assignedProductionDepts.length + 1) * 0.08}s` }}>
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-gray-50">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-500">
-                        <Truck size={16} />
+                {(isAllQcApproved(wo as WorkOrder) || wo.status === 'Ready for despatch' || wo.status === 'Dispatched') ? (
+                  <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden animate-fade-slide-up"
+                    style={{ animationDelay: `${(assignedProductionDepts.length + 1) * 0.08}s` }}>
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-50">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-500">
+                          <Truck size={16} />
+                        </div>
+                        <span className="text-sm font-bold text-gray-800">Dispatch</span>
                       </div>
-                      <span className="text-sm font-bold text-gray-800">Dispatch</span>
                     </div>
-                  </div>
-                  <div className="px-4 py-3">
-                    {DISPATCH_FLOW.map((step, stepIdx) => {
-                      const currentDispatchIdx = DISPATCH_FLOW.indexOf(wo.status);
-                      const state = (stepIdx < currentDispatchIdx || wo.status === 'Dispatched') ? 'completed' : stepIdx === currentDispatchIdx ? 'current' : 'upcoming';
-                      return (
-                        <div key={step} className="flex items-start gap-3 pb-5 last:pb-0 relative">
-                          {stepIdx < DISPATCH_FLOW.length - 1 && (
-                            <div className={`absolute left-[11px] top-5 w-0.5 -z-0 transition-all duration-500 ${
-                              stepIdx < currentDispatchIdx ? 'bg-emerald-400' :
-                              stepIdx === currentDispatchIdx ? 'bg-emerald-400/40' :
-                              'bg-gray-200'
-                            }`} style={{ height: 'calc(100% + 4px)' }} />
-                          )}
-                          <div className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center z-10 transition-all duration-300 ${
-                            state === 'completed'
-                              ? 'bg-emerald-100 text-emerald-600 animate-check-pop'
-                              : state === 'current'
-                              ? 'bg-blue-100 text-blue-600 ring-4 ring-blue-50'
-                              : 'bg-gray-100 text-gray-300'
-                          }`}>
-                            {state === 'completed' ? (
-                              <Check size={13} strokeWidth={3} />
-                            ) : state === 'current' ? (
-                              <div className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse-dot" />
-                            ) : (
-                              <div className="w-2.5 h-2.5 rounded-full bg-gray-300" />
+                    <div className="px-4 py-3">
+                      {DISPATCH_FLOW.map((step, stepIdx) => {
+                        const currentDispatchIdx = DISPATCH_FLOW.indexOf(wo.status);
+                        const state = (stepIdx < currentDispatchIdx || wo.status === 'Dispatched') ? 'completed' : stepIdx === currentDispatchIdx ? 'current' : 'upcoming';
+                        return (
+                          <div key={step} className="flex items-start gap-3 pb-5 last:pb-0 relative">
+                            {stepIdx < DISPATCH_FLOW.length - 1 && (
+                              <div className={`absolute left-[11px] top-5 w-0.5 -z-0 transition-all duration-500 ${
+                                stepIdx < currentDispatchIdx ? 'bg-emerald-400' :
+                                stepIdx === currentDispatchIdx ? 'bg-emerald-400/40' :
+                                'bg-gray-200'
+                              }`} style={{ height: 'calc(100% + 4px)' }} />
                             )}
-                          </div>
-                          <div className="pt-0.5 min-w-0">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <p className={`text-sm font-bold leading-tight whitespace-nowrap ${
-                                state === 'completed' ? 'text-emerald-700' :
-                                state === 'current' ? 'text-blue-700' :
-                                'text-gray-500'
-                              }`}>{step}</p>
-                              {(state === 'completed' || state === 'current') && (() => {
-                                const info = statusActorMap.get(step);
-                                if (!info) return null;
-                                return (
-                                  <span className="text-[10px] text-gray-500 font-semibold truncate max-w-[180px]">
-                                    · by {info.actor_name} · {new Date(info.event_time).toLocaleString('en-GB')}
-                                  </span>
-                                );
-                              })()}
+                            <div className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center z-10 transition-all duration-300 ${
+                              state === 'completed'
+                                ? 'bg-emerald-100 text-emerald-600 animate-check-pop'
+                                : state === 'current'
+                                ? 'bg-blue-100 text-blue-600 ring-4 ring-blue-50'
+                                : 'bg-gray-100 text-gray-300'
+                            }`}>
+                              {state === 'completed' ? (
+                                <Check size={13} strokeWidth={3} />
+                              ) : state === 'current' ? (
+                                <div className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse-dot" />
+                              ) : (
+                                <div className="w-2.5 h-2.5 rounded-full bg-gray-300" />
+                              )}
+                            </div>
+                            <div className="pt-0.5 min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className={`text-sm font-bold leading-tight whitespace-nowrap ${
+                                  state === 'completed' ? 'text-emerald-700' :
+                                  state === 'current' ? 'text-blue-700' :
+                                  'text-gray-500'
+                                }`}>{step}</p>
+                                {(state === 'completed' || state === 'current') && (() => {
+                                  const info = statusActorMap.get(step);
+                                  if (!info) return null;
+                                  return (
+                                    <span className="text-[10px] text-gray-500 font-semibold truncate max-w-[180px]">
+                                      · by {info.actor_name} · {new Date(info.event_time).toLocaleString('en-GB')}
+                                    </span>
+                                  );
+                                })()}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="bg-gray-50 rounded-xl border border-dashed border-gray-200 p-4 animate-fade-slide-up"
+                    style={{ animationDelay: `${(assignedProductionDepts.length + 1) * 0.08}s` }}>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 animate-pulse">
+                        <Lock size={18} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-gray-600">Dispatch Locked</p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          Dispatch will be available after QC approval.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           </div>
