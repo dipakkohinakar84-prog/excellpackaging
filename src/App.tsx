@@ -687,7 +687,7 @@ const WorkOrderCardActions: React.FC<{
   busy?: boolean;
 }> = ({ wo, loggedInUser, onViewPlan, onViewDrawing, onChangeStatus, busy = false }) => {
   const statusOptions = getCardStatusOptions(wo, loggedInUser);
-  const drawingUrl = wo.itemInfo?.drawing_image_url;
+  const drawingUrl = wo.drawing_image_url || wo.itemInfo?.drawing_image_url;
   const [showOptions, setShowOptions] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
 
@@ -1653,7 +1653,10 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
               <button key={wo.id} onClick={() => openOrderDetails(wo.id)} className="group w-full px-4 py-3 text-left transition-colors hover:bg-gray-50" style={{ animationDelay: `${index * 20}ms` }}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="text-[11px] font-black text-slate-600">#{wo.id}</div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[11px] font-black text-slate-600">#{wo.id}</span>
+                      <span className="text-[10px] font-semibold text-gray-400">Entry: {formatEntryDate(wo.entry_date || wo.created_at || (wo as any).created)}</span>
+                    </div>
                     <div className="mt-0.5 truncate text-sm font-black text-gray-900 group-hover:text-slate-700">{wo.job_details}</div>
                     <div className="truncate text-xs font-semibold text-gray-500">{wo.customer}</div>
                   </div>
@@ -2226,6 +2229,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                   </th>
                 )}
                 <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Order #</th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Entry Date</th>
                 <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Customer</th>
                 <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Job Details</th>
                 <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Drawing No</th>
@@ -2270,6 +2274,9 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                     )}
                     <td className="px-6 py-4">
                       <span className="text-blue-600 font-bold">#{wo.id}</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-xs font-bold text-gray-600 whitespace-nowrap">{formatEntryDate(wo.entry_date || (wo as any).created_at || (wo as any).created)}</div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="font-semibold text-gray-800">{wo.customer}</div>
@@ -3459,6 +3466,30 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
     }
   };
 
+  const updateItemReferencesInWorkOrders = async (item: Item, nextData: { name: string; drawing_no: string; drawing_image_url?: string; drawing_file?: string }) => {
+    try {
+      const workOrderUpdates: Record<string, any> = {};
+      if (nextData.name !== undefined) workOrderUpdates.job_details = nextData.name;
+      if (nextData.drawing_no !== undefined) workOrderUpdates.drawing = nextData.drawing_no;
+      if (nextData.drawing_image_url !== undefined) workOrderUpdates.drawing_image_url = nextData.drawing_image_url;
+      if (nextData.drawing_file !== undefined) workOrderUpdates.drawing_file = nextData.drawing_file;
+
+      if (Object.keys(workOrderUpdates).length === 0) return;
+
+      const { error } = await supabase
+        .from('work_orders')
+        .update(workOrderUpdates)
+        .eq('source_item_id', item.id);
+
+      if (error) {
+        console.error('Failed to propagate item changes to work orders:', error);
+      }
+    } catch (e) {
+      console.error('Work order propagation error:', e);
+    }
+  };
+
+
   const filteredComponents = allLibraryComponents.filter(c => 
     c.name.toLowerCase().includes(componentSearch.toLowerCase()) ||
     (c.departments || []).some((d: string) => d.toLowerCase().includes(componentSearch.toLowerCase()))
@@ -3766,7 +3797,10 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
           const { error } = result; 
           if(error) alert(error.message);
           else {
-            if (editingItem) await updateItemReferencesInBoms(editingItem, { name: rowsToInsert[0].name, drawing_no: rowsToInsert[0].drawing_no, departments: rowsToInsert[0].departments });
+            if (editingItem) {
+              await updateItemReferencesInBoms(editingItem, { name: rowsToInsert[0].name, drawing_no: rowsToInsert[0].drawing_no, departments: rowsToInsert[0].departments });
+              await updateItemReferencesInWorkOrders(editingItem, { name: rowsToInsert[0].name, drawing_no: rowsToInsert[0].drawing_no, drawing_image_url: rowsToInsert[0].drawing_image_url, drawing_file: rowsToInsert[0].drawing_file });
+            }
             void logActivity({
               eventType: 'item',
               action: editingItem ? 'updated' : 'created',
@@ -3781,11 +3815,12 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
               metadata: { count: rowsToInsert.length, drawing_nos: rowsToInsert.map(row => row.drawing_no), departments: rowsToInsert.map(row => row.departments) },
               severity: 'info',
             });
-            setIsModalOpen(false); 
+            setIsModalOpen(false);
             setEditingItem(null);
             resetItemForm();
             invalidateCollectionCache('items');
-            fetchData(); 
+            invalidateCollectionCache('work_orders');
+            fetchData();
           }
         }} className="flex flex-col h-full gap-6">
 
@@ -4945,6 +4980,7 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
                 <div className="flex items-center gap-1 flex-wrap">
                   <span className="text-[10px] font-black text-indigo-600">#{wo.id}</span>
                   {wo.order_type === 'suborder' && <Badge color="purple" className="!text-[10px]">Suborder Of #{wo.parent_work_order_id || '-'}</Badge>}
+                  <span className="text-[10px] text-gray-400 font-semibold">Entry: {formatEntryDate(wo.entry_date || wo.created_at || (wo as any).created)}</span>
                 </div>
                 <h3 className="text-xs font-black text-slate-800 leading-tight mt-0.5 line-clamp-1 md:line-clamp-2">{wo.job_details}</h3>
                 <p className="hidden md:block text-[10px] font-bold text-gray-500 uppercase">{wo.customer}</p>
@@ -5010,12 +5046,14 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [selectedImageUrl, setSelectedImageUrl] = useState('');
-  const [searchQuery, setSearchQuery] = useState(''); 
+  const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [departmentFilter, setDepartmentFilter] = useState('All');
   const [orderDateFilter, setOrderDateFilter] = useState('all');
   const [orderCustomFrom, setOrderCustomFrom] = useState('');
   const [orderCustomTo, setOrderCustomTo] = useState('');
+  const [overdueOnly, setOverdueOnly] = useState(false);
+  const [sortConfig, setSortConfig] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
   const [page, setPage] = useState(1);
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [busyCardStatusId, setBusyCardStatusId] = useState<number | null>(null);
@@ -5054,9 +5092,11 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
     qty: number | '';
     etd: string;
     drawing: string;
+    drawingImageUrl: string;
+    drawingFile: string;
     departments: string[];
   }
-  
+
   function createBlankLineItem(): OrderLineItem {
     return {
       key: crypto.randomUUID?.() || Math.random().toString(36).substr(2, 9),
@@ -5064,6 +5104,8 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
       qty: 1,
       etd: '',
       drawing: '',
+      drawingImageUrl: '',
+      drawingFile: '',
       departments: [],
     };
   }
@@ -5155,6 +5197,9 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
           customer: params.customer,
           job_details: childItem.name,
           drawing: childItem.drawing_no || '',
+          drawing_image_url: childItem.drawing_image_url || '',
+          drawing_file: childItem.drawing_file || '',
+          entry_date: new Date().toISOString().slice(0, 10),
           qty: suborderQty,
           etd: params.etd,
           status: 'Not Started',
@@ -5254,6 +5299,9 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
           qty: Number(lineItem.qty) || 1,
           etd: lineItem.etd,
           drawing: lineItem.drawing,
+          drawing_image_url: lineItem.drawingImageUrl || '',
+          drawing_file: lineItem.drawingFile || '',
+          entry_date: new Date().toISOString().slice(0, 10),
           status: 'Not Started',
           order_type: 'parent',
           parent_work_order_id: null,
@@ -5342,7 +5390,9 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
       ? statusFiltered.filter(wo => (wo.assigned_departments || []).some(dept => normalizeDepartment(dept) === normalizeDepartment(departmentFilter)))
       : statusFiltered;
 
-    const dateFiltered = departmentFiltered.filter(wo => filterByDate(wo.etd, orderDateFilter, orderCustomFrom, orderCustomTo));
+    const overdueFiltered = overdueOnly ? departmentFiltered.filter(wo => isOrderOverdue(wo)) : departmentFiltered;
+
+    const dateFiltered = overdueFiltered.filter(wo => filterByDate(wo.etd, orderDateFilter, orderCustomFrom, orderCustomTo));
 
     if (!deferredSearchQuery) return dateFiltered;
     const lowerCaseQuery = deferredSearchQuery.toLowerCase();
@@ -5352,15 +5402,74 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
       wo.job_details.toLowerCase().includes(lowerCaseQuery) ||
       (wo.drawing || '').toLowerCase().includes(lowerCaseQuery)
     );
-  }, [data, deferredSearchQuery, statusFilter, departmentFilter, canFilterByDepartment, orderDateFilter, orderCustomFrom, orderCustomTo]);
+  }, [data, deferredSearchQuery, statusFilter, departmentFilter, canFilterByDepartment, orderDateFilter, orderCustomFrom, orderCustomTo, overdueOnly]);
+
+  const sortedOrders = useMemo(() => {
+    if (!sortConfig) return filteredOrders;
+    const { key, dir } = sortConfig;
+    const sortDir = dir === 'asc' ? 1 : -1;
+    return [...filteredOrders].sort((a, b) => {
+      let aVal: any;
+      let bVal: any;
+      if (key === 'id') {
+        aVal = a.id;
+        bVal = b.id;
+      } else if (key === 'created_at') {
+        aVal = a.created_at || (a as any).created || '';
+        bVal = b.created_at || (b as any).created || '';
+      } else if (key === 'customer') {
+        aVal = (a.customer || '').toLowerCase();
+        bVal = (b.customer || '').toLowerCase();
+      } else if (key === 'job_details') {
+        aVal = (a.job_details || '').toLowerCase();
+        bVal = (b.job_details || '').toLowerCase();
+      } else if (key === 'drawing') {
+        aVal = (a.drawing || a.itemInfo?.drawing_no || '').toLowerCase();
+        bVal = (b.drawing || b.itemInfo?.drawing_no || '').toLowerCase();
+      } else if (key === 'qty') {
+        aVal = Number(a.qty) || 0;
+        bVal = Number(b.qty) || 0;
+      } else if (key === 'etd') {
+        aVal = a.etd || '';
+        bVal = b.etd || '';
+      } else if (key === 'status') {
+        aVal = a.status || '';
+        bVal = b.status || '';
+      } else if (key === 'departments') {
+        aVal = (a.assigned_departments || []).join(',').toLowerCase();
+        bVal = (b.assigned_departments || []).join(',').toLowerCase();
+      } else {
+        return 0;
+      }
+      if (aVal < bVal) return -1 * sortDir;
+      if (aVal > bVal) return 1 * sortDir;
+      return 0;
+    });
+  }, [filteredOrders, sortConfig]);
+
+  const handleSort = (key: string) => {
+    setSortConfig(prev => {
+      if (prev?.key === key) {
+        if (prev.dir === 'desc') return null;
+        return { key, dir: 'desc' };
+      }
+      return { key, dir: 'asc' };
+    });
+  };
+
+  const SortIcon = ({ col }: { col: string }) => (
+    sortConfig?.key === col
+      ? <span className="ml-1 text-indigo-500">{sortConfig.dir === 'asc' ? '↑' : '↓'}</span>
+      : <span className="ml-1 opacity-25">↕</span>
+  );
 
   useEffect(() => {
     setPage(1);
-  }, [searchQuery, statusFilter, departmentFilter, data.length]);
+  }, [searchQuery, statusFilter, departmentFilter, overdueOnly, sortConfig, data.length]);
 
   const { pageRows: paginatedOrders, totalPages, safePage, totalRows, startIndex } = useMemo(
-    () => getPageSlice(filteredOrders, page, LIST_PAGE_SIZE),
-    [filteredOrders, page]
+    () => getPageSlice(sortedOrders, page, LIST_PAGE_SIZE),
+    [sortedOrders, page]
   );
 
   const updateCardStatus = async (wo: WorkOrder & { itemInfo?: Item }, status: string) => {
@@ -5469,7 +5578,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
         <details className="md:hidden rounded-2xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
           <summary className="list-none cursor-pointer flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-500">
             <span>Filters &amp; Search</span>
-            <span className="text-blue-600">{statusFilter !== 'All' || departmentFilter !== 'All' ? 'Active' : 'Open'}</span>
+            <span className="text-blue-600">{statusFilter !== 'All' || departmentFilter !== 'All' || overdueOnly ? 'Active' : 'Open'}</span>
           </summary>
           <div className="mt-2 grid gap-2">
             <div className="relative">
@@ -5495,6 +5604,14 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                 <Plus size={16} /> New Order
               </button>
             )}
+            <button
+              onClick={() => setOverdueOnly(v => !v)}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${
+                overdueOnly ? 'bg-red-600 text-white border-red-600' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'
+              }`}
+            >
+              Overdue Only {overdueOnly && '✓'}
+            </button>
           </div>
         </details>
 
@@ -5504,6 +5621,14 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
             {statusOptions.map(s => (
               <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === s ? (statusTabColors[s] || 'bg-slate-900 text-white') : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS[s] || s}</button>
             ))}
+            <button
+              onClick={() => setOverdueOnly(v => !v)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                overdueOnly ? 'bg-red-600 text-white border-red-600' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'
+              }`}
+            >
+              Overdue Only {overdueOnly && '✓'}
+            </button>
           </div>
 
           <div className="relative flex-1 min-w-0 max-w-xs">
@@ -5585,7 +5710,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                         {customerFilteredItems.filter(i => i.name.toLowerCase().includes((itemSearchQueries[item.key] ?? '').toLowerCase())).map(i => (
                           <button key={i.id} type="button"
                             onClick={() => {
-                              const newItems = lineItems.map((li, liIdx) => liIdx === idx ? { ...li, itemName: i.name, drawing: i.drawing_no || '', departments: (collectDirectWorkDepartments(i).length > 0 ? collectDirectWorkDepartments(i) : collectItemBomDepartments(items, i)) } : li);
+                              const newItems = lineItems.map((li, liIdx) => liIdx === idx ? { ...li, itemName: i.name, drawing: i.drawing_no || '', drawingImageUrl: i.drawing_image_url || '', drawingFile: i.drawing_file || '', departments: (collectDirectWorkDepartments(i).length > 0 ? collectDirectWorkDepartments(i) : collectItemBomDepartments(items, i)) } : li);
                               setLineItems(newItems);
                               setItemSearchQueries(q => ({...q, [item.key]: i.name}));
                               setOpenDropdownKey(null);
@@ -5640,7 +5765,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                         {customerFilteredItems.filter(i => i.name.toLowerCase().includes((itemSearchQueries[item.key] ?? '').toLowerCase())).map(i => (
                           <button key={i.id} type="button"
                             onClick={() => {
-                              const newItems = lineItems.map((li, liIdx) => liIdx === idx ? { ...li, itemName: i.name, drawing: i.drawing_no || '', departments: (collectDirectWorkDepartments(i).length > 0 ? collectDirectWorkDepartments(i) : collectItemBomDepartments(items, i)) } : li);
+                              const newItems = lineItems.map((li, liIdx) => liIdx === idx ? { ...li, itemName: i.name, drawing: i.drawing_no || '', drawingImageUrl: i.drawing_image_url || '', drawingFile: i.drawing_file || '', departments: (collectDirectWorkDepartments(i).length > 0 ? collectDirectWorkDepartments(i) : collectItemBomDepartments(items, i)) } : li);
                               setLineItems(newItems);
                               setItemSearchQueries(q => ({...q, [item.key]: i.name}));
                               setOpenDropdownKey(null);
@@ -5731,17 +5856,36 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
 
       {viewMode === 'table' ? (
         <Card className="hidden md:block p-0 overflow-x-auto shadow-md border border-gray-100">
-                <table className="w-full min-w-[1550px] text-left text-sm">
+                <table className="w-full min-w-[1660px] text-left text-sm">
                     <thead className="bg-gray-50 text-xs font-black uppercase text-gray-500 border-b border-gray-200">
                         <tr>
-                            <th className="px-4 py-2 whitespace-nowrap">Order #</th>
-                            <th className="px-4 py-2 whitespace-nowrap">Customer</th>
-                            <th className="px-4 py-2 whitespace-nowrap">Job Details</th>
-                            <th className="px-4 py-2 whitespace-nowrap">Drawing</th>
-                            <th className="px-4 py-2 whitespace-nowrap">Qty</th>
-                            <th className="px-4 py-2 whitespace-nowrap">ETD</th>
-                            <th className="px-4 py-2 whitespace-nowrap">Status</th>
-                            <th className="px-4 py-2 whitespace-nowrap">Depts</th>
+                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('id')}>
+                                <span className="inline-flex items-center">Order #<SortIcon col="id" /></span>
+                            </th>
+                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('created_at')}>
+                                <span className="inline-flex items-center">Entry Date<SortIcon col="created_at" /></span>
+                            </th>
+                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('customer')}>
+                                <span className="inline-flex items-center">Customer<SortIcon col="customer" /></span>
+                            </th>
+                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('job_details')}>
+                                <span className="inline-flex items-center">Job Details<SortIcon col="job_details" /></span>
+                            </th>
+                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('drawing')}>
+                                <span className="inline-flex items-center">Drawing<SortIcon col="drawing" /></span>
+                            </th>
+                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('qty')}>
+                                <span className="inline-flex items-center">Qty<SortIcon col="qty" /></span>
+                            </th>
+                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('etd')}>
+                                <span className="inline-flex items-center">ETD<SortIcon col="etd" /></span>
+                            </th>
+                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('status')}>
+                                <span className="inline-flex items-center">Status<SortIcon col="status" /></span>
+                            </th>
+                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('departments')}>
+                                <span className="inline-flex items-center">Depts<SortIcon col="departments" /></span>
+                            </th>
                             <th className="px-4 py-2 text-right whitespace-nowrap">Action</th>
                         </tr>
                     </thead>
@@ -5756,6 +5900,9 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                                   <div className="text-sm">#{wo.id}</div>
                                   {wo.order_type === 'suborder' && <Badge color="purple" className="!text-xs">Suborder Of #{wo.parent_work_order_id || '-'}</Badge>}
                                 </td>
+                                <td className="px-4 py-2 text-xs font-bold text-gray-600 whitespace-nowrap">
+                                  {formatEntryDate(wo.entry_date || wo.created_at || (wo as any).created)}
+                                </td>
                                 <td className="px-4 py-2 font-bold text-gray-700 text-sm whitespace-nowrap">{wo.customer}</td>
                                 <td className="px-4 py-2 font-semibold text-gray-800 text-sm whitespace-nowrap">
                                   <div>{wo.job_details}</div>
@@ -5763,12 +5910,12 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                                 <td className="px-4 py-2 whitespace-nowrap">
                                     <div className="flex items-center gap-2">
                                         <span className="font-mono text-sm text-gray-500 font-bold">{wo.drawing || wo.itemInfo?.drawing_no || 'TBD'}</span>
-                                        {wo.itemInfo?.drawing_image_url && (
-                                                <button 
-                                                    onClick={(e) => { 
-                                                        e.stopPropagation(); 
-                                                        setSelectedImageUrl(wo.itemInfo!.drawing_image_url!); 
-                                                        setIsImageModalOpen(true); 
+                                        {(wo.drawing_image_url || wo.itemInfo?.drawing_image_url) && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setSelectedImageUrl(wo.drawing_image_url || wo.itemInfo!.drawing_image_url!);
+                                                        setIsImageModalOpen(true);
                                                     }}
                                                     className="text-blue-400 hover:text-blue-600 transition-colors"
                                                     title="View Drawing PDF"
@@ -5818,6 +5965,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                     <div className="flex items-center gap-1 flex-wrap">
                       <span className="text-xs font-black text-indigo-600">#{wo.id}</span>
                       {wo.order_type === 'suborder' && <Badge color="purple" className="!text-xs">Suborder Of #{wo.parent_work_order_id || '-'}</Badge>}
+                      <span className="text-[10px] text-gray-500 font-semibold">Entry: {formatEntryDate(wo.entry_date || wo.created_at || (wo as any).created)}</span>
                     </div>
                     <h3 className="text-sm font-black text-slate-800 leading-tight mt-0.5 line-clamp-1 md:line-clamp-2">{wo.job_details}</h3>
                     <p className="hidden md:block text-xs font-bold text-gray-500 uppercase">{wo.customer}</p>
@@ -5847,9 +5995,9 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                     <span className="text-xs font-black text-gray-500 uppercase md:inline hidden">DRW</span>
                     <span className="text-xs font-bold text-slate-500 truncate md:hidden">{wo.customer}</span>
                     <span className="hidden md:inline text-xs font-mono font-bold text-slate-500 truncate">{wo.drawing || wo.itemInfo?.drawing_no || 'TBD'}</span>
-                    {wo.itemInfo?.drawing_image_url && (
+                    {(wo.drawing_image_url || wo.itemInfo?.drawing_image_url) && (
                       <button
-                        onClick={() => { setSelectedImageUrl(wo.itemInfo!.drawing_image_url!); setIsImageModalOpen(true); }}
+                        onClick={() => { setSelectedImageUrl(wo.drawing_image_url || wo.itemInfo!.drawing_image_url!); setIsImageModalOpen(true); }}
                         className="w-6 h-6 rounded-md bg-blue-50 flex items-center justify-center text-blue-500"
                         title="View Drawing PDF"
                       >
@@ -6489,7 +6637,18 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Blueprint Ref</span>
-                <span className="text-[11px] font-mono font-semibold text-gray-700 px-2 py-1 bg-gray-50 rounded break-all max-w-[140px] text-right">{wo.drawing || '—'}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-mono font-semibold text-gray-700 px-2 py-1 bg-gray-50 rounded break-all max-w-[100px] text-right">{wo.drawing || (wo as any).itemInfo?.drawing_no || '—'}</span>
+                  {(wo.drawing_image_url || (wo as any).itemInfo?.drawing_image_url) && (
+                    <button
+                      onClick={() => window.open(wo.drawing_image_url || (wo as any).itemInfo?.drawing_image_url, '_blank')}
+                      className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
+                      title="Open drawing PDF"
+                    >
+                      <FileText size={14} />
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">QC/Ready Date</span>
@@ -7822,10 +7981,13 @@ const ProductionPlanList: React.FC<{ onError: () => void; onGenerate: (ids: numb
           )}
 
           {paginatedPlanOrders.map(wo => (
-            <div key={wo.id} className={`rounded-xl border p-3 ${selectedIds.includes(wo.id) ? 'border-indigo-300 bg-indigo-50/50' : 'border-gray-200 bg-white'}`}>
+              <div key={wo.id} className={`rounded-xl border p-3 ${selectedIds.includes(wo.id) ? 'border-indigo-300 bg-indigo-50/50' : 'border-gray-200 bg-white'}`}>
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-[10px] font-black text-indigo-600">ORDER #{wo.id}</div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <div className="text-[10px] font-black text-indigo-600">ORDER #{wo.id}</div>
+                    <div className="text-[10px] font-semibold text-gray-400">Entry: {formatEntryDate(wo.entry_date || wo.created_at || (wo as any).created)}</div>
+                  </div>
                   <div className="font-black text-gray-800 mt-0.5 leading-tight text-xs">{wo.job_details}</div>
                   <div className="text-[11px] text-gray-500 font-semibold mt-0.5">{wo.customer}</div>
                 </div>
@@ -8036,6 +8198,8 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
   const [alertsDateFilter, setAlertsDateFilter] = useState('all');
   const [alertsCustomFrom, setAlertsCustomFrom] = useState('');
   const [alertsCustomTo, setAlertsCustomTo] = useState('');
+  const [errorsOnly, setErrorsOnly] = useState(false);
+  const [sortConfig, setSortConfig] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
   const activityOffsetRef = useRef(0);
   const notificationOffsetRef = useRef(0);
   const ACTIVITY_PAGE = 100;
@@ -8154,10 +8318,86 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
         const evDepts = getEventDepartments(ev);
         if (!evDepts.some(d => d.toLowerCase() === departmentFilter.toLowerCase())) return false;
       }
+      if (errorsOnly) {
+        const failed = Number(ev.failed || 0);
+        const isError = ev.severity === 'error';
+        if (failed <= 0 && !isError) return false;
+      }
       if (!filterByDate(ev.event_time, alertsDateFilter, alertsCustomFrom, alertsCustomTo)) return false;
       return true;
     });
-  }, [events, searchQuery, userFilter, departmentFilter, alertsDateFilter, alertsCustomFrom, alertsCustomTo]);
+  }, [events, searchQuery, userFilter, departmentFilter, alertsDateFilter, alertsCustomFrom, alertsCustomTo, errorsOnly]);
+
+  const sortedEvents = useMemo(() => {
+    if (!sortConfig) return filteredEvents;
+    const { key, dir } = sortConfig;
+    const sortDir = dir === 'asc' ? 1 : -1;
+    return [...filteredEvents].sort((a: any, b: any) => {
+      let aVal: any;
+      let bVal: any;
+      if (key === 'time') {
+        aVal = getEventTimestamp(a);
+        bVal = getEventTimestamp(b);
+      } else if (key === 'type') {
+        aVal = getEventType(a);
+        bVal = getEventType(b);
+      } else if (key === 'action') {
+        aVal = getEventAction(a);
+        bVal = getEventAction(b);
+      } else if (key === 'title') {
+        aVal = String(a.title || '').toLowerCase();
+        bVal = String(b.title || '').toLowerCase();
+      } else if (key === 'body') {
+        aVal = String(a.body || '').toLowerCase();
+        bVal = String(b.body || '').toLowerCase();
+      } else if (key === 'actor') {
+        aVal = getEventActor(a).toLowerCase();
+        bVal = getEventActor(b).toLowerCase();
+      } else if (key === 'departments') {
+        aVal = getEventDepartments(a).join(',').toLowerCase();
+        bVal = getEventDepartments(b).join(',').toLowerCase();
+      } else if (key === 'wo') {
+        aVal = a.work_order_id || 0;
+        bVal = b.work_order_id || 0;
+      } else if (key === 'customer') {
+        aVal = String(a.customer_name || '').toLowerCase();
+        bVal = String(b.customer_name || '').toLowerCase();
+      } else if (key === 'target') {
+        aVal = String(a.item_name || a.target_label || '').toLowerCase();
+        bVal = String(b.item_name || b.target_label || '').toLowerCase();
+      } else if (key === 'targets') {
+        aVal = Number(a.targets) || 0;
+        bVal = Number(b.targets) || 0;
+      } else if (key === 'sent') {
+        aVal = Number(a.sent) || 0;
+        bVal = Number(b.sent) || 0;
+      } else if (key === 'failed') {
+        aVal = Number(a.failed) || 0;
+        bVal = Number(b.failed) || 0;
+      } else {
+        return 0;
+      }
+      if (aVal < bVal) return -1 * sortDir;
+      if (aVal > bVal) return 1 * sortDir;
+      return 0;
+    });
+  }, [filteredEvents, sortConfig]);
+
+  const handleSort = (key: string) => {
+    setSortConfig(prev => {
+      if (prev?.key === key) {
+        if (prev.dir === 'desc') return null;
+        return { key, dir: 'desc' };
+      }
+      return { key, dir: 'asc' };
+    });
+  };
+
+  const SortIcon = ({ col }: { col: string }) => (
+    sortConfig?.key === col
+      ? <span className="ml-1 text-indigo-500">{sortConfig.dir === 'asc' ? '↑' : '↓'}</span>
+      : <span className="ml-1 opacity-25">↕</span>
+  );
 
   if (loading) return <LoadingState message="Loading activity log..." />;
 
@@ -8195,6 +8435,14 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
             <input type="date" value={alertsCustomTo} onChange={e => setAlertsCustomTo(e.target.value)} className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs bg-white" />
           </>
         )}
+        <button
+          onClick={() => setErrorsOnly(v => !v)}
+          className={`px-4 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+            errorsOnly ? 'bg-red-600 text-white border-red-600' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'
+          }`}
+        >
+          Errors Only {errorsOnly && '✓'}
+        </button>
         <button onClick={fetchEvents} className="px-4 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-black hover:bg-blue-700 transition-colors">Refresh</button>
       </div>
 
@@ -8242,23 +8490,49 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
           <table className="w-full min-w-[1180px] text-sm">
             <thead className="bg-gray-50 text-[10px] uppercase tracking-widest text-gray-500 font-black border-b">
               <tr>
-                <th className="px-4 py-2 text-left">Time</th>
-                <th className="px-4 py-2 text-left">Type</th>
-                <th className="px-4 py-2 text-left">Action</th>
-                <th className="px-4 py-2 text-left">Title</th>
-                <th className="px-4 py-2 text-left">Message</th>
-                <th className="px-4 py-2 text-left">Done By</th>
-                <th className="px-4 py-2 text-left">Departments</th>
-                <th className="px-4 py-2 text-left">WO #</th>
-                <th className="px-4 py-2 text-left">Customer</th>
-                <th className="px-4 py-2 text-left">Item/Target</th>
-                <th className="px-4 py-2 text-left">Targets</th>
-                <th className="px-4 py-2 text-left">Sent</th>
-                <th className="px-4 py-2 text-left">Failed</th>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('time')}>
+                  <span className="inline-flex items-center">Time<SortIcon col="time" /></span>
+                </th>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('type')}>
+                  <span className="inline-flex items-center">Type<SortIcon col="type" /></span>
+                </th>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('action')}>
+                  <span className="inline-flex items-center">Action<SortIcon col="action" /></span>
+                </th>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('title')}>
+                  <span className="inline-flex items-center">Title<SortIcon col="title" /></span>
+                </th>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('body')}>
+                  <span className="inline-flex items-center">Message<SortIcon col="body" /></span>
+                </th>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('actor')}>
+                  <span className="inline-flex items-center">Done By<SortIcon col="actor" /></span>
+                </th>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('departments')}>
+                  <span className="inline-flex items-center">Departments<SortIcon col="departments" /></span>
+                </th>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('wo')}>
+                  <span className="inline-flex items-center">WO #<SortIcon col="wo" /></span>
+                </th>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('customer')}>
+                  <span className="inline-flex items-center">Customer<SortIcon col="customer" /></span>
+                </th>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('target')}>
+                  <span className="inline-flex items-center">Item/Target<SortIcon col="target" /></span>
+                </th>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('targets')}>
+                  <span className="inline-flex items-center">Targets<SortIcon col="targets" /></span>
+                </th>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('sent')}>
+                  <span className="inline-flex items-center">Sent<SortIcon col="sent" /></span>
+                </th>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('failed')}>
+                  <span className="inline-flex items-center">Failed<SortIcon col="failed" /></span>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filteredEvents.map((ev: any) => {
+              {sortedEvents.map((ev: any) => {
                 const departments = getEventDepartments(ev);
                 return (
                   <tr key={`${ev._source}-${ev.id}`}>
@@ -8282,7 +8556,7 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
                   </tr>
                 );
               })}
-              {filteredEvents.length === 0 && (
+              {sortedEvents.length === 0 && (
                 <tr>
                   <td colSpan={13} className="px-4 py-10 text-center text-gray-500 italic font-semibold">No activity events found.</td>
                 </tr>
@@ -9224,6 +9498,13 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
 };
 
 // --- Production Entry ---
+
+const formatEntryDate = (dateValue: string | undefined | null): string => {
+  if (!dateValue) return '—';
+  const d = new Date(dateValue);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-GB'); // dd/mm/yyyy
+};
 
 const filterByDate = (dateStr: string | undefined, filter: string, customFrom: string, customTo: string): boolean => {
   if (filter === 'all' || !dateStr) return true;
@@ -10339,6 +10620,237 @@ export default function App() {
   useEffect(() => {
     sessionStorage.setItem('excell_erp_view', view);
   }, [view]);
+
+  // One-time backfill: snapshot item data to existing work orders
+  const [backfillRunning, setBackfillRunning] = useState(false);
+
+  const runOneTimeBackfill = async () => {
+    const BACKFILL_KEY = 'work_order_backfill_v1_done';
+    if (typeof window === 'undefined') return;
+    if (localStorage.getItem(BACKFILL_KEY) === 'true') return;
+    if (backfillRunning) return;
+
+    setBackfillRunning(true);
+    let updatedItemCount = 0;
+    let errorCount = 0;
+
+    try {
+      const { data: items } = await supabase.from('items').select('*');
+      if (!items) {
+        setBackfillRunning(false);
+        return;
+      }
+
+      for (const item of items) {
+        const updates: Record<string, any> = {};
+        if (item.name) updates.job_details = item.name;
+        if (item.drawing_no !== undefined) updates.drawing = item.drawing_no;
+
+        let effectiveImageUrl = item.drawing_image_url || '';
+        if (!effectiveImageUrl && item.drawing_file) {
+          const fileName = Array.isArray(item.drawing_file) ? item.drawing_file[0] : item.drawing_file;
+          if (fileName && typeof fileName === 'string') {
+            try {
+              effectiveImageUrl = pb.files.getURL({ id: item.id, collectionId: '', collectionName: 'items' } as any, fileName);
+            } catch (e) {
+              console.warn(`Could not generate URL for item ${item.id} file ${fileName}:`, e);
+            }
+          }
+        }
+        if (effectiveImageUrl) updates.drawing_image_url = effectiveImageUrl;
+        if (item.drawing_file !== undefined) updates.drawing_file = item.drawing_file;
+
+        if (Object.keys(updates).length === 0) continue;
+
+        const { error } = await supabase
+          .from('work_orders')
+          .update(updates)
+          .eq('source_item_id', item.id);
+
+        if (error) {
+          console.error(`Backfill failed for item ${item.id}:`, error);
+          errorCount++;
+        } else {
+          updatedItemCount++;
+        }
+      }
+
+      console.log(`[Backfill v1] Updated ${updatedItemCount} items' work orders. ${errorCount} errors.`);
+      localStorage.setItem(BACKFILL_KEY, 'true');
+      invalidateCollectionCache('work_orders');
+
+      try {
+        void logActivity({
+          eventType: 'item',
+          action: 'backfill',
+          title: 'Work Orders Backfilled from Items (v1)',
+          body: `Auto-backfilled ${updatedItemCount} items to work orders (drawing_no, job_details, drawing_image_url, drawing_file).`,
+          actor: getStoredLoggedInUser(),
+          severity: 'info',
+        });
+      } catch (_) {
+        // logActivity may not be available in this scope
+      }
+    } catch (e) {
+      console.error('Backfill error:', e);
+    }
+
+    setBackfillRunning(false);
+  };
+
+  useEffect(() => {
+    const BACKFILL_KEY = 'work_order_backfill_v1_done';
+    if (typeof window === 'undefined') return;
+    if (localStorage.getItem(BACKFILL_KEY) === 'true') return;
+    runOneTimeBackfill();
+  }, []);
+
+  const [entryDateBackfillRunning, setEntryDateBackfillRunning] = useState(false);
+
+  const runEntryDateBackfill = async () => {
+    const BACKFILL_KEY = 'work_order_entry_date_backfill_v1_done';
+    if (typeof window === 'undefined') return;
+    if (localStorage.getItem(BACKFILL_KEY) === 'true') return;
+    if (entryDateBackfillRunning) return;
+
+    setEntryDateBackfillRunning(true);
+    let updatedCount = 0;
+    let skippedCount = 0;
+    let errorCount = 0;
+    let fieldMissingCount = 0;
+
+    try {
+      const { data: orders } = await supabase.from('work_orders').select('*');
+      if (!orders) {
+        setEntryDateBackfillRunning(false);
+        return;
+      }
+
+      const { data: activities } = await supabase
+        .from('activity_events')
+        .select('work_order_id, target_id, target_label, customer_name, event_time')
+        .eq('event_type', 'work_order')
+        .eq('action', 'created')
+        .eq('title', 'Order Created');
+
+      type EventRecord = { eventTime: string };
+      const eventMap = new Map<string, EventRecord[]>();
+
+      const addEvent = (key: string, rec: EventRecord) => {
+        const arr = eventMap.get(key) || [];
+        arr.push(rec);
+        eventMap.set(key, arr);
+      };
+
+      activities?.forEach((ev: any) => {
+        const eventTime = ev.event_time;
+        if (!eventTime) return;
+
+        let workOrderId = NaN;
+        if (ev.work_order_id) {
+          workOrderId = Number(ev.work_order_id);
+        } else if (ev.target_id) {
+          workOrderId = Number(ev.target_id);
+        }
+        if (isNaN(workOrderId)) return;
+
+        const itemName = (ev.target_label || '').trim().toLowerCase();
+        const customerName = (ev.customer_name || '').trim().toLowerCase();
+        if (!itemName || !customerName) return;
+
+        const key = `${workOrderId}|${itemName}|${customerName}`;
+        addEvent(key, { eventTime });
+      });
+
+      for (const order of orders) {
+        if (order.entry_date) {
+          skippedCount++;
+          continue;
+        }
+
+        const workOrderId = Number(order.id);
+        const itemName = (order.job_details || '').trim().toLowerCase();
+        const customerName = (order.customer || '').trim().toLowerCase();
+
+        if (!workOrderId || !itemName || !customerName) {
+          skippedCount++;
+          continue;
+        }
+
+        const key = `${workOrderId}|${itemName}|${customerName}`;
+        const candidates = eventMap.get(key);
+        if (!candidates || candidates.length === 0) {
+          skippedCount++;
+          continue;
+        }
+
+        const earliest = candidates.reduce((min, c) =>
+          new Date(c.eventTime) < new Date(min.eventTime) ? c : min
+        );
+
+        const entryDate = new Date(earliest.eventTime).toISOString().slice(0, 10);
+
+        const { data: updateResult, error } = await supabase
+          .from('work_orders')
+          .update({ entry_date: entryDate })
+          .eq('id', order.id);
+
+        if (error) {
+          console.error(`Failed to backfill entry_date for order ${order.id}:`, error);
+          errorCount++;
+        } else if (updateResult && Array.isArray(updateResult) && updateResult.length > 0) {
+          // Verify the field was actually persisted
+          const persisted = updateResult[0]?.entry_date;
+          if (persisted) {
+            updatedCount++;
+          } else {
+            console.warn(`Order ${order.id}: update succeeded but entry_date not persisted. Field may not exist in PocketBase collection schema.`);
+            fieldMissingCount++;
+            errorCount++;
+          }
+        } else if (updateResult && !Array.isArray(updateResult) && updateResult.entry_date) {
+          // Single record update response
+          updatedCount++;
+        } else {
+          console.warn(`Order ${order.id}: update returned no data. Field may not exist in PocketBase collection schema.`);
+          fieldMissingCount++;
+          errorCount++;
+        }
+      }
+
+      if (fieldMissingCount > 0) {
+        console.error(`[Entry Date Backfill] CRITICAL: ${fieldMissingCount} updates failed because 'entry_date' field does not exist in the PocketBase 'work_orders' collection schema. Add this field in PocketBase Admin (type: date) and clear localStorage to re-run.`);
+      }
+
+      console.log(`[Entry Date Backfill] Updated ${updatedCount} orders, skipped ${skippedCount}, ${errorCount} errors (${fieldMissingCount} field-missing).`);
+      localStorage.setItem(BACKFILL_KEY, 'true');
+      invalidateCollectionCache('work_orders');
+
+      try {
+        void logActivity({
+          eventType: 'work_order',
+          action: 'backfill',
+          title: 'Work Order Entry Dates Backfilled (v1)',
+          body: `Auto-backfilled ${updatedCount} work orders with entry dates from activity events (strict 3-field match: order_id + item + customer). ${skippedCount} skipped (no exact match). ${errorCount} errors${fieldMissingCount > 0 ? ` (${fieldMissingCount} failed: field missing in PocketBase schema)` : ''}.`,
+          actor: getStoredLoggedInUser(),
+          severity: fieldMissingCount > 0 ? 'error' : 'info',
+        });
+      } catch (_) {
+        // logActivity may not be available in this scope
+      }
+    } catch (e) {
+      console.error('Entry date backfill error:', e);
+    }
+
+    setEntryDateBackfillRunning(false);
+  };
+
+  useEffect(() => {
+    const ENTRY_DATE_BACKFILL_KEY = 'work_order_entry_date_backfill_v1_done';
+    if (typeof window === 'undefined') return;
+    if (localStorage.getItem(ENTRY_DATE_BACKFILL_KEY) === 'true') return;
+    runEntryDateBackfill();
+  }, []);
 
   // Save read IDs to localStorage
   useEffect(() => {

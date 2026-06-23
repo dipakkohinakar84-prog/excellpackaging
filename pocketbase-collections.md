@@ -94,6 +94,9 @@ Fields:
 - `parent_item_name`: text
 - `source_item_id`: number
 - `source_child_qty`: number
+- `drawing_image_url`: text (snapshot of item drawing_image_url at creation)
+- `drawing_file`: text (snapshot of item drawing_file filename at creation)
+- `entry_date`: date (when the order was created; backfilled from activity_events)
 
 ## dispatch_logs
 

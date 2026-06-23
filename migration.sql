@@ -123,3 +123,10 @@ CREATE TABLE IF NOT EXISTS vehicles (
 
 CREATE INDEX IF NOT EXISTS idx_vehicles_vehicle_no
   ON vehicles(vehicle_no);
+
+-- 8. Add 'drawing_image_url' and 'drawing_file' to work_orders (snapshot of item PDF at creation)
+ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS drawing_image_url TEXT;
+ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS drawing_file TEXT;
+
+-- 9. Add 'entry_date' to work_orders (backfilled from activity_events.event_time)
+ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS entry_date DATE;

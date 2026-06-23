@@ -288,6 +288,9 @@ export interface WorkOrder {
   customer: string;
   job_details: string;
   drawing: string;
+  drawing_image_url?: string;
+  drawing_file?: string;
+  entry_date?: string;
   qty: number;
   qty_dispatched?: number;
   last_invoice_no?: string;
