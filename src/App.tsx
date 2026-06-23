@@ -1825,6 +1825,8 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
   const [dispatchCustomFrom, setDispatchCustomFrom] = useState('');
   const [dispatchCustomTo, setDispatchCustomTo] = useState('');
   const [dispatchCompanyFilter, setDispatchCompanyFilter] = useState('All');
+  const [dispatchDepartmentFilter, setDispatchDepartmentFilter] = useState('All');
+  const [overdueOnly, setOverdueOnly] = useState(false);
   const [dispatchLogsMap, setDispatchLogsMap] = useState<Map<number, any[]>>(new Map());
   const [page, setPage] = useState(1);
   const deferredSearchQuery = useDeferredValue(searchQuery);
@@ -1838,6 +1840,29 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
   const [selectedOrders, setSelectedOrders] = useState<Record<number, number>>({});
   const [dispatchMode, setDispatchMode] = useState(false);
   const [editingDispatchDate, setEditingDispatchDate] = useState<number | null>(null);
+
+  const isOrderOverdue = (wo: WorkOrder) => {
+    if (!wo.etd || wo.status === 'Dispatched') return false;
+    return wo.etd < new Date().toISOString().slice(0, 10);
+  };
+
+  const [sortConfig, setSortConfig] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
+
+  const handleSort = (key: string) => {
+    setSortConfig(prev => {
+      if (prev?.key === key) {
+        if (prev.dir === 'desc') return null;
+        return { key, dir: 'desc' };
+      }
+      return { key, dir: 'asc' };
+    });
+  };
+
+  const SortIcon = ({ col }: { col: string }) => (
+    sortConfig?.key === col
+      ? <span className="ml-1 text-indigo-500">{sortConfig.dir === 'asc' ? '↑' : '↓'}</span>
+      : <span className="ml-1 opacity-25">↕</span>
+  );
 
   const fetchData = async () => {
     setLoading(true);
@@ -2062,10 +2087,18 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
     return Array.from(companies).sort();
   }, [data]);
 
+  const dispatchDepartmentOptions = useMemo(() => {
+    const depts = new Set<string>();
+    data.forEach(wo => (wo.assigned_departments || []).forEach(d => depts.add(d)));
+    return Array.from(depts).sort();
+  }, [data]);
+
   const filteredOrders = useMemo(() => {
     const statusFiltered = statusFilter === 'Ready for despatch' ? data.filter(wo => wo.status === 'Ready for despatch' || (wo.status === 'Dispatched' && (wo.qty - (wo.qty_dispatched || 0)) > 0)) : data.filter(wo => wo.status === 'Dispatched');
     const companyFiltered = dispatchCompanyFilter === 'All' ? statusFiltered : statusFiltered.filter(wo => wo.customer === dispatchCompanyFilter);
-    const dateFiltered = companyFiltered.filter(wo => {
+    const deptFiltered = dispatchDepartmentFilter === 'All' ? companyFiltered : companyFiltered.filter(wo => (wo.assigned_departments || []).some(dept => normalizeDepartment(dept) === normalizeDepartment(dispatchDepartmentFilter)));
+    const overdueFiltered = overdueOnly ? deptFiltered.filter(wo => isOrderOverdue(wo)) : deptFiltered;
+    const dateFiltered = overdueFiltered.filter(wo => {
       const logs = dispatchLogsMap.get(wo.id) || [];
       if (logs.length > 0) {
         return logs.some((log: any) => filterByDate(log.dispatch_date, dispatchDateFilter, dispatchCustomFrom, dispatchCustomTo));
@@ -2079,15 +2112,52 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
       wo.customer.toLowerCase().includes(lowerQuery) ||
       wo.job_details.toLowerCase().includes(lowerQuery)
     );
-  }, [data, deferredSearchQuery, statusFilter, dispatchDateFilter, dispatchCustomFrom, dispatchCustomTo, dispatchCompanyFilter, dispatchLogsMap]);
+  }, [data, deferredSearchQuery, statusFilter, dispatchDateFilter, dispatchCustomFrom, dispatchCustomTo, dispatchCompanyFilter, dispatchDepartmentFilter, overdueOnly, dispatchLogsMap]);
+
+  const sortedOrders = useMemo(() => {
+    if (!sortConfig) return filteredOrders;
+    const { key, dir } = sortConfig;
+    const sortDir = dir === 'asc' ? 1 : -1;
+    return [...filteredOrders].sort((a, b) => {
+      let aVal: any;
+      let bVal: any;
+      if (key === 'id') {
+        aVal = a.id; bVal = b.id;
+      } else if (key === 'entry_date') {
+        aVal = a.entry_date || (a as any).created_at || (a as any).created || '';
+        bVal = b.entry_date || (b as any).created_at || (b as any).created || '';
+      } else if (key === 'customer') {
+        aVal = (a.customer || '').toLowerCase(); bVal = (b.customer || '').toLowerCase();
+      } else if (key === 'job_details') {
+        aVal = (a.job_details || '').toLowerCase(); bVal = (b.job_details || '').toLowerCase();
+      } else if (key === 'drawing') {
+        aVal = (a.drawing || '').toLowerCase(); bVal = (b.drawing || '').toLowerCase();
+      } else if (key === 'qty') {
+        aVal = Number(a.qty) || 0; bVal = Number(b.qty) || 0;
+      } else if (key === 'etd') {
+        aVal = a.etd || ''; bVal = b.etd || '';
+      } else if (key === 'dispatched') {
+        aVal = Number(a.qty_dispatched) || 0; bVal = Number(b.qty_dispatched) || 0;
+      } else if (key === 'remaining') {
+        aVal = (a.qty || 0) - (a.qty_dispatched || 0); bVal = (b.qty || 0) - (b.qty_dispatched || 0);
+      } else if (key === 'status') {
+        aVal = a.status || ''; bVal = b.status || '';
+      } else {
+        return 0;
+      }
+      if (aVal < bVal) return -1 * sortDir;
+      if (aVal > bVal) return 1 * sortDir;
+      return 0;
+    });
+  }, [filteredOrders, sortConfig]);
 
   useEffect(() => {
     setPage(1);
-  }, [searchQuery, statusFilter, data.length]);
+  }, [searchQuery, statusFilter, data.length, sortConfig, dispatchDepartmentFilter, overdueOnly]);
 
   const { pageRows: paginatedOrders, totalPages, safePage, totalRows, startIndex } = useMemo(
-    () => getPageSlice(filteredOrders, page, LIST_PAGE_SIZE),
-    [filteredOrders, page]
+    () => getPageSlice(sortedOrders, page, LIST_PAGE_SIZE),
+    [sortedOrders, page]
   );
 
   const getRemainingQty = (wo: WorkOrder) => {
@@ -2098,23 +2168,75 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
 
   return (
     <div className="space-y-6 custom-bom-print">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
-          <input
-            type="text"
-            placeholder="Search by order, customer, or job..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500"
-          />
+      <details className="md:hidden rounded-2xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
+        <summary className="list-none cursor-pointer flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-500">
+          <span>Filters &amp; Search</span>
+          <span className="text-blue-600">{overdueOnly || dispatchDepartmentFilter !== 'All' || dispatchCompanyFilter !== 'All' || dispatchDateFilter !== 'all' ? 'Active' : 'Open'}</span>
+        </summary>
+        <div className="mt-2 grid gap-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+            <input type="text" placeholder="Search order, customer, job..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-9 pr-3 py-1.5 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-xs" />
+          </div>
+          <div className="flex gap-1.5 flex-wrap">
+            <button onClick={() => setStatusFilter('Ready for despatch')} className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${statusFilter === 'Ready for despatch' ? statusTabColors['Ready for despatch'] : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS['Ready for despatch']}</button>
+            <button onClick={() => setStatusFilter('Dispatched')} className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${statusFilter === 'Dispatched' ? statusTabColors['Dispatched'] : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS['Dispatched']}</button>
+          </div>
+          <select value={dispatchCompanyFilter} onChange={e => setDispatchCompanyFilter(e.target.value)} className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="All">All Companies</option>
+            {dispatchCompanyOptions.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          {dispatchDepartmentOptions.length > 0 && (
+            <select value={dispatchDepartmentFilter} onChange={e => setDispatchDepartmentFilter(e.target.value)} className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="All">All Departments</option>
+              {dispatchDepartmentOptions.map(d => <option key={d} value={d}>{d.replace(/_/g, ' ')}</option>)}
+            </select>
+          )}
+          <button onClick={() => setOverdueOnly(v => !v)} className={`w-full px-2.5 py-1.5 rounded-lg text-[10px] font-bold border transition-all text-center ${overdueOnly ? 'bg-red-600 text-white border-red-600' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>Overdue Only {overdueOnly && '✓'}</button>
+          <select value={dispatchDateFilter} onChange={e => { setDispatchDateFilter(e.target.value); if (e.target.value !== 'custom') { setDispatchCustomFrom(''); setDispatchCustomTo(''); } }} className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="all">All Dates</option>
+            <option value="today">Today</option>
+            <option value="week">This Week</option>
+            <option value="month">This Month</option>
+            <option value="custom">Custom</option>
+          </select>
+          {dispatchDateFilter === 'custom' && (
+            <div className="flex items-center gap-2">
+              <input type="date" value={dispatchCustomFrom} onChange={e => setDispatchCustomFrom(e.target.value)} className="flex-1 px-3 py-1.5 border border-gray-200 rounded-xl text-xs bg-white" />
+              <span className="text-gray-500 text-xs">to</span>
+              <input type="date" value={dispatchCustomTo} onChange={e => setDispatchCustomTo(e.target.value)} className="flex-1 px-3 py-1.5 border border-gray-200 rounded-xl text-xs bg-white" />
+            </div>
+          )}
+          {statusFilter === 'Ready for despatch' && !dispatchMode && (
+            <button onClick={() => setDispatchMode(true)} className="w-full px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-1.5 justify-center"><Package size={14} /> Bulk Dispatch</button>
+          )}
+          {statusFilter === 'Ready for despatch' && dispatchMode && (
+            <div className="flex gap-2">
+              <button onClick={() => { setDispatchMode(false); setSelectedOrders({}); }} className="flex-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">Cancel</button>
+              <button onClick={handleBulkDispatch} disabled={Object.keys(selectedOrders).length === 0} className="flex-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 justify-center"><Check size={14} /> Dispatch ({Object.keys(selectedOrders).length})</button>
+            </div>
+          )}
         </div>
-        <button onClick={() => setStatusFilter('Ready for despatch')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === 'Ready for despatch' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>Ready For Dispatch</button>
-        <button onClick={() => setStatusFilter('Dispatched')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === 'Dispatched' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>Dispatched</button>
+      </details>
+
+      <div className="hidden md:flex flex-wrap items-center gap-2">
+        <button onClick={() => setStatusFilter('Ready for despatch')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === 'Ready for despatch' ? statusTabColors['Ready for despatch'] : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS['Ready for despatch']}</button>
+        <button onClick={() => setStatusFilter('Dispatched')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === 'Dispatched' ? statusTabColors['Dispatched'] : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS['Dispatched']}</button>
+        <button onClick={() => setOverdueOnly(v => !v)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${overdueOnly ? 'bg-red-600 text-white border-red-600' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>Overdue Only {overdueOnly && '✓'}</button>
+        <div className="relative flex-1 min-w-0 max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+          <input type="text" placeholder="Search by order, customer, or job..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-9 pr-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
         <select value={dispatchCompanyFilter} onChange={e => setDispatchCompanyFilter(e.target.value)} className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
           <option value="All">All Companies</option>
           {dispatchCompanyOptions.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
+        {dispatchDepartmentOptions.length > 0 && (
+          <select value={dispatchDepartmentFilter} onChange={e => setDispatchDepartmentFilter(e.target.value)} className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="All">All Departments</option>
+            {dispatchDepartmentOptions.map(d => <option key={d} value={d}>{d.replace(/_/g, ' ')}</option>)}
+          </select>
+        )}
         <select value={dispatchDateFilter} onChange={e => { setDispatchDateFilter(e.target.value); if (e.target.value !== 'custom') { setDispatchCustomFrom(''); setDispatchCustomTo(''); } }} className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
           <option value="all">All Dates</option>
           <option value="today">Today</option>
@@ -2130,18 +2252,12 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
           </>
         )}
         {!dispatchMode && (
-          <button onClick={() => setDispatchMode(true)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-1.5">
-            <Package size={14} /> Bulk Dispatch
-          </button>
+          <button onClick={() => setDispatchMode(true)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-1.5"><Package size={14} /> Bulk Dispatch</button>
         )}
         {dispatchMode && (
           <>
-            <button onClick={() => { setDispatchMode(false); setSelectedOrders({}); }} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">
-              Cancel
-            </button>
-            <button onClick={handleBulkDispatch} disabled={Object.keys(selectedOrders).length === 0} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
-              <Check size={14} /> Dispatch ({Object.keys(selectedOrders).length})
-            </button>
+            <button onClick={() => { setDispatchMode(false); setSelectedOrders({}); }} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">Cancel</button>
+            <button onClick={handleBulkDispatch} disabled={Object.keys(selectedOrders).length === 0} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"><Check size={14} /> Dispatch ({Object.keys(selectedOrders).length})</button>
           </>
         )}
       </div>
@@ -2228,14 +2344,15 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                     />
                   </th>
                 )}
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Order #</th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Entry Date</th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Customer</th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Job Details</th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Drawing No</th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Total Qty</th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Dispatched</th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Remaining</th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('id')}><span className="inline-flex items-center">Order #<SortIcon col="id" /></span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('entry_date')}><span className="inline-flex items-center">Entry Date<SortIcon col="entry_date" /></span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('customer')}><span className="inline-flex items-center">Customer<SortIcon col="customer" /></span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('job_details')}><span className="inline-flex items-center">Job Details<SortIcon col="job_details" /></span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('drawing')}><span className="inline-flex items-center">Drawing No<SortIcon col="drawing" /></span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('qty')}><span className="inline-flex items-center">Total Qty<SortIcon col="qty" /></span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('etd')}><span className="inline-flex items-center">ETD<SortIcon col="etd" /></span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('dispatched')}><span className="inline-flex items-center">Dispatched<SortIcon col="dispatched" /></span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('remaining')}><span className="inline-flex items-center">Remaining<SortIcon col="remaining" /></span></th>
                 {statusFilter === 'Dispatched' && (
                   <>
                     <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Invoice</th>
@@ -2246,140 +2363,132 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                 {dispatchMode && (
                   <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Dispatch Qty</th>
                 )}
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Status</th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('status')}><span className="inline-flex items-center">Status<SortIcon col="status" /></span></th>
                 <th className="px-6 py-3 text-right text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {paginatedOrders.map(wo => {
-                const remaining = getRemainingQty(wo);
-                const isSelected = selectedOrders[wo.id] !== undefined;
-                const canDispatch = remaining > 0;
-
-                return (
-                  <tr 
-                    key={wo.id}
-                    className={`border-b transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
-                  >
-                    {dispatchMode && (
-                      <td className="px-4 py-4">
-                        <input
-                          type="checkbox"
-                          className="w-4 h-4 rounded"
-                          checked={isSelected}
-                          disabled={!canDispatch}
-                          onChange={() => toggleOrderSelection(wo.id, remaining)}
-                        />
-                      </td>
-                    )}
-                    <td className="px-6 py-4">
-                      <span className="text-blue-600 font-bold">#{wo.id}</span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-xs font-bold text-gray-600 whitespace-nowrap">{formatEntryDate(wo.entry_date || (wo as any).created_at || (wo as any).created)}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="font-semibold text-gray-800">{wo.customer}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-gray-700">{wo.job_details}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="font-mono text-xs font-bold text-gray-500 break-all max-w-[200px] inline-block">{wo.drawing || wo.itemInfo?.drawing_no || '-'}</span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="font-bold text-gray-800">{wo.qty}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="font-bold text-blue-600">{wo.qty_dispatched || 0}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className={`font-bold ${remaining > 0 ? 'text-orange-600' : 'text-green-600'}`}>
-                        {remaining}
-                      </div>
-                    </td>
-                    {statusFilter === 'Dispatched' && (
-                      <>
-                        <td className="px-6 py-4"><span className="text-xs font-bold text-gray-600">{wo.last_invoice_no || '-'}</span></td>
-                        <td className="px-6 py-4"><span className="text-xs font-bold text-gray-600">{wo.last_vehicle_no || '-'}</span></td>
-                        <td className="px-6 py-4">
-                      {editingDispatchDate === wo.id ? (
-                        <div className="flex flex-col gap-1">
-                          {(dispatchLogsMap.get(wo.id) || []).map((log: any) => (
-                            <div key={log.id} className="flex items-center gap-1">
-                              <input type="date" defaultValue={log.dispatch_date?.slice(0, 10)} onChange={e => { saveSingleDispatchDate(log.id, e.target.value); }} className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white w-44" />
-                              <span className="text-xs text-gray-500 font-semibold">Qty: {log.dispatch_qty}</span>
-                            </div>
-                          ))}
-                          <button onClick={() => setEditingDispatchDate(null)} className="self-end px-3 py-1 text-xs font-bold text-gray-500 hover:text-gray-700">Done</button>
-                        </div>
-                      ) : (
-                        <div className="relative group flex items-center gap-1">
-                          {(dispatchLogsMap.get(wo.id) || []).length > 0 ? (
-                            <span className="text-sm font-bold text-gray-600">{(dispatchLogsMap.get(wo.id) || []).map((log: any) => `${formatDateDMY(log.dispatch_date)} (${log.dispatch_qty})`).join(', ')}</span>
-                          ) : (
-                            <span className="text-sm font-bold text-gray-600">-</span>
-                          )}
-                          {(dispatchLogsMap.get(wo.id) || []).length > 0 && (
-                            <button onClick={() => setEditingDispatchDate(wo.id)} className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded opacity-0 group-hover:opacity-100 transition-opacity"><Pencil size={16} /></button>
-                          )}
-                          {dispatchLogsMap.has(wo.id) && (dispatchLogsMap.get(wo.id) || []).length > 0 && (
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50">
-                              <div className="bg-gray-900 text-white text-[10px] font-semibold rounded-lg px-3 py-2 shadow-xl whitespace-nowrap space-y-1">
-                                {(dispatchLogsMap.get(wo.id) || []).map((log, i) => (
-                                  <div key={i} className="flex items-center gap-2">
-                                    <span>{formatDateDMY(log.dispatch_date)}</span>
-                                    <span className="text-gray-400">Qty: {log.dispatch_qty}</span>
-                                  </div>
-                                ))}
-                              </div>
-                              <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900" />
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </td>
-                      </>
-                    )}
-                    {dispatchMode && (
-                      <td className="px-6 py-4">
-                        {isSelected ? (
-                          <input
-                            type="number"
-                            min="1"
-                            max={remaining}
-                            value={selectedOrders[wo.id]}
-                            onChange={(e) => updateDispatchQty(wo.id, parseInt(e.target.value) || 0, remaining)}
-                            className="w-20 px-2 py-1 border rounded-lg text-center font-bold"
-                          />
-                        ) : (
-                          <span className="text-gray-500">—</span>
-                        )}
-                      </td>
-                    )}
-                    <td className="px-6 py-4">
-                      <StatusBadge status={wo.status} />
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex justify-end">
-                        <button 
-                          onClick={() => onView(wo.id)} 
-                          className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
-                          title="View Details"
-                        >
-                          <Eye size={16}/>
-                        </button>
-                      </div>
-                    </td>
+              {statusFilter === 'Dispatched' ? (
+                paginatedOrders.flatMap(wo => {
+                  const logs = dispatchLogsMap.get(wo.id) || [];
+                  return logs.length > 0
+                    ? logs.map((log, i) => ({ log, wo, key: `log-${wo.id}-${log.id || i}` }))
+                    : [{ log: null, wo, key: `wo-${wo.id}` }];
+                }).map(({ log, wo }) => (
+                  <tr key={`log-${wo.id}-${log?.id || 0}`} className="border-b hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4"><span className="text-blue-600 font-bold">#{wo.id}</span></td>
+                    <td className="px-6 py-4"><div className="text-xs font-bold text-gray-600 whitespace-nowrap">{formatEntryDate(wo.entry_date || (wo as any).created_at || (wo as any).created)}</div></td>
+                    <td className="px-6 py-4"><div className="font-semibold text-gray-800">{wo.customer}</div></td>
+                    <td className="px-6 py-4"><div className="text-gray-700">{wo.job_details}</div></td>
+                    <td className="px-6 py-4"><span className="font-mono font-bold text-gray-700 whitespace-nowrap">{wo.drawing || wo.itemInfo?.drawing_no || '-'}</span></td>
+                    <td className="px-6 py-4"><div className="font-bold text-gray-800">{wo.qty}</div></td>
+                    <td className="px-6 py-4"><div className="text-xs font-bold text-orange-600 whitespace-nowrap">{wo.etd || 'TBD'}</div></td>
+                    <td className="px-6 py-4"><div className="font-bold text-blue-600">{log?.dispatch_qty || wo.qty_dispatched || 0}</div></td>
+                    <td className="px-6 py-4"><div className="font-bold text-green-600">0</div></td>
+                    <td className="px-6 py-4"><span className="text-xs font-bold text-gray-600">{log?.invoice_no || wo.last_invoice_no || '-'}</span></td>
+                    <td className="px-6 py-4"><span className="text-xs font-bold text-gray-600">{log?.vehicle_no || wo.last_vehicle_no || '-'}</span></td>
+                    <td className="px-6 py-4"><span className="text-sm font-bold text-gray-600">{log?.dispatch_date ? formatDateDMY(log.dispatch_date) : '-'}</span></td>
+                    <td className="px-6 py-4"><StatusBadge status="Dispatched" /></td>
+                    <td className="px-6 py-4"><div className="flex justify-end"><button onClick={() => onView(wo.id)} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors" title="View Details"><Eye size={16}/></button></div></td>
                   </tr>
-                );
-              })}
-              {filteredOrders.length === 0 && (
-                <tr>
-                  <td colSpan={dispatchMode ? 12 : 11} className="px-6 py-12 text-center text-gray-500 italic font-semibold">
-                    No orders for dispatch
-                  </td>
-                </tr>
+                ))
+              ) : (
+                <>
+                  {paginatedOrders.map(wo => {
+                    const remaining = getRemainingQty(wo);
+                    const isSelected = selectedOrders[wo.id] !== undefined;
+                    const canDispatch = remaining > 0;
+
+                    return (
+                      <tr 
+                        key={wo.id}
+                        className={`border-b transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                      >
+                        {dispatchMode && (
+                          <td className="px-4 py-4">
+                            <input
+                              type="checkbox"
+                              className="w-4 h-4 rounded"
+                              checked={isSelected}
+                              disabled={!canDispatch}
+                              onChange={() => toggleOrderSelection(wo.id, remaining)}
+                            />
+                          </td>
+                        )}
+                        <td className="px-6 py-4">
+                          <span className="text-blue-600 font-bold">#{wo.id}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-xs font-bold text-gray-600 whitespace-nowrap">{formatEntryDate(wo.entry_date || (wo as any).created_at || (wo as any).created)}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="font-semibold text-gray-800">{wo.customer}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-gray-700">{wo.job_details}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="font-mono font-bold text-gray-700 whitespace-nowrap">{wo.drawing || wo.itemInfo?.drawing_no || '-'}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="font-bold text-gray-800">{wo.qty}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-xs font-bold text-orange-600 whitespace-nowrap">{wo.etd || 'TBD'}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="font-bold text-blue-600">{wo.qty_dispatched || 0}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className={`font-bold ${remaining > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                            {remaining}
+                          </div>
+                        </td>
+                        {dispatchMode && (
+                          <td className="px-6 py-4">
+                            {isSelected ? (
+                              <input
+                                type="number"
+                                min="1"
+                                max={remaining}
+                                value={selectedOrders[wo.id]}
+                                onChange={(e) => updateDispatchQty(wo.id, parseInt(e.target.value) || 0, remaining)}
+                                className="w-20 px-2 py-1 border rounded-lg text-center font-bold"
+                              />
+                            ) : (
+                              <span className="text-gray-500">—</span>
+                            )}
+                          </td>
+                        )}
+                        <td className="px-6 py-4">
+                          {wo.status === 'Dispatched' && remaining > 0 ? (
+                            <span className="px-3 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-600">Partially Dispatched</span>
+                          ) : (
+                            <StatusBadge status={wo.status} />
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex justify-end">
+                            <button 
+                              onClick={() => onView(wo.id)} 
+                              className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
+                              title="View Details"
+                            >
+                              <Eye size={16}/>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {filteredOrders.length === 0 && (
+                    <tr>
+                      <td colSpan={dispatchMode ? 14 : 13} className="px-6 py-12 text-center text-gray-500 italic font-semibold">
+                        No orders for dispatch
+                      </td>
+                    </tr>
+                  )}
+                </>
               )}
             </tbody>
           </table>
@@ -2413,70 +2522,53 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
             </button>
           )}
 
-          {paginatedOrders.map(wo => {
-            const remaining = getRemainingQty(wo);
-            const isSelected = selectedOrders[wo.id] !== undefined;
-            const canDispatch = remaining > 0;
-
-            return (
-              <div key={wo.id} className={`rounded-xl border px-3 py-2 ${isSelected ? 'border-blue-300 bg-blue-50/50' : 'border-gray-200 bg-white'}`}>
+          {statusFilter === 'Dispatched' ? (
+            paginatedOrders.flatMap(wo => {
+              const logs = dispatchLogsMap.get(wo.id) || [];
+              return logs.length > 0
+                ? logs.map((log, i) => ({ log, wo, key: `card-${wo.id}-${log.id || i}` }))
+                : [{ log: null, wo, key: `card-${wo.id}` }];
+            }).map(({ log, wo }) => (
+              <div key={`card-${wo.id}-${log?.id || 0}`} className="rounded-xl border border-gray-200 bg-white px-3 py-2">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <div className="text-[10px] font-black text-blue-600">#{wo.id}</div>
                     <div className="font-black text-gray-800 leading-tight text-xs mt-0.5">{wo.job_details}</div>
                     <div className="text-[11px] font-semibold text-gray-500 mt-0.5">{wo.customer}</div>
                   </div>
-                  <StatusBadge status={wo.status} />
+                  <StatusBadge status="Dispatched" />
                 </div>
 
-                <div className="grid grid-cols-3 gap-1.5 mt-2 text-center">
+                <div className="mt-2 grid grid-cols-2 gap-1.5 text-center">
                   <div className="bg-gray-50 rounded-lg py-1">
                     <div className="text-[10px] font-black text-gray-500 uppercase">Total</div>
                     <div className="font-black text-gray-800 text-xs">{wo.qty}</div>
                   </div>
                   <div className="bg-blue-50 rounded-lg py-1">
-                    <div className="text-[10px] font-black text-blue-400 uppercase">Done</div>
-                    <div className="font-black text-blue-600 text-xs">{wo.qty_dispatched || 0}</div>
-                  </div>
-                  <div className="bg-orange-50 rounded-lg py-1">
-                    <div className="text-[10px] font-black text-orange-400 uppercase">Left</div>
-                    <div className="font-black text-orange-600 text-xs">{remaining}</div>
+                    <div className="text-[10px] font-black text-blue-400 uppercase">Dispatch Qty</div>
+                    <div className="font-black text-blue-600 text-xs">{log?.dispatch_qty || wo.qty_dispatched || 0}</div>
                   </div>
                 </div>
 
-                <div className="mt-2 grid grid-cols-2 gap-1.5 text-[10px]">
+                <div className="mt-2 bg-orange-50 rounded-lg px-2 py-1 text-[10px]">
+                  <span className="font-black text-orange-500 uppercase">ETD</span>
+                  <div className="font-bold text-orange-600 truncate">{wo.etd || 'TBD'}</div>
+                </div>
+
+                <div className="mt-2 grid grid-cols-3 gap-1.5 text-[10px]">
                   <div className="bg-gray-50 rounded-lg px-2 py-1">
                     <span className="font-black text-gray-500 uppercase">Inv</span>
-                    <div className="font-bold text-gray-700 truncate">{wo.last_invoice_no || '-'}</div>
+                    <div className="font-bold text-gray-700 truncate">{log?.invoice_no || wo.last_invoice_no || '-'}</div>
                   </div>
                   <div className="bg-gray-50 rounded-lg px-2 py-1">
                     <span className="font-black text-gray-500 uppercase">Vehicle</span>
-                    <div className="font-bold text-gray-700 truncate">{wo.last_vehicle_no || '-'}</div>
+                    <div className="font-bold text-gray-700 truncate">{log?.vehicle_no || wo.last_vehicle_no || '-'}</div>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg px-2 py-1">
+                    <span className="font-black text-gray-500 uppercase">Date</span>
+                    <div className="font-bold text-gray-700 truncate">{log?.dispatch_date ? formatDateDMY(log.dispatch_date) : '-'}</div>
                   </div>
                 </div>
-
-                {dispatchMode && (
-                  <div className="mt-2 flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      className="w-4 h-4 rounded"
-                      checked={isSelected}
-                      disabled={!canDispatch}
-                      onChange={() => toggleOrderSelection(wo.id, remaining)}
-                    />
-                    <span className="text-xs font-semibold text-gray-600 flex-1">Include</span>
-                    {isSelected && (
-                      <input
-                        type="number"
-                        min="1"
-                        max={remaining}
-                        value={selectedOrders[wo.id]}
-                        onChange={(e) => updateDispatchQty(wo.id, parseInt(e.target.value) || 0, remaining)}
-                        className="w-16 px-2 py-1 border rounded-lg text-center font-bold text-xs"
-                      />
-                    )}
-                  </div>
-                )}
 
                 <button
                   onClick={() => onView(wo.id)}
@@ -2485,10 +2577,96 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                   View Details
                 </button>
               </div>
-            );
-          })}
+            ))
+          ) : (
+            <>
+              {paginatedOrders.map(wo => {
+                const remaining = getRemainingQty(wo);
+                const isSelected = selectedOrders[wo.id] !== undefined;
+                const canDispatch = remaining > 0;
 
-          {filteredOrders.length === 0 && (
+                return (
+                  <div key={wo.id} className={`rounded-xl border px-3 py-2 ${isSelected ? 'border-blue-300 bg-blue-50/50' : 'border-gray-200 bg-white'}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="text-[10px] font-black text-blue-600">#{wo.id}</div>
+                        <div className="font-black text-gray-800 leading-tight text-xs mt-0.5">{wo.job_details}</div>
+                        <div className="text-[11px] font-semibold text-gray-500 mt-0.5">{wo.customer}</div>
+                      </div>
+                      {wo.status === 'Dispatched' && remaining > 0 ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-600">Partially Dispatched</span>
+                      ) : (
+                        <StatusBadge status={wo.status} />
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-1.5 mt-2 text-center">
+                      <div className="bg-gray-50 rounded-lg py-1">
+                        <div className="text-[10px] font-black text-gray-500 uppercase">Total</div>
+                        <div className="font-black text-gray-800 text-xs">{wo.qty}</div>
+                      </div>
+                      <div className="bg-blue-50 rounded-lg py-1">
+                        <div className="text-[10px] font-black text-blue-400 uppercase">Done</div>
+                        <div className="font-black text-blue-600 text-xs">{wo.qty_dispatched || 0}</div>
+                      </div>
+                      <div className="bg-orange-50 rounded-lg py-1">
+                        <div className="text-[10px] font-black text-orange-400 uppercase">Left</div>
+                        <div className="font-black text-orange-600 text-xs">{remaining}</div>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 bg-orange-50 rounded-lg px-2 py-1 text-[10px]">
+                      <span className="font-black text-orange-500 uppercase">ETD</span>
+                      <div className="font-bold text-orange-600 truncate">{wo.etd || 'TBD'}</div>
+                    </div>
+
+                    <div className="mt-2 grid grid-cols-2 gap-1.5 text-[10px]">
+                      <div className="bg-gray-50 rounded-lg px-2 py-1">
+                        <span className="font-black text-gray-500 uppercase">Inv</span>
+                        <div className="font-bold text-gray-700 truncate">{(dispatchLogsMap.get(wo.id) || []).map((log: any) => log.invoice_no || '-').join(', ')}</div>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg px-2 py-1">
+                        <span className="font-black text-gray-500 uppercase">Vehicle</span>
+                        <div className="font-bold text-gray-700 truncate">{(dispatchLogsMap.get(wo.id) || []).map((log: any) => log.vehicle_no || '-').join(', ')}</div>
+                      </div>
+                    </div>
+
+                    {dispatchMode && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 rounded"
+                          checked={isSelected}
+                          disabled={!canDispatch}
+                          onChange={() => toggleOrderSelection(wo.id, remaining)}
+                        />
+                        <span className="text-xs font-semibold text-gray-600 flex-1">Include</span>
+                        {isSelected && (
+                          <input
+                            type="number"
+                            min="1"
+                            max={remaining}
+                            value={selectedOrders[wo.id]}
+                            onChange={(e) => updateDispatchQty(wo.id, parseInt(e.target.value) || 0, remaining)}
+                            className="w-16 px-2 py-1 border rounded-lg text-center font-bold text-xs"
+                          />
+                        )}
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => onView(wo.id)}
+                      className="mt-2 w-full py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold"
+                    >
+                      View Details
+                    </button>
+                  </div>
+                );
+              })}
+            </>
+          )}
+
+          {(statusFilter === 'Dispatched' ? paginatedOrders.length === 0 : filteredOrders.length === 0) && (
             <div className="py-8 text-center text-gray-500 italic font-semibold text-sm">No orders for dispatch</div>
           )}
         </div>
@@ -5465,7 +5643,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
 
   useEffect(() => {
     setPage(1);
-  }, [searchQuery, statusFilter, departmentFilter, overdueOnly, sortConfig, data.length]);
+  }, [searchQuery, statusFilter, data.length]);
 
   const { pageRows: paginatedOrders, totalPages, safePage, totalRows, startIndex } = useMemo(
     () => getPageSlice(sortedOrders, page, LIST_PAGE_SIZE),
@@ -10718,6 +10896,8 @@ export default function App() {
     let skippedCount = 0;
     let errorCount = 0;
     let fieldMissingCount = 0;
+    let fromDeptStatuses = 0;
+    let fromCreated = 0;
 
     try {
       const { data: orders } = await supabase.from('work_orders').select('*');
@@ -10726,69 +10906,43 @@ export default function App() {
         return;
       }
 
-      const { data: activities } = await supabase
-        .from('activity_events')
-        .select('work_order_id, target_id, target_label, customer_name, event_time')
-        .eq('event_type', 'work_order')
-        .eq('action', 'created')
-        .eq('title', 'Order Created');
-
-      type EventRecord = { eventTime: string };
-      const eventMap = new Map<string, EventRecord[]>();
-
-      const addEvent = (key: string, rec: EventRecord) => {
-        const arr = eventMap.get(key) || [];
-        arr.push(rec);
-        eventMap.set(key, arr);
-      };
-
-      activities?.forEach((ev: any) => {
-        const eventTime = ev.event_time;
-        if (!eventTime) return;
-
-        let workOrderId = NaN;
-        if (ev.work_order_id) {
-          workOrderId = Number(ev.work_order_id);
-        } else if (ev.target_id) {
-          workOrderId = Number(ev.target_id);
-        }
-        if (isNaN(workOrderId)) return;
-
-        const itemName = (ev.target_label || '').trim().toLowerCase();
-        const customerName = (ev.customer_name || '').trim().toLowerCase();
-        if (!itemName || !customerName) return;
-
-        const key = `${workOrderId}|${itemName}|${customerName}`;
-        addEvent(key, { eventTime });
-      });
-
       for (const order of orders) {
+        // Skip if entry_date already set
         if (order.entry_date) {
           skippedCount++;
           continue;
         }
 
-        const workOrderId = Number(order.id);
-        const itemName = (order.job_details || '').trim().toLowerCase();
-        const customerName = (order.customer || '').trim().toLowerCase();
+        let entryDate: string | null = null;
+        let source = '';
 
-        if (!workOrderId || !itemName || !customerName) {
+        // Priority 1: earliest department_statuses.updated_at
+        const deptStatuses = Array.isArray(order.department_statuses) ? order.department_statuses : [];
+        const earliestDept = deptStatuses
+          .filter((ds: any) => ds.updated_at)
+          .map((ds: any) => String(ds.updated_at))
+          .sort()[0]; // ISO strings sort lexicographically
+
+        if (earliestDept) {
+          entryDate = earliestDept.split('T')[0];
+          source = 'department_statuses';
+          fromDeptStatuses++;
+        }
+
+        // Priority 2: fallback to PocketBase auto-field "created"
+        if (!entryDate) {
+          const createdRaw = (order as any).created;
+          if (createdRaw) {
+            entryDate = String(createdRaw).split('T')[0];
+            source = 'created';
+            fromCreated++;
+          }
+        }
+
+        if (!entryDate) {
           skippedCount++;
           continue;
         }
-
-        const key = `${workOrderId}|${itemName}|${customerName}`;
-        const candidates = eventMap.get(key);
-        if (!candidates || candidates.length === 0) {
-          skippedCount++;
-          continue;
-        }
-
-        const earliest = candidates.reduce((min, c) =>
-          new Date(c.eventTime) < new Date(min.eventTime) ? c : min
-        );
-
-        const entryDate = new Date(earliest.eventTime).toISOString().slice(0, 10);
 
         const { data: updateResult, error } = await supabase
           .from('work_orders')
@@ -10799,7 +10953,6 @@ export default function App() {
           console.error(`Failed to backfill entry_date for order ${order.id}:`, error);
           errorCount++;
         } else if (updateResult && Array.isArray(updateResult) && updateResult.length > 0) {
-          // Verify the field was actually persisted
           const persisted = updateResult[0]?.entry_date;
           if (persisted) {
             updatedCount++;
@@ -10808,8 +10961,7 @@ export default function App() {
             fieldMissingCount++;
             errorCount++;
           }
-        } else if (updateResult && !Array.isArray(updateResult) && updateResult.entry_date) {
-          // Single record update response
+        } else if (updateResult && !Array.isArray(updateResult) && (updateResult as any).entry_date) {
           updatedCount++;
         } else {
           console.warn(`Order ${order.id}: update returned no data. Field may not exist in PocketBase collection schema.`);
@@ -10822,7 +10974,7 @@ export default function App() {
         console.error(`[Entry Date Backfill] CRITICAL: ${fieldMissingCount} updates failed because 'entry_date' field does not exist in the PocketBase 'work_orders' collection schema. Add this field in PocketBase Admin (type: date) and clear localStorage to re-run.`);
       }
 
-      console.log(`[Entry Date Backfill] Updated ${updatedCount} orders, skipped ${skippedCount}, ${errorCount} errors (${fieldMissingCount} field-missing).`);
+      console.log(`[Entry Date Backfill] Updated ${updatedCount} orders, skipped ${skippedCount}, ${errorCount} errors (${fieldMissingCount} field-missing). Sources: ${fromDeptStatuses} from department_statuses, ${fromCreated} from created.`);
       localStorage.setItem(BACKFILL_KEY, 'true');
       invalidateCollectionCache('work_orders');
 
@@ -10830,8 +10982,8 @@ export default function App() {
         void logActivity({
           eventType: 'work_order',
           action: 'backfill',
-          title: 'Work Order Entry Dates Backfilled (v1)',
-          body: `Auto-backfilled ${updatedCount} work orders with entry dates from activity events (strict 3-field match: order_id + item + customer). ${skippedCount} skipped (no exact match). ${errorCount} errors${fieldMissingCount > 0 ? ` (${fieldMissingCount} failed: field missing in PocketBase schema)` : ''}.`,
+          title: 'Work Order Entry Dates Backfilled (v2)',
+          body: `Auto-backfilled ${updatedCount} work orders with entry dates: ${fromDeptStatuses} from department_statuses.updated_at, ${fromCreated} from created field. ${skippedCount} skipped. ${errorCount} errors${fieldMissingCount > 0 ? ` (${fieldMissingCount} failed: field missing in PocketBase schema)` : ''}.`,
           actor: getStoredLoggedInUser(),
           severity: fieldMissingCount > 0 ? 'error' : 'info',
         });
