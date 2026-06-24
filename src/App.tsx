@@ -12517,18 +12517,29 @@ export default function App() {
         </main>
 
         {showLogoutConfirm && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 animate-fade-in">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
-                  <AlertTriangle size={20} className="text-red-600" />
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-[2px]" onClick={() => setShowLogoutConfirm(false)}>
+            <div className="bg-white rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] w-full max-w-sm mx-4 p-8 animate-fade-in" onClick={e => e.stopPropagation()}>
+              <div className="flex flex-col items-center text-center mb-6">
+                <div className="w-16 h-16 rounded-2xl bg-red-50 flex items-center justify-center mb-4">
+                  <LogOut size={28} className="text-red-500" />
                 </div>
-                <h3 className="text-lg font-black text-slate-900">Confirm Logout</h3>
+                <h3 className="text-xl font-black text-slate-900 mb-1">Sign out of ERP?</h3>
+                <p className="text-sm font-semibold text-slate-500">You'll need to sign back in to access your orders and tasks.</p>
               </div>
-              <p className="text-sm font-semibold text-slate-600 mb-6">Are you sure you want to sign out?</p>
+              {loggedInUser && (
+                <div className="bg-slate-50 rounded-xl px-4 py-3 mb-6 flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-black text-sm">
+                    {loggedInUser.username.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-slate-800 truncate">{loggedInUser.username}</p>
+                    <p className="text-xs font-semibold text-slate-400">{loggedInUser.department || 'ERP User'}</p>
+                  </div>
+                </div>
+              )}
               <div className="flex gap-3">
-                <button onClick={() => setShowLogoutConfirm(false)} className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">Cancel</button>
-                <button onClick={() => { handleLogout(); setShowLogoutConfirm(false); }} className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-red-600 text-white hover:bg-red-700 transition-colors">Logout</button>
+                <button onClick={() => setShowLogoutConfirm(false)} className="flex-1 py-3 rounded-xl text-sm font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors">Cancel</button>
+                <button onClick={() => { handleLogout(); setShowLogoutConfirm(false); }} className="flex-1 py-3 rounded-xl text-sm font-bold bg-red-500 text-white hover:bg-red-600 shadow-lg shadow-red-500/25 transition-all">Sign out</button>
               </div>
             </div>
           </div>

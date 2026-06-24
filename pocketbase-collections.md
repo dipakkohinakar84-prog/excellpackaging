@@ -13,7 +13,7 @@ Fields:
 - `legacy_id`: number
 - `display_name`: text, required
 - built-in auth `username`: normalized mobile number, required
-- built-in auth `email`: email
+- built-in auth `email`: email (**NOTE**: Remove the "Unique" flag on this field to allow multiple users to share the same email address. See PocketBase Admin → erp_users → email field → uncheck "Unique".)
 - `login_email`: email or text, required if built-in auth email is not public/readable
 - `mobile`: text, required
 - `department`: text, required
