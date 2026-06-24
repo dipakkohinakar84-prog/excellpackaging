@@ -287,16 +287,6 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
           (() => {
             const accentColor = page.key === 'wip' ? '#ffb020' : page.key === 'qc' ? '#49b16b' : '#9aa0a6';
             const textColor = page.key === 'wip' ? '#ffb020' : page.key === 'qc' ? '#49b16b' : '#f3f4f6';
-            const getUrgency = (wo: WorkOrder) => {
-              if (!wo.etd) return null;
-              const etd = new Date(wo.etd + 'T12:00:00');
-              if (Number.isNaN(etd.getTime())) return null;
-              const diff = etd.getTime() - Date.now();
-              const days = Math.ceil(diff / 86400000);
-              if (days < 0) return { label: `Overdue ${Math.abs(days)}d`, state: 'overdue', color: '#e2462f', border: '8px solid #e2462f' };
-              if (days <= 3) return { label: `${days}d left`, state: 'urgent', color: '#ffb020', border: '8px solid #ffb020' };
-              return { label: `${days}d left`, state: 'ok', color: '#49b16b', border: '8px solid #49b16b' };
-            };
             return (
           <div className="flex-1 grid grid-cols-2 gap-3 min-h-0 overflow-hidden">
             {DEPT_COLUMNS.map(col => {
@@ -318,28 +308,44 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
                       </div>
                     ) : (
                       colOrders.map((wo, idx) => {
-                        const urgency = getUrgency(wo);
+                        const etdMs = wo.etd ? new Date(wo.etd + 'T12:00:00').getTime() : 0;
+                        const daysLeft = etdMs && !isNaN(etdMs) ? Math.ceil((etdMs - Date.now()) / 86400000) : 0;
+                        const isOverdue = daysLeft < 0;
+                        const daysAbs = Math.abs(daysLeft);
+                        const dateStr = wo.etd
+                          ? new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(wo.etd))
+                          : 'TBD';
                         return (
                         <div key={wo.id} className="animate-card-in" style={{margin:'4px',animationDelay:`${idx * 50}ms`}}>
-                          <div style={{background:'#1d2024',border:`1px solid #34393e`,borderLeft:`8px solid ${accentColor}`,borderRadius:'8px',padding:'16px 20px',transition:'all 0.2s'}}
+                          <div style={{background:'#1d2024',border:`1px solid #34393e`,borderLeft:`8px solid ${accentColor}`,borderRadius:'8px',padding:'14px 16px',transition:'all 0.2s'}}
                             onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.3)'; }}
                             onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; }}
                           >
-                            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'8px',marginBottom:'4px'}}>
-                              <span style={{fontFamily:'IBM Plex Mono,monospace',fontWeight:700,fontSize:'20px',color:'#f3f4f6'}}>#{wo.id}</span>
-                              <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
-                                {urgency && (
-                                  <span style={{fontFamily:'IBM Plex Mono,monospace',fontSize:'12px',fontWeight:700,letterSpacing:'0.04em',textTransform:'uppercase',padding:'3px 10px',borderRadius:'5px',background: urgency.state === 'overdue' ? 'rgba(226,70,47,0.16)' : urgency.state === 'urgent' ? 'rgba(255,176,32,0.14)' : 'rgba(73,177,107,0.14)',color:accentColor,border:`1px solid ${urgency.state === 'overdue' ? 'rgba(226,70,47,0.45)' : urgency.state === 'urgent' ? 'rgba(255,176,32,0.4)' : 'rgba(73,177,107,0.4)'}`}}>{urgency.label}</span>
-                                )}
-                              </div>
-                            </div>
-                            <div style={{display:'grid',gridTemplateColumns:'1fr auto auto auto',gap:'20px',alignItems:'center',marginBottom:'6px'}}>
-                              <span style={{fontWeight:600,fontSize:'24px',color:textColor,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{wo.customer}</span>
-                              <span style={{fontWeight:600,fontSize:'24px',color:textColor,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{wo.job_details}</span>
-                              <span style={{fontWeight:600,fontSize:'24px',color:textColor}}>{wo.qty}</span>
-                              <span style={{fontFamily:'IBM Plex Mono,monospace',fontSize:'16px',fontWeight:600,color:'#9aa0a6',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:'4px'}}>
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>{wo.etd || 'TBD'}
-                              </span>
+                            <div style={{display:'flex',alignItems:'stretch',gap:'14px'}}>
+                              <div style={{flex:1,display:'grid',gridTemplateColumns:'auto 1fr auto',gap:'10px 36px',alignItems:'center',minWidth:0}}>
+                                <span style={{fontFamily:'IBM Plex Mono,monospace',fontWeight:700,fontSize:'18px',color:'#f3f4f6',flexShrink:0}}>#{wo.id}</span>
+                                <span style={{fontWeight:600,fontSize:'18px',color:textColor,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{wo.customer}</span>
+                                <span style={{fontFamily:'IBM Plex Mono,monospace',fontSize:'14px',fontWeight:600,color:'#9aa0a6',whiteSpace:'nowrap'}}>{dateStr}</span>
+                                <span style={{fontFamily:'IBM Plex Mono,monospace',fontWeight:700,fontSize:'18px',color:'#f3f4f6',flexShrink:0,visibility:'hidden'}}>#{wo.id}</span>
+                                <span style={{fontWeight:600,fontSize:'22px',color:textColor,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{wo.job_details}</span>
+                                <span style={{fontWeight:600,fontSize:'22px',color:textColor,whiteSpace:'nowrap'}}>{wo.qty}</span>
+                                </div>
+                              {wo.etd && (
+                                <div style={{
+                                  display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
+                                  background: isOverdue ? 'rgba(226,70,47,0.12)' : 'rgba(73,177,107,0.12)',
+                                  border: isOverdue ? '1.5px solid rgba(226,70,47,0.35)' : '1.5px solid rgba(73,177,107,0.35)',
+                                  borderRadius:'12px',
+                                  padding:'10px 16px',
+                                  minWidth:'80px',
+                                  flexShrink:0
+                                }}>
+                                  <span style={{fontFamily:'IBM Plex Mono,monospace',fontSize:'34px',fontWeight:700,color:textColor,lineHeight:1}}>{daysAbs}D</span>
+                                  <span style={{fontFamily:'IBM Plex Mono,monospace',fontSize:'11px',fontWeight:600,color:textColor,textTransform:'uppercase',letterSpacing:'0.07em',marginTop:'2px'}}>
+                                    {isOverdue ? 'Overdue' : 'Left'}
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>

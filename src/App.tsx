@@ -113,7 +113,7 @@ const StatusBadge: React.FC<{ status: WOStatus }> = ({ status }) => {
     'Not Started': { bg: 'bg-gray-100', text: 'text-gray-600', label: 'In Queue' },
     'Work Started': { bg: 'bg-blue-100', text: 'text-blue-600', label: 'Work In Progress' },
     'Ready for QC': { bg: 'bg-yellow-100', text: 'text-yellow-600', label: 'Ready for QC' },
-    'Ready for despatch': { bg: 'bg-purple-100', text: 'text-purple-600', label: 'Ready for Despatch' },
+    'Ready for despatch': { bg: 'bg-purple-100', text: 'text-purple-600', label: 'Ready for Dispatch' },
     'Dispatched': { bg: 'bg-indigo-100', text: 'text-indigo-600', label: 'Dispatched' },
   };
   
@@ -137,7 +137,7 @@ const STATUS_LABELS: Record<string, string> = {
   'Not Started': 'In Queue',
   'Work Started': 'Work In Progress',
   'Ready for QC': 'Ready for QC',
-  'Ready for despatch': 'Ready for Despatch',
+  'Ready for despatch': 'Ready for Dispatch',
   'Dispatched': 'Dispatched',
 };
 
@@ -1839,7 +1839,8 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
   // Track selected orders and their dispatch quantities using Record to be TS friendly
   const [selectedOrders, setSelectedOrders] = useState<Record<number, number>>({});
   const [dispatchMode, setDispatchMode] = useState(false);
-  const [editingDispatchDate, setEditingDispatchDate] = useState<number | null>(null);
+  const [editingDispatchDateId, setEditingDispatchDateId] = useState<number | null>(null);
+  const [editingDateValue, setEditingDateValue] = useState('');
 
   const isOrderOverdue = (wo: WorkOrder) => {
     if (!wo.etd || wo.status === 'Dispatched') return false;
@@ -2179,8 +2180,8 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
             <input type="text" placeholder="Search order, customer, job..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-9 pr-3 py-1.5 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-xs" />
           </div>
           <div className="flex gap-1.5 flex-wrap">
-            <button onClick={() => setStatusFilter('Ready for despatch')} className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${statusFilter === 'Ready for despatch' ? statusTabColors['Ready for despatch'] : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS['Ready for despatch']}</button>
-            <button onClick={() => setStatusFilter('Dispatched')} className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${statusFilter === 'Dispatched' ? statusTabColors['Dispatched'] : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS['Dispatched']}</button>
+            <button onClick={() => setStatusFilter('Ready for despatch')} className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all whitespace-nowrap ${statusFilter === 'Ready for despatch' ? statusTabColors['Ready for despatch'] : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS['Ready for despatch']}</button>
+            <button onClick={() => setStatusFilter('Dispatched')} className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all whitespace-nowrap ${statusFilter === 'Dispatched' ? statusTabColors['Dispatched'] : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS['Dispatched']}</button>
           </div>
           <select value={dispatchCompanyFilter} onChange={e => setDispatchCompanyFilter(e.target.value)} className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
             <option value="All">All Companies</option>
@@ -2220,8 +2221,8 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
       </details>
 
       <div className="hidden md:flex flex-wrap items-center gap-2">
-        <button onClick={() => setStatusFilter('Ready for despatch')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === 'Ready for despatch' ? statusTabColors['Ready for despatch'] : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS['Ready for despatch']}</button>
-        <button onClick={() => setStatusFilter('Dispatched')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === 'Dispatched' ? statusTabColors['Dispatched'] : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS['Dispatched']}</button>
+        <button onClick={() => setStatusFilter('Ready for despatch')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all whitespace-nowrap ${statusFilter === 'Ready for despatch' ? statusTabColors['Ready for despatch'] : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS['Ready for despatch']}</button>
+        <button onClick={() => setStatusFilter('Dispatched')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all whitespace-nowrap ${statusFilter === 'Dispatched' ? statusTabColors['Dispatched'] : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS['Dispatched']}</button>
         <button onClick={() => setOverdueOnly(v => !v)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${overdueOnly ? 'bg-red-600 text-white border-red-600' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>Overdue Only {overdueOnly && '✓'}</button>
         <div className="relative flex-1 min-w-0 max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
@@ -2387,7 +2388,17 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                     <td className="px-6 py-4"><div className="font-bold text-green-600">0</div></td>
                     <td className="px-6 py-4"><span className="text-xs font-bold text-gray-600">{log?.invoice_no || wo.last_invoice_no || '-'}</span></td>
                     <td className="px-6 py-4"><span className="text-xs font-bold text-gray-600">{log?.vehicle_no || wo.last_vehicle_no || '-'}</span></td>
-                    <td className="px-6 py-4"><span className="text-sm font-bold text-gray-600">{log?.dispatch_date ? formatDateDMY(log.dispatch_date) : '-'}</span></td>
+                    <td className="px-6 py-4">
+                      {log && editingDispatchDateId === log.id ? (
+                        <div className="flex items-center gap-1">
+                          <input type="date" value={editingDateValue} onChange={e => setEditingDateValue(e.target.value)} className="text-xs border border-gray-300 rounded px-1.5 py-0.5 w-[130px]" autoFocus />
+                          <button onClick={async () => { await saveSingleDispatchDate(log.id, editingDateValue); setEditingDispatchDateId(null); }} className="text-xs bg-green-500 text-white px-1.5 py-0.5 rounded font-bold" title="Save">✓</button>
+                          <button onClick={() => setEditingDispatchDateId(null)} className="text-xs bg-gray-400 text-white px-1.5 py-0.5 rounded font-bold" title="Cancel">✗</button>
+                        </div>
+                      ) : (
+                        <span onClick={() => { if (log) { setEditingDateValue(log?.dispatch_date || ''); setEditingDispatchDateId(log.id); } }} className={`text-sm font-bold ${log ? 'cursor-pointer hover:text-blue-600' : 'text-gray-400'} ${log?.dispatch_date ? 'text-gray-600' : 'text-blue-500'}`} title={log ? 'Click to edit date' : ''}>{log?.dispatch_date ? formatDateDMY(log.dispatch_date) : (log ? 'Add date' : '-')}</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4"><StatusBadge status="Dispatched" /></td>
                     <td className="px-6 py-4"><div className="flex justify-end"><button onClick={() => onView(wo.id)} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors" title="View Details"><Eye size={16}/></button></div></td>
                   </tr>
@@ -2566,7 +2577,15 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                   </div>
                   <div className="bg-gray-50 rounded-lg px-2 py-1">
                     <span className="font-black text-gray-500 uppercase">Date</span>
-                    <div className="font-bold text-gray-700 truncate">{log?.dispatch_date ? formatDateDMY(log.dispatch_date) : '-'}</div>
+                    {log && editingDispatchDateId === log.id ? (
+                      <div className="flex items-center gap-0.5 mt-0.5">
+                        <input type="date" value={editingDateValue} onChange={e => setEditingDateValue(e.target.value)} className="text-[10px] border border-gray-300 rounded px-1 py-0.5 w-[110px]" autoFocus />
+                        <button onClick={async () => { await saveSingleDispatchDate(log.id, editingDateValue); setEditingDispatchDateId(null); }} className="text-[10px] bg-green-500 text-white px-1 py-0.5 rounded font-bold">✓</button>
+                        <button onClick={() => setEditingDispatchDateId(null)} className="text-[10px] bg-gray-400 text-white px-1 py-0.5 rounded font-bold">✗</button>
+                      </div>
+                    ) : (
+                      <div onClick={() => { if (log) { setEditingDateValue(log?.dispatch_date || ''); setEditingDispatchDateId(log.id); } }} className={`font-bold truncate ${log ? 'cursor-pointer hover:text-blue-600' : 'text-gray-400'} ${log?.dispatch_date ? 'text-gray-700' : 'text-blue-500'}`}>{log?.dispatch_date ? formatDateDMY(log.dispatch_date) : (log ? 'Add date' : '-')}</div>
+                    )}
                   </div>
                 </div>
 
@@ -6379,7 +6398,7 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
     if (status === 'Not Started') return 'Order Entry';
     if (status === 'Work Started') return 'Work Started';
     if (status === 'Ready for QC') return 'Work done';
-    if (status === 'Ready for despatch') return 'Ready for Despatch';
+    if (status === 'Ready for despatch') return 'Ready for Dispatch';
     if (status === 'Dispatched') return 'Dispatched';
     return status;
   };
@@ -11589,6 +11608,12 @@ export default function App() {
   const [globalSearchResults, setGlobalSearchResults] = useState<GlobalSearchResult[]>([]);
   const [globalSearchLoading, setGlobalSearchLoading] = useState(false);
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
+  const [refreshCounter, setRefreshCounter] = useState(0);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  const handleAppRefresh = useCallback(() => {
+    setRefreshCounter(c => c + 1);
+  }, []);
 
   const searchableViews = useMemo(() => (
     navGroups.flatMap(group => group.items.map(item => ({ ...item, group: group.label })))
@@ -12148,7 +12173,7 @@ export default function App() {
                   <ExternalLink size={20} /> Install App
                 </button>
               )}
-              <button onClick={handleLogout} className="w-full flex items-center gap-4 px-4 py-3 rounded-xl font-bold text-red-500 hover:bg-red-50 text-sm group transition-colors">
+              <button onClick={() => setShowLogoutConfirm(true)} className="w-full flex items-center gap-4 px-4 py-3 rounded-xl font-bold text-red-500 hover:bg-red-50 text-sm group transition-colors">
                 <LogOut size={20} /> Sign Out
               </button>
             </div>
@@ -12297,10 +12322,10 @@ export default function App() {
                   </div>
                 )}
               </div>
-              <button onClick={refreshNotificationHealth} className="rounded-full bg-white/15 p-2 hover:bg-white/25 transition-colors" aria-label="Refresh notification status">
+              <button onClick={handleAppRefresh} className="rounded-full bg-white/15 p-2 hover:bg-white/25 transition-colors" aria-label="Refresh app data" title="Refresh data">
                 <RefreshCw size={17} />
               </button>
-              <button onClick={handleLogout} className="rounded-full bg-white/15 p-2 hover:bg-white/25 transition-colors" aria-label="Sign out" title="Sign out">
+              <button onClick={() => setShowLogoutConfirm(true)} className="rounded-full bg-white/15 p-2 hover:bg-white/25 transition-colors" aria-label="Sign out" title="Sign out">
                 <LogOut size={17} />
               </button>
             </div>
@@ -12313,9 +12338,9 @@ export default function App() {
                <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-900/40"><Package size={16}/></div>
                <span className="font-black tracking-widest text-lg text-white">EXCELL</span>
              </div>
-             <button onClick={refreshNotificationHealth} className="p-2 text-white hover:bg-white/15 rounded-xl transition-colors" aria-label="Refresh notification status">
-               <RefreshCw size={20} />
-             </button>
+              <button onClick={handleAppRefresh} className="p-2 text-white hover:bg-white/15 rounded-xl transition-colors" aria-label="Refresh app data" title="Refresh data">
+                <RefreshCw size={20} />
+              </button>
           </header>
           <div className={`p-3 pb-24 sm:p-3 md:p-4 lg:pb-4 mx-auto w-full flex-1 ${view === 'work-orders' ? 'max-w-none' : 'max-w-[1700px]'}`}>
            {showExitHint && (
@@ -12350,7 +12375,7 @@ export default function App() {
                </div>
              </div>
            )}
-            <div key={view} className="erp-fade-only">
+            <div key={`${view}-${refreshCounter}`} className="erp-fade-only">
               {renderContent()}
             </div>
           </div>
@@ -12490,6 +12515,24 @@ export default function App() {
           </div>
 
         </main>
+
+        {showLogoutConfirm && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 animate-fade-in">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                  <AlertTriangle size={20} className="text-red-600" />
+                </div>
+                <h3 className="text-lg font-black text-slate-900">Confirm Logout</h3>
+              </div>
+              <p className="text-sm font-semibold text-slate-600 mb-6">Are you sure you want to sign out?</p>
+              <div className="flex gap-3">
+                <button onClick={() => setShowLogoutConfirm(false)} className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">Cancel</button>
+                <button onClick={() => { handleLogout(); setShowLogoutConfirm(false); }} className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-red-600 text-white hover:bg-red-700 transition-colors">Logout</button>
+              </div>
+            </div>
+          </div>
+        )}
     </div>
   );
 }
