@@ -92,6 +92,17 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
       .map((dl: any) => Number(dl.work_order_id))
   ), [dispatchLogs]);
 
+  const todayDispatchQtyMap = useMemo(() => {
+    const map = new Map<number, number>();
+    dispatchLogs.forEach((dl: any) => {
+      if ((dl.dispatch_date || '').slice(0, 10) === todayStr) {
+        const id = Number(dl.work_order_id);
+        map.set(id, (map.get(id) || 0) + Number(dl.dispatch_qty || 0));
+      }
+    });
+    return map;
+  }, [dispatchLogs, todayStr]);
+
   const activePages = useMemo(() => {
     return PAGES.filter(p => {
       if (p.key === 'dispatched-today') {
@@ -394,7 +405,7 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
                                 </span>
                                 <span style={{fontFamily:'IBM Plex Mono,monospace',fontWeight:700,fontSize:'18px',color:'#f3f4f6',flexShrink:0,visibility:'hidden'}}>#{wo.id}</span>
                                 <span style={{fontWeight:600,fontSize:'22px',color:textColor,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{wo.job_details}</span>
-                                <span style={{fontWeight:600,fontSize:'22px',color:textColor,whiteSpace:'nowrap'}}>{wo.qty}</span>
+                                <span style={{fontWeight:600,fontSize:'22px',color:textColor,whiteSpace:'nowrap'}}>{page?.key === 'dispatched-today' ? (todayDispatchQtyMap.get(wo.id) || 0) : wo.qty}</span>
                                 </div>
                             </div>
                           </div>

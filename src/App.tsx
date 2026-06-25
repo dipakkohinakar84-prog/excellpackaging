@@ -2100,11 +2100,15 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
     const deptFiltered = dispatchDepartmentFilter === 'All' ? companyFiltered : companyFiltered.filter(wo => (wo.assigned_departments || []).some(dept => normalizeDepartment(dept) === normalizeDepartment(dispatchDepartmentFilter)));
     const overdueFiltered = overdueOnly ? deptFiltered.filter(wo => isOrderOverdue(wo)) : deptFiltered;
     const dateFiltered = overdueFiltered.filter(wo => {
-      const logs = dispatchLogsMap.get(wo.id) || [];
-      if (logs.length > 0) {
-        return logs.some((log: any) => filterByDate(log.dispatch_date, dispatchDateFilter, dispatchCustomFrom, dispatchCustomTo));
+      if (statusFilter === 'Dispatched') {
+        const logs = dispatchLogsMap.get(wo.id) || [];
+        if (logs.length === 0) return dispatchDateFilter === 'all';
+        return logs.some((log: any) => {
+          if (dispatchDateFilter !== 'all' && !log.dispatch_date) return false;
+          return filterByDate(log.dispatch_date, dispatchDateFilter, dispatchCustomFrom, dispatchCustomTo);
+        });
       }
-      return filterByDate(wo.etd, dispatchDateFilter, dispatchCustomFrom, dispatchCustomTo);
+      return filterByDate(wo.entry_date, dispatchDateFilter, dispatchCustomFrom, dispatchCustomTo);
     });
     if (!deferredSearchQuery) return dateFiltered;
     const lowerQuery = deferredSearchQuery.toLowerCase();
@@ -2371,7 +2375,13 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
             <tbody>
               {statusFilter === 'Dispatched' ? (
                 paginatedOrders.flatMap(wo => {
-                  const logs = dispatchLogsMap.get(wo.id) || [];
+                  let logs = dispatchLogsMap.get(wo.id) || [];
+                  if (dispatchDateFilter !== 'all') {
+                    logs = logs.filter((log: any) => {
+                      if (!log.dispatch_date) return false;
+                      return filterByDate(log.dispatch_date, dispatchDateFilter, dispatchCustomFrom, dispatchCustomTo);
+                    });
+                  }
                   return logs.length > 0
                     ? logs.map((log, i) => ({ log, wo, key: `log-${wo.id}-${log.id || i}` }))
                     : [{ log: null, wo, key: `wo-${wo.id}` }];
@@ -2535,7 +2545,13 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
 
           {statusFilter === 'Dispatched' ? (
             paginatedOrders.flatMap(wo => {
-              const logs = dispatchLogsMap.get(wo.id) || [];
+              let logs = dispatchLogsMap.get(wo.id) || [];
+              if (dispatchDateFilter !== 'all') {
+                logs = logs.filter((log: any) => {
+                  if (!log.dispatch_date) return false;
+                  return filterByDate(log.dispatch_date, dispatchDateFilter, dispatchCustomFrom, dispatchCustomTo);
+                });
+              }
               return logs.length > 0
                 ? logs.map((log, i) => ({ log, wo, key: `card-${wo.id}-${log.id || i}` }))
                 : [{ log: null, wo, key: `card-${wo.id}` }];
@@ -5589,7 +5605,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
 
     const overdueFiltered = overdueOnly ? departmentFiltered.filter(wo => isOrderOverdue(wo)) : departmentFiltered;
 
-    const dateFiltered = overdueFiltered.filter(wo => filterByDate(wo.etd, orderDateFilter, orderCustomFrom, orderCustomTo));
+    const dateFiltered = overdueFiltered.filter(wo => filterByDate(wo.entry_date, orderDateFilter, orderCustomFrom, orderCustomTo));
 
     if (!deferredSearchQuery) return dateFiltered;
     const lowerCaseQuery = deferredSearchQuery.toLowerCase();
@@ -9705,7 +9721,8 @@ const formatEntryDate = (dateValue: string | undefined | null): string => {
 
 const filterByDate = (dateStr: string | undefined, filter: string, customFrom: string, customTo: string): boolean => {
   if (filter === 'all' || !dateStr) return true;
-  const reportDate = new Date(dateStr + 'T00:00:00');
+  const dateOnly = dateStr.slice(0, 10);
+  const reportDate = new Date(dateOnly + 'T00:00:00');
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   if (filter === 'today') return reportDate.getTime() === today.getTime();
