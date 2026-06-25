@@ -408,6 +408,29 @@ const getEditableDepartmentForUser = (wo: WorkOrder, user: User) => {
   return departments.find(dept => normalizeDepartment(dept) === userDept) || '';
 };
 
+const canEditDeptCard = (dept: string, wo: WorkOrder, user: User): boolean => {
+  const userDept = normalizeDepartment(user.department);
+  const normDept = normalizeDepartment(dept);
+  const deptSt = (wo.department_statuses || []).find(s => normalizeDepartment(s.department) === normDept);
+  const currentQcStatus = deptSt?.qc_status;
+  const currentDeptStatus = deptSt?.status || 'Not Started';
+
+  if (userDept === 'Office') return true;
+
+  if (userDept === 'Quality_Control') {
+    return currentDeptStatus === 'Ready for QC' && (!currentQcStatus || currentQcStatus === 'Pending QC');
+  }
+
+  if (userDept === normDept) {
+    if (currentQcStatus === 'QC Denied') return true;
+    if (currentQcStatus === 'QC Approved') return false;
+    if (currentDeptStatus === 'Ready for QC') return false;
+    return true;
+  }
+
+  return false;
+};
+
 const getCardStatusOptions = (wo: WorkOrder, user: User): string[] => {
   const userDept = normalizeDepartment(user.department);
   let options: string[] = [];
@@ -493,7 +516,7 @@ const updateSingleDepartmentStatus = (wo: WorkOrder, department: string, user: U
     return {
       ...s,
       status: (nextStatus === 'QC Approved' || nextStatus === 'QC Denied') ? 'Ready for QC' as DepartmentWOStatus : nextStatus as DepartmentWOStatus,
-      qc_status: nextStatus === 'QC Approved' || nextStatus === 'QC Denied' ? nextStatus as QCStatus : s.qc_status,
+      qc_status: nextStatus === 'QC Approved' || nextStatus === 'QC Denied' ? nextStatus as QCStatus : undefined,
       updated_at: now,
       updated_by: user.username,
     };
@@ -2769,6 +2792,7 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
     can_access_client_orders: true, can_access_live_screen: true, can_access_dispatch: true,
     can_access_notifications: true, can_access_components: true, can_access_custom_bom: true,
     can_access_production_entry: true,
+    can_place_order: true,
   };
   const [featureFlags, setFeatureFlags] = useState<Record<string, boolean>>(initialFeatureFlags);
 
@@ -2896,7 +2920,7 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
     setEditingUser(user);
     setFormData({
       username: user.username || '',
-      email: user.email || '',
+      email: user.email || user.login_email || '',
       mobile: user.mobile || '',
       vehicle_number: user.vehicle_number || '',
       passkey: '',
@@ -2920,6 +2944,7 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
       can_access_components: user.can_access_components !== false,
       can_access_custom_bom: user.can_access_custom_bom !== false,
       can_access_production_entry: user.can_access_production_entry !== false,
+      can_place_order: user.can_place_order !== false,
     });
     setIsModalOpen(true);
   };
@@ -3103,7 +3128,7 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="font-black text-gray-800 text-sm break-words">{u.username}</div>
-                  <div className="text-[11px] text-gray-500 font-semibold mt-0.5 break-all">{u.email}</div>
+                  <div className="text-[11px] text-gray-500 font-semibold mt-0.5 break-all">{u.email || u.login_email}</div>
                 </div>
                 <Badge color="purple">{u.department}</Badge>
               </div>
@@ -5812,7 +5837,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                 ))}
               </select>
             )}
-            {isOfficeUser && (
+            {(isOfficeUser || loggedInUser?.can_place_order) && (
               <button onClick={() => setIsModalOpen(true)} className="w-full bg-blue-600 text-white px-4 py-2 rounded-xl font-bold flex items-center justify-center gap-2 text-sm">
                 <Plus size={16} /> New Order
               </button>
@@ -5878,7 +5903,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
             <button onClick={() => setViewMode('card')} className={`p-1.5 rounded-lg transition-all ${viewMode === 'card' ? 'bg-indigo-50 text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-600 hover:bg-gray-50'}`} title="Card View"><LayoutGrid size={16} /></button>
           </div>
 
-          {isOfficeUser && (
+          {(isOfficeUser || loggedInUser?.can_place_order) && (
             <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-blue-500/20 hover:bg-blue-500 transition-all">
               <Plus size={14} /> New Order
             </button>
@@ -6678,8 +6703,8 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                         </div>
                       )}
 
-                      {/* Office per-department status buttons */}
-                      {isOffice && (
+                      {/* Per-department status buttons */}
+                      {canEditDeptCard(dept, wo as WorkOrder, loggedInUser) && (
                         <div className="border-t border-gray-50 px-3 py-2.5">
                           {(() => {
                             const currentDeptStatus = deptStatus?.status || 'Not Started';

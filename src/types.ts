@@ -33,6 +33,7 @@ export interface User {
   id: number;
   username: string;
   email: string;
+  login_email?: string;
   mobile: string;
   vehicle_number?: string;
   passkey?: string;
@@ -54,6 +55,7 @@ export interface User {
   can_access_components?: boolean;
   can_access_custom_bom?: boolean;
   can_access_production_entry?: boolean;
+  can_place_order?: boolean;
   can_access_vehicles?: boolean;
 }
 
@@ -88,7 +90,8 @@ export const FEATURE_FLAG_GROUPS = [
     flags: [
       { key: 'can_access_dashboard', label: 'Dashboard' },
       { key: 'can_access_dispatch', label: 'Dispatch' },
-      { key: 'can_access_work_orders', label: 'Orders' },
+      { key: 'can_access_work_orders', label: 'Access Orders' },
+      { key: 'can_place_order', label: 'Create Orders' },
       { key: 'can_access_daily_tasks', label: 'Daily Tasks' },
       { key: 'can_access_live_screen', label: 'Live Screen' },
       { key: 'can_access_notifications', label: 'Alerts Log' },
