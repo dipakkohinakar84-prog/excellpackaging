@@ -68,7 +68,7 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
 
   const fetchData = useCallback(async () => {
     const [woRes, dlRes, noticeRes] = await Promise.all([
-      supabase.from('work_orders').select('*').limit(200),
+      supabase.from('work_orders').select('*').order('id', { ascending: false }),
       supabase.from('dispatch_logs').select('*'),
       supabase.from('notices').select('*').order('created_at', { ascending: false }),
     ]);
@@ -115,7 +115,10 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
       const targetStatus = p.status;
       return orders.some(o => {
         const deptStatuses = o.department_statuses || [];
-        return deptStatuses.some(ds => ds.status === targetStatus);
+        if (deptStatuses.length > 0) {
+          return deptStatuses.some(ds => ds.status === targetStatus && (targetStatus !== 'Ready for QC' || !ds.qc_status));
+        }
+        return p.key !== 'qc' && o.status === targetStatus;
       });
     });
   }, [orders, todayDispatchIds]);
@@ -132,7 +135,10 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
     const targetStatus = page.status;
     return orders.filter(o => {
       const deptStatuses = o.department_statuses || [];
-      return deptStatuses.some(ds => ds.status === targetStatus);
+      if (deptStatuses.length > 0) {
+        return deptStatuses.some(ds => ds.status === targetStatus && (targetStatus !== 'Ready for QC' || !ds.qc_status));
+      }
+      return page.key !== 'qc' && o.status === targetStatus;
     });
   }, [orders, currentPage, activePages, todayDispatchIds]);
 
@@ -146,12 +152,22 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
       const depts = wo.assigned_departments || [];
       const deptStatuses = wo.department_statuses || [];
       if (isDeptPage) {
-        DEPT_COLUMNS.forEach(col => {
-          const ds = deptStatuses.find(s => normalizeDepartment(s.department) === col.key);
-          if (ds?.status === targetStatus) {
-            grouped[col.key].push(wo);
-          }
-        });
+        if (deptStatuses.length > 0) {
+          DEPT_COLUMNS.forEach(col => {
+            const ds = deptStatuses.find(s => normalizeDepartment(s.department) === col.key);
+            if (ds?.status === targetStatus && (targetStatus !== 'Ready for QC' || !ds?.qc_status)) {
+              grouped[col.key].push(wo);
+            }
+          });
+        } else if (depts.length > 0) {
+          DEPT_COLUMNS.forEach(col => {
+            if (wo.status === targetStatus && page.key !== 'qc' && depts.some(d => normalizeDepartment(d) === col.key)) {
+              grouped[col.key].push(wo);
+            }
+          });
+        } else if (wo.status === targetStatus && page.key !== 'qc') {
+          grouped[DEPT_COLUMNS[0].key].push(wo);
+        }
       } else {
         const match = DEPT_COLUMNS.find(col => depts.some(d => normalizeDepartment(d) === col.key));
         if (match) grouped[match.key].push(wo);
@@ -165,7 +181,7 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
   useEffect(() => {
     const channel = supabase
       .channel('live-screen-wo-changes')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'work_orders' }, () => { fetchData(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'work_orders' }, () => { fetchData(); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [fetchData]);

@@ -5642,11 +5642,11 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
     const ORDER_ONLY_STATUSES = new Set(['Ready for despatch', 'Dispatched']);
     const statusFiltered = statusFilter === 'All' ? data.filter(wo => wo.status !== 'Dispatched') : data.filter(wo => {
       if (wo.status === statusFilter) return true;
-      if (canFilterByDepartment && departmentFilter !== 'All' && !ORDER_ONLY_STATUSES.has(statusFilter)) {
+      if (canFilterByDepartment && departmentFilter !== 'All' && !ORDER_ONLY_STATUSES.has(statusFilter) && wo.status !== 'Dispatched') {
         const deptStatuses = wo.department_statuses || [];
         return deptStatuses.some(ds =>
           normalizeDepartment(ds.department) === normalizeDepartment(departmentFilter) &&
-          ds.status === statusFilter
+          ds.status === statusFilter && !ds.qc_status
         );
       }
       return false;
@@ -5659,7 +5659,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
             const deptStatuses = wo.department_statuses || [];
             return deptStatuses.some(ds =>
               normalizeDepartment(ds.department) === normDept &&
-              ds.status === statusFilter
+              ds.status === statusFilter && !ds.qc_status
             );
           }
           return (wo.assigned_departments || []).some(dept =>
