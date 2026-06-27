@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from './pocketbase';
 import { WorkOrder, Notice } from './types';
+import { normalizeDepartment } from './utils';
 import { RefreshCw, Maximize2, Minimize2, Pause, Play, ArrowLeft, Megaphone, Plus, X, Trash2, ListChecks, Clock, PlayCircle, Truck, CheckCircle } from 'lucide-react';
 
 interface Props {
@@ -61,7 +62,7 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
   const prevPageCountRef = useRef(0);
   const [badgePop, setBadgePop] = useState(false);
   const scrollPausedRef = useRef(false);
-  const scrollRefs = useRef<(HTMLDivElement | null)[]>([null, null]);
+  const scrollRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   const activeNotices = useMemo(() => notices.filter(n => n.is_active), [notices]);
 
@@ -108,7 +109,14 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
       if (p.key === 'dispatched-today') {
         return orders.some(o => o.status === 'Dispatched' && todayDispatchIds.has(o.id));
       }
-      return orders.some(o => o.status === p.status);
+      if (p.key === 'ready-dispatch') {
+        return orders.some(o => o.status === 'Ready for despatch');
+      }
+      const targetStatus = p.status;
+      return orders.some(o => {
+        const deptStatuses = o.department_statuses || [];
+        return deptStatuses.some(ds => ds.status === targetStatus);
+      });
     });
   }, [orders, todayDispatchIds]);
 
@@ -118,18 +126,39 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
     if (page.key === 'dispatched-today') {
       return orders.filter(o => o.status === 'Dispatched' && todayDispatchIds.has(o.id));
     }
-    return orders.filter(o => o.status === page.status);
+    if (page.key === 'ready-dispatch') {
+      return orders.filter(o => o.status === 'Ready for despatch');
+    }
+    const targetStatus = page.status;
+    return orders.filter(o => {
+      const deptStatuses = o.department_statuses || [];
+      return deptStatuses.some(ds => ds.status === targetStatus);
+    });
   }, [orders, currentPage, activePages, todayDispatchIds]);
 
   const columnOrders = useMemo(() => {
     const grouped: Record<string, WorkOrder[]> = { Wood_Work: [], Corrugation: [] };
+    const page = activePages[currentPage];
+    if (!page) return grouped;
+    const isDeptPage = page.key === 'pending' || page.key === 'wip' || page.key === 'qc';
+    const targetStatus = page.status;
     pageOrders.forEach(wo => {
       const depts = wo.assigned_departments || [];
-      const match = DEPT_COLUMNS.find(col => depts.includes(col.key));
-      if (match) grouped[match.key].push(wo);
+      const deptStatuses = wo.department_statuses || [];
+      if (isDeptPage) {
+        DEPT_COLUMNS.forEach(col => {
+          const ds = deptStatuses.find(s => normalizeDepartment(s.department) === col.key);
+          if (ds?.status === targetStatus) {
+            grouped[col.key].push(wo);
+          }
+        });
+      } else {
+        const match = DEPT_COLUMNS.find(col => depts.some(d => normalizeDepartment(d) === col.key));
+        if (match) grouped[match.key].push(wo);
+      }
     });
     return grouped;
-  }, [pageOrders]);
+  }, [pageOrders, activePages, currentPage]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 

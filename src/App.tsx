@@ -5284,15 +5284,25 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [selectedImageUrl, setSelectedImageUrl] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All');
-  const [departmentFilter, setDepartmentFilter] = useState('All');
-  const [orderDateFilter, setOrderDateFilter] = useState('all');
-  const [orderCustomFrom, setOrderCustomFrom] = useState('');
-  const [orderCustomTo, setOrderCustomTo] = useState('');
-  const [overdueOnly, setOverdueOnly] = useState(false);
-  const [sortConfig, setSortConfig] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
-  const [page, setPage] = useState(1);
+  const ORDERS_FILTER_STORAGE_KEY = 'excell_erp_orders_filters';
+
+  const getSavedOrdersFilters = () => {
+    try {
+      const raw = sessionStorage.getItem(ORDERS_FILTER_STORAGE_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return {};
+  };
+
+  const [searchQuery, setSearchQuery] = useState(() => getSavedOrdersFilters().searchQuery ?? '');
+  const [statusFilter, setStatusFilter] = useState(() => getSavedOrdersFilters().statusFilter ?? 'All');
+  const [departmentFilter, setDepartmentFilter] = useState(() => getSavedOrdersFilters().departmentFilter ?? 'All');
+  const [orderDateFilter, setOrderDateFilter] = useState(() => getSavedOrdersFilters().orderDateFilter ?? 'all');
+  const [orderCustomFrom, setOrderCustomFrom] = useState(() => getSavedOrdersFilters().orderCustomFrom ?? '');
+  const [orderCustomTo, setOrderCustomTo] = useState(() => getSavedOrdersFilters().orderCustomTo ?? '');
+  const [overdueOnly, setOverdueOnly] = useState(() => getSavedOrdersFilters().overdueOnly ?? false);
+  const [sortConfig, setSortConfig] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(() => getSavedOrdersFilters().sortConfig ?? null);
+  const [page, setPage] = useState(() => getSavedOrdersFilters().page ?? 1);
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [busyCardStatusId, setBusyCardStatusId] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'card'>(() => (
@@ -5315,6 +5325,13 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    sessionStorage.setItem(ORDERS_FILTER_STORAGE_KEY, JSON.stringify({
+      searchQuery, statusFilter, departmentFilter, orderDateFilter,
+      orderCustomFrom, orderCustomTo, overdueOnly, sortConfig, page
+    }));
+  }, [searchQuery, statusFilter, departmentFilter, orderDateFilter, orderCustomFrom, orderCustomTo, overdueOnly, sortConfig, page]);
 
   const normalizedUserDept = normalizeDepartment(loggedInUser.department);
   const isOfficeUser = normalizedUserDept === 'Office';
@@ -5622,10 +5639,33 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
   };
 
   const filteredOrders = useMemo(() => {
-    const statusFiltered = statusFilter === 'All' ? data.filter(wo => wo.status !== 'Dispatched') : data.filter(wo => wo.status === statusFilter);
+    const ORDER_ONLY_STATUSES = new Set(['Ready for despatch', 'Dispatched']);
+    const statusFiltered = statusFilter === 'All' ? data.filter(wo => wo.status !== 'Dispatched') : data.filter(wo => {
+      if (wo.status === statusFilter) return true;
+      if (canFilterByDepartment && departmentFilter !== 'All' && !ORDER_ONLY_STATUSES.has(statusFilter)) {
+        const deptStatuses = wo.department_statuses || [];
+        return deptStatuses.some(ds =>
+          normalizeDepartment(ds.department) === normalizeDepartment(departmentFilter) &&
+          ds.status === statusFilter
+        );
+      }
+      return false;
+    });
 
     const departmentFiltered = canFilterByDepartment && departmentFilter !== 'All'
-      ? statusFiltered.filter(wo => (wo.assigned_departments || []).some(dept => normalizeDepartment(dept) === normalizeDepartment(departmentFilter)))
+      ? statusFiltered.filter(wo => {
+          const normDept = normalizeDepartment(departmentFilter);
+          if (statusFilter !== 'All' && !ORDER_ONLY_STATUSES.has(statusFilter)) {
+            const deptStatuses = wo.department_statuses || [];
+            return deptStatuses.some(ds =>
+              normalizeDepartment(ds.department) === normDept &&
+              ds.status === statusFilter
+            );
+          }
+          return (wo.assigned_departments || []).some(dept =>
+            normalizeDepartment(dept) === normDept
+          );
+        })
       : statusFiltered;
 
     const overdueFiltered = overdueOnly ? departmentFiltered.filter(wo => isOrderOverdue(wo)) : departmentFiltered;
