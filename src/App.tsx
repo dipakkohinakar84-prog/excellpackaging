@@ -2345,12 +2345,12 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
       </Modal>
 
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full">
+        <div className="hidden md:block overflow-x-auto max-h-[70vh] overflow-y-auto">
+          <table className="w-full border-separate">
             <thead className="bg-gray-50 border-b">
               <tr>
                 {dispatchMode && (
-                  <th className="px-4 py-3 w-12">
+                  <th className="px-4 py-3 w-12 sticky top-0 bg-gray-50 z-10">
                     <input 
                       type="checkbox" 
                       className="w-4 h-4 rounded"
@@ -2372,27 +2372,27 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                     />
                   </th>
                 )}
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('id')}><span className="inline-flex items-center">Order #<SortIcon col="id" /></span></th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('entry_date')}><span className="inline-flex items-center">Entry Date<SortIcon col="entry_date" /></span></th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('customer')}><span className="inline-flex items-center">Customer<SortIcon col="customer" /></span></th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('job_details')}><span className="inline-flex items-center">Job Details<SortIcon col="job_details" /></span></th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('drawing')}><span className="inline-flex items-center">Drawing No<SortIcon col="drawing" /></span></th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('qty')}><span className="inline-flex items-center">Total Qty<SortIcon col="qty" /></span></th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('etd')}><span className="inline-flex items-center">ETD<SortIcon col="etd" /></span></th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('dispatched')}><span className="inline-flex items-center">Dispatched<SortIcon col="dispatched" /></span></th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('remaining')}><span className="inline-flex items-center">Remaining<SortIcon col="remaining" /></span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky left-0 top-0 bg-gray-50 z-20" onClick={() => handleSort('id')}><span className="inline-flex items-center">Order #<SortIcon col="id" /></span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('entry_date')}><span className="inline-flex items-center">Entry Date<SortIcon col="entry_date" /></span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('customer')}><span className="inline-flex items-center">Customer<SortIcon col="customer" /></span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('job_details')}><span className="inline-flex items-center">Job Details<SortIcon col="job_details" /></span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('drawing')}><span className="inline-flex items-center">Drawing No<SortIcon col="drawing" /></span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('qty')}><span className="inline-flex items-center">Total Qty<SortIcon col="qty" /></span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('etd')}><span className="inline-flex items-center">ETD<SortIcon col="etd" /></span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('dispatched')}><span className="inline-flex items-center">Dispatched<SortIcon col="dispatched" /></span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('remaining')}><span className="inline-flex items-center">Remaining<SortIcon col="remaining" /></span></th>
                 {statusFilter === 'Dispatched' && (
                   <>
-                    <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Invoice</th>
-                    <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Vehicle</th>
-                    <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Dispatch Date</th>
+                    <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Invoice</th>
+                    <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Vehicle</th>
+                    <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Dispatch Date</th>
                   </>
                 )}
                 {dispatchMode && (
-                  <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Dispatch Qty</th>
+                  <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Dispatch Qty</th>
                 )}
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('status')}><span className="inline-flex items-center">Status<SortIcon col="status" /></span></th>
-                <th className="px-6 py-3 text-right text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Actions</th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('status')}><span className="inline-flex items-center">Status<SortIcon col="status" /></span></th>
+                <th className="px-6 py-3 text-right text-[10px] font-black uppercase text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -2410,7 +2410,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                     : [{ log: null, wo, key: `wo-${wo.id}` }];
                 }).map(({ log, wo }) => (
                   <tr key={`log-${wo.id}-${log?.id || 0}`} className="border-b hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4"><span className="text-blue-600 font-bold">#{wo.id}</span></td>
+                    <td className="px-6 py-4 sticky left-0 bg-white z-10"><span className="text-blue-600 font-bold">#{wo.id}</span></td>
                     <td className="px-6 py-4"><div className="text-xs font-bold text-gray-600 whitespace-nowrap">{formatEntryDate(wo.entry_date || (wo as any).created_at || (wo as any).created)}</div></td>
                     <td className="px-6 py-4"><div className="font-semibold text-gray-800">{wo.customer}</div></td>
                     <td className="px-6 py-4"><div className="text-gray-700">{wo.job_details}</div></td>
@@ -2459,7 +2459,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                             />
                           </td>
                         )}
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4 sticky left-0 bg-white z-10">
                           <span className="text-blue-600 font-bold">#{wo.id}</span>
                         </td>
                         <td className="px-6 py-4">
@@ -3095,15 +3095,15 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
       </Modal>
 
       <Card className="p-0 overflow-hidden shadow-md">
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full min-w-[760px] text-left text-sm">
+        <div className="hidden md:block overflow-x-auto max-h-[70vh] overflow-y-auto">
+          <table className="w-full min-w-[760px] text-left text-sm border-separate">
             <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-500 border-b">
-              <tr><th className="px-6 py-4 whitespace-nowrap">Name</th><th className="px-6 py-4 whitespace-nowrap">Contact</th><th className="px-6 py-4 whitespace-nowrap">Vehicle</th><th className="px-6 py-4 whitespace-nowrap">Dept</th><th className="px-6 py-4 whitespace-nowrap">Actions</th></tr>
+              <tr><th className="px-6 py-4 whitespace-nowrap sticky left-0 top-0 bg-gray-50 z-20">Name</th><th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Contact</th><th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Vehicle</th><th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Dept</th><th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Actions</th></tr>
             </thead>
             <tbody className="divide-y">
               {filteredUsers.map(u => (
                 <tr key={u.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 font-bold">{u.username}</td>
+                  <td className="px-6 py-4 font-bold sticky left-0 bg-white z-10">{u.username}</td>
                   <td className="px-6 py-4">{u.mobile}</td>
                   <td className="px-6 py-4 text-xs font-bold text-gray-600">{u.vehicle_number || '-'}</td>
                   <td className="px-6 py-4"><Badge color="purple">{u.department}</Badge></td>
@@ -3448,23 +3448,23 @@ const CustomerManagement: React.FC<{ onError: () => void; editingId?: number }> 
       </Modal>
 
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full min-w-[900px] text-left text-sm">
+        <div className="hidden md:block overflow-x-auto max-h-[70vh] overflow-y-auto">
+          <table className="w-full min-w-[900px] text-left text-sm border-separate">
             <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-500 border-b">
               <tr>
-                <th className="px-6 py-4 whitespace-nowrap">Client Name</th>
-                <th className="px-6 py-4 whitespace-nowrap">City</th>
-                <th className="px-6 py-4 whitespace-nowrap">Contact</th>
-                <th className="px-6 py-4 whitespace-nowrap">Email</th>
-                <th className="px-6 py-4 whitespace-nowrap">GST</th>
-                <th className="px-6 py-4 whitespace-nowrap">Type</th>
-                <th className="px-6 py-4 text-right whitespace-nowrap">Actions</th>
+                <th className="px-6 py-4 whitespace-nowrap sticky left-0 top-0 bg-gray-50 z-20">Client Name</th>
+                <th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">City</th>
+                <th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Contact</th>
+                <th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Email</th>
+                <th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">GST</th>
+                <th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Type</th>
+                <th className="px-6 py-4 text-right whitespace-nowrap sticky top-0 bg-gray-50 z-10">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {data.map(c => (
                 <tr key={c.id} className="hover:bg-gray-50/80 transition-colors group">
-                  <td className="px-6 py-4 font-bold text-gray-800">{c.name}</td>
+                  <td className="px-6 py-4 font-bold text-gray-800 sticky left-0 bg-white z-10">{c.name}</td>
                   <td className="px-6 py-4 text-gray-600">{c.city || '—'}</td>
                   <td className="px-6 py-4 text-gray-600">{c.contact || '—'}</td>
                   <td className="px-6 py-4 text-gray-600 truncate max-w-[200px]">{c.email || '—'}</td>
@@ -4319,21 +4319,21 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
       </Modal>
 
       <Card className="p-0 overflow-hidden shadow-md">
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full min-w-[780px] text-left text-sm">
+        <div className="hidden md:block overflow-x-auto max-h-[70vh] overflow-y-auto">
+          <table className="w-full min-w-[780px] text-left text-sm border-separate">
             <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-500 border-b">
               <tr>
-                <th className="px-6 py-4 whitespace-nowrap">Item Name</th>
-                <th className="px-6 py-4 whitespace-nowrap">Customer</th>
-                <th className="px-6 py-4 whitespace-nowrap">Drawing No</th>
-                <th className="px-6 py-4 whitespace-nowrap">Depts</th>
-                <th className="px-6 py-4 text-right whitespace-nowrap">Actions</th>
+                <th className="px-6 py-4 whitespace-nowrap sticky left-0 top-0 bg-gray-50 z-20">Item Name</th>
+                <th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Customer</th>
+                <th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Drawing No</th>
+                <th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Depts</th>
+                <th className="px-6 py-4 text-right whitespace-nowrap sticky top-0 bg-gray-50 z-10">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {filteredData.map(c => (
                 <tr key={c.id} className="hover:bg-indigo-50/20 transition-colors">
-                  <td className="px-6 py-4 font-bold text-indigo-700">{c.name}</td>
+                  <td className="px-6 py-4 font-bold text-indigo-700 sticky left-0 bg-white z-10">{c.name}</td>
                   <td className="px-6 py-4">{c.customer_name}</td>
                   <td className="px-6 py-4 font-mono text-xs">{c.drawing_no}</td>
                   <td className="px-6 py-4">
@@ -4742,19 +4742,19 @@ const ChildItemListView: React.FC<{ onError: () => void; editingId?: number | st
       </Modal>
 
       <Card className="p-0 overflow-hidden shadow-md">
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full min-w-[680px] text-left text-sm">
+        <div className="hidden md:block overflow-x-auto max-h-[70vh] overflow-y-auto">
+          <table className="w-full min-w-[680px] text-left text-sm border-separate">
             <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-500 border-b">
               <tr>
-                <th className="px-6 py-4 whitespace-nowrap">Component Name</th>
-                <th className="px-6 py-4 whitespace-nowrap">Depts</th>
-                <th className="px-6 py-4 text-center whitespace-nowrap w-24">Actions</th>
+                <th className="px-6 py-4 whitespace-nowrap sticky left-0 top-0 bg-gray-50 z-20">Component Name</th>
+                <th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Depts</th>
+                <th className="px-6 py-4 text-center whitespace-nowrap w-24 sticky top-0 bg-gray-50 z-10">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {filteredComponents.map(c => (
                 <tr key={c.id} className="hover:bg-indigo-50/20 transition-colors">
-                  <td className="px-6 py-4 font-bold text-gray-800">{c.name}</td>
+                  <td className="px-6 py-4 font-bold text-gray-800 sticky left-0 bg-white z-10">{c.name}</td>
                   <td className="px-6 py-4">
                     <div className="flex flex-wrap gap-1">
                       {(c.departments || []).map((d: string) => <Badge key={d} color="gray">{d}</Badge>)}
@@ -4919,20 +4919,20 @@ const VehicleList: React.FC<{ onError: () => void }> = ({ onError }) => {
       </Modal>
 
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full min-w-[600px] text-left text-sm">
+        <div className="hidden md:block overflow-x-auto max-h-[70vh] overflow-y-auto">
+          <table className="w-full min-w-[600px] text-left text-sm border-separate">
             <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-500 border-b">
               <tr>
-                <th className="px-6 py-4 whitespace-nowrap">Vehicle No</th>
-                <th className="px-6 py-4 whitespace-nowrap">Driver / Transport</th>
-                <th className="px-6 py-4 whitespace-nowrap">Status</th>
-                <th className="px-6 py-4 text-right whitespace-nowrap">Actions</th>
+                <th className="px-6 py-4 whitespace-nowrap sticky left-0 top-0 bg-gray-50 z-20">Vehicle No</th>
+                <th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Driver / Transport</th>
+                <th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Status</th>
+                <th className="px-6 py-4 text-right whitespace-nowrap sticky top-0 bg-gray-50 z-10">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {data.map(v => (
                 <tr key={v.id} className="hover:bg-gray-50/80 transition-colors group">
-                  <td className="px-6 py-4 font-bold text-gray-800">{v.vehicle_no}</td>
+                  <td className="px-6 py-4 font-bold text-gray-800 sticky left-0 bg-white z-10">{v.vehicle_no}</td>
                   <td className="px-6 py-4 text-gray-600">{v.driver_name || '—'}</td>
                   <td className="px-6 py-4">
                     <span className={`font-bold text-xs px-2.5 py-1 rounded-full ${v.is_active !== false ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{v.is_active !== false ? 'Active' : 'Inactive'}</span>
@@ -5017,6 +5017,10 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
   const [jobsDateFilter, setJobsDateFilter] = useState('all');
   const [jobsCustomFrom, setJobsCustomFrom] = useState('');
   const [jobsCustomTo, setJobsCustomTo] = useState('');
+  const [departmentFilter, setDepartmentFilter] = useState('All');
+  const normalizedUserDept = normalizeDepartment(loggedInUser.department);
+  const isOfficeUser = normalizedUserDept === 'Office';
+  const canFilterByDepartment = isOfficeUser || normalizedUserDept === 'Quality_Control' || normalizedUserDept === 'Dispatch';
 
   useEffect(() => {
     const fetchData = async () => {
@@ -5051,25 +5055,53 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
   }, [loggedInUser]);
 
   const filteredOrders = useMemo(() => {
-    const statusFiltered = statusFilter === 'All' ? data.filter(wo => wo.status !== 'Dispatched') : data.filter(wo => wo.status === statusFilter);
+    const ORDER_ONLY_STATUSES = new Set(['Ready for despatch', 'Dispatched']);
+    const statusFiltered = statusFilter === 'All' ? data.filter(wo => wo.status !== 'Dispatched') : data.filter(wo => {
+      if (wo.status === statusFilter) return true;
+      if (canFilterByDepartment && departmentFilter !== 'All' && !ORDER_ONLY_STATUSES.has(statusFilter) && wo.status !== 'Dispatched') {
+        const deptStatuses = wo.department_statuses || [];
+        return deptStatuses.some(ds =>
+          normalizeDepartment(ds.department) === normalizeDepartment(departmentFilter) &&
+          ds.status === statusFilter && !ds.qc_status
+        );
+      }
+      return false;
+    });
     const dateFiltered = statusFiltered.filter(wo => filterByDate(wo.etd, jobsDateFilter, jobsCustomFrom, jobsCustomTo));
-    if (!deferredSearchQuery) return dateFiltered;
+    const departmentFiltered = canFilterByDepartment && departmentFilter !== 'All'
+      ? dateFiltered.filter(wo => {
+          const normDept = normalizeDepartment(departmentFilter);
+          if (statusFilter !== 'All' && !ORDER_ONLY_STATUSES.has(statusFilter)) {
+            const deptStatuses = wo.department_statuses || [];
+            return deptStatuses.some(ds =>
+              normalizeDepartment(ds.department) === normDept &&
+              ds.status === statusFilter && !ds.qc_status
+            );
+          }
+          return (wo.assigned_departments || []).some(dept => normalizeDepartment(dept) === normDept);
+        })
+      : dateFiltered;
+    if (!deferredSearchQuery) return departmentFiltered;
     const lowerCaseQuery = deferredSearchQuery.toLowerCase();
-    return dateFiltered.filter(wo =>
-      wo.id.toString().includes(lowerCaseQuery) ||
-      wo.customer.toLowerCase().includes(lowerCaseQuery) ||
-      wo.job_details.toLowerCase().includes(lowerCaseQuery)
-    );
-  }, [data, deferredSearchQuery, statusFilter, jobsDateFilter, jobsCustomFrom, jobsCustomTo]);
+    return departmentFiltered.filter(wo => wo.id.toString().includes(lowerCaseQuery) || wo.customer.toLowerCase().includes(lowerCaseQuery) || wo.job_details.toLowerCase().includes(lowerCaseQuery));
+  }, [data, deferredSearchQuery, statusFilter, jobsDateFilter, jobsCustomFrom, jobsCustomTo, departmentFilter, canFilterByDepartment]);
 
   const statusOptions = useMemo(() => {
     const uniqueStatuses = Array.from(new Set(data.map(wo => wo.status))).filter(s => s !== 'QC Approved');
     return sortStatuses(uniqueStatuses);
   }, [data]);
 
+  const departmentOptions = useMemo(() => {
+    const deptSet = new Set<string>();
+    data.forEach(wo => {
+      (wo.assigned_departments || []).forEach(dept => deptSet.add(normalizeDepartment(dept)));
+    });
+    return Array.from(deptSet).sort();
+  }, [data]);
+
   useEffect(() => {
     setPage(1);
-  }, [searchQuery, statusFilter, data.length]);
+  }, [searchQuery, statusFilter, data.length, departmentFilter]);
 
   const { pageRows: paginatedOrders, totalPages, safePage, totalRows, startIndex } = useMemo(
     () => getPageSlice(filteredOrders, page, LIST_PAGE_SIZE),
@@ -5156,25 +5188,21 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
 
   return (
     <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-300">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-6">
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={20} />
+      <div className="flex flex-wrap items-center gap-2 mb-3 sm:mb-6">
+        <div className="relative flex-1 min-w-[200px] max-w-[320px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
           <input 
             type="text" 
             placeholder="Search by order, customer, or job..." 
             value={searchQuery} 
             onChange={e => setSearchQuery(e.target.value)} 
-            className="w-full pl-12 pr-4 py-2.5 sm:py-4 bg-white border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm"
+            className="w-full pl-9 pr-3 py-1.5 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
           />
         </div>
-        <div className="flex gap-1.5 flex-wrap items-center">
-          <button onClick={() => setStatusFilter('All')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === 'All' ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>All</button>
-          {statusOptions.map(s => (
-            <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === s ? (statusTabColors[s] || 'bg-slate-900 text-white') : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS[s] || s}</button>
-          ))}
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
+        <button onClick={() => setStatusFilter('All')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === 'All' ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>All</button>
+        {statusOptions.map(s => (
+          <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === s ? (statusTabColors[s] || 'bg-slate-900 text-white') : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS[s] || s}</button>
+        ))}
         <select value={jobsDateFilter} onChange={e => { setJobsDateFilter(e.target.value); if (e.target.value !== 'custom') { setJobsCustomFrom(''); setJobsCustomTo(''); } }} className="px-3 py-1.5 border rounded-xl text-xs font-semibold bg-white">
           <option value="all">All Dates</option>
           <option value="today">Today</option>
@@ -5188,6 +5216,14 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
             <span className="text-gray-500 text-xs">to</span>
             <input type="date" value={jobsCustomTo} onChange={e => setJobsCustomTo(e.target.value)} className="px-3 py-1.5 border rounded-xl text-xs bg-white" />
           </>
+        )}
+        {canFilterByDepartment && (
+          <select value={departmentFilter} onChange={e => setDepartmentFilter(e.target.value)} className="px-3 py-1.5 border rounded-xl text-xs font-semibold bg-white">
+            <option value="All">All Depts</option>
+            {departmentOptions.map(d => (
+              <option key={d} value={d}>{d.replace(/_/g, ' ')}</option>
+            ))}
+          </select>
         )}
       </div>
 
@@ -6133,38 +6169,38 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
       </Modal>
 
       {viewMode === 'table' ? (
-        <Card className="hidden md:block p-0 overflow-x-auto shadow-md border border-gray-100">
-                <table className="w-full min-w-[1660px] text-left text-sm">
+        <Card className="hidden md:block p-0 overflow-x-auto overflow-y-auto max-h-[70vh] shadow-md border border-gray-100">
+                <table className="w-full min-w-[1660px] text-left text-sm border-separate">
                     <thead className="bg-gray-50 text-xs font-black uppercase text-gray-500 border-b border-gray-200">
                         <tr>
-                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('id')}>
+                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky left-0 top-0 bg-gray-50 z-20" onClick={() => handleSort('id')}>
                                 <span className="inline-flex items-center">Order #<SortIcon col="id" /></span>
                             </th>
-                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('created_at')}>
+                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('created_at')}>
                                 <span className="inline-flex items-center">Entry Date<SortIcon col="created_at" /></span>
                             </th>
-                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('customer')}>
+                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('customer')}>
                                 <span className="inline-flex items-center">Customer<SortIcon col="customer" /></span>
                             </th>
-                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('job_details')}>
+                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('job_details')}>
                                 <span className="inline-flex items-center">Job Details<SortIcon col="job_details" /></span>
                             </th>
-                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('drawing')}>
+                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('drawing')}>
                                 <span className="inline-flex items-center">Drawing<SortIcon col="drawing" /></span>
                             </th>
-                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('qty')}>
+                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('qty')}>
                                 <span className="inline-flex items-center">Qty<SortIcon col="qty" /></span>
                             </th>
-                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('etd')}>
+                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('etd')}>
                                 <span className="inline-flex items-center">ETD<SortIcon col="etd" /></span>
                             </th>
-                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('status')}>
+                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('status')}>
                                 <span className="inline-flex items-center">Status<SortIcon col="status" /></span>
                             </th>
-                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('departments')}>
+                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('departments')}>
                                 <span className="inline-flex items-center">Depts<SortIcon col="departments" /></span>
                             </th>
-                            <th className="px-4 py-2 text-right whitespace-nowrap">Action</th>
+                            <th className="px-4 py-2 text-right whitespace-nowrap sticky top-0 bg-gray-50 z-10">Action</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -6174,7 +6210,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                                 onClick={() => onView(wo.id)} 
                                 className={`hover:bg-blue-50/50 cursor-pointer transition-colors group ${isOrderOverdue(wo) ? 'bg-red-100/60' : ''}`}
                             >
-                                <td className="px-4 py-2 font-black text-indigo-600 text-sm whitespace-nowrap">
+                                <td className={`px-4 py-2 font-black text-indigo-600 text-sm whitespace-nowrap sticky left-0 z-10 ${isOrderOverdue(wo) ? 'bg-red-100/60' : 'bg-white'}`}>
                                   <div className="text-sm">#{wo.id}</div>
                                   {wo.order_type === 'suborder' && <Badge color="purple" className="!text-xs">Suborder Of #{wo.parent_work_order_id || '-'}</Badge>}
                                 </td>
@@ -7682,21 +7718,21 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
                     <button onClick={() => addComponentToItem(item.local_id, componentPicker[item.local_id] || '')} className="w-full md:w-auto px-3 py-2 bg-slate-900 text-white rounded-lg text-xs font-black">Add Component</button>
                   </div>
 
-                  <div className="hidden md:block overflow-x-auto border border-gray-100 rounded-lg">
-                    <table className="w-full min-w-[700px] text-sm">
+                  <div className="hidden md:block overflow-x-auto max-h-[70vh] overflow-y-auto border border-gray-100 rounded-lg">
+                    <table className="w-full min-w-[700px] text-sm border-separate">
                       <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black">
                         <tr>
-                          <th className="px-3 py-2 text-left">Component</th>
-                          <th className="px-3 py-2 text-left">Depts</th>
-                          <th className="px-3 py-2 text-left">Qty / Item</th>
-                          <th className="px-3 py-2 text-left">Total Qty</th>
-                          <th className="px-3 py-2 text-right">Action</th>
+                          <th className="px-3 py-2 text-left sticky left-0 top-0 bg-gray-50 z-20">Component</th>
+                          <th className="px-3 py-2 text-left sticky top-0 bg-gray-50 z-10">Depts</th>
+                          <th className="px-3 py-2 text-left sticky top-0 bg-gray-50 z-10">Qty / Item</th>
+                          <th className="px-3 py-2 text-left sticky top-0 bg-gray-50 z-10">Total Qty</th>
+                          <th className="px-3 py-2 text-right sticky top-0 bg-gray-50 z-10">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
                         {item.components.map(comp => (
                           <tr key={comp.component_name}>
-                            <td className="px-3 py-2 font-bold text-gray-700">{comp.component_name}</td>
+                            <td className="px-3 py-2 font-bold text-gray-700 sticky left-0 bg-white z-10">{comp.component_name}</td>
                             <td className="px-3 py-2">
                               <div className="flex gap-1 flex-wrap">{comp.departments.map(d => <Badge key={d} color="gray">{d}</Badge>)}</div>
                             </td>
@@ -7761,21 +7797,21 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
           <h3 className="font-black text-gray-800">{bomMode === 'unsaved' ? 'Items Without BOM Components' : 'Items With Saved BOM Components'}</h3>
           <span className="text-xs font-bold text-gray-500">{bomMode === 'unsaved' ? filteredUnsavedRows.length : filteredSavedRows.length} row(s)</span>
         </div>
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full min-w-[850px] text-sm">
+        <div className="hidden md:block overflow-x-auto max-h-[70vh] overflow-y-auto">
+          <table className="w-full min-w-[850px] text-sm border-separate">
             <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b">
               <tr>
-                <th className="px-4 py-2 text-left">Item Name</th>
-                <th className="px-4 py-2 text-left">Company</th>
-                <th className="px-4 py-2 text-left">Qty</th>
-                <th className="px-4 py-2 text-left">Updated</th>
-                <th className="px-4 py-2 text-right">Actions</th>
+                <th className="px-4 py-2 text-left sticky left-0 top-0 bg-gray-50 z-20">Item Name</th>
+                <th className="px-4 py-2 text-left sticky top-0 bg-gray-50 z-10">Company</th>
+                <th className="px-4 py-2 text-left sticky top-0 bg-gray-50 z-10">Qty</th>
+                <th className="px-4 py-2 text-left sticky top-0 bg-gray-50 z-10">Updated</th>
+                <th className="px-4 py-2 text-right sticky top-0 bg-gray-50 z-10">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {bomMode === 'saved' && filteredSavedRows.map(row => (
                 <tr key={`${row.company_name}-${row.item_id}`}>
-                  <td className="px-4 py-2 font-black text-indigo-700">{row.item_name}</td>
+                  <td className="px-4 py-2 font-black text-indigo-700 sticky left-0 bg-white z-10">{row.item_name}</td>
                   <td className="px-4 py-2 font-semibold text-gray-700">{row.company_name}</td>
                   <td className="px-4 py-2">{row.components_count} component(s)</td>
                   <td className="px-4 py-2 text-xs text-gray-500">Saved in Item Master</td>
@@ -7787,7 +7823,7 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
               ))}
               {bomMode === 'unsaved' && filteredUnsavedRows.map(row => (
                 <tr key={`${row.company_name}-${row.item_id}`}>
-                  <td className="px-4 py-2 font-black text-indigo-700">{row.item_name}</td>
+                  <td className="px-4 py-2 font-black text-indigo-700 sticky left-0 bg-white z-10">{row.item_name}</td>
                   <td className="px-4 py-2 font-semibold text-gray-700">{row.company_name}</td>
                   <td className="px-4 py-2">{row.default_qty}</td>
                   <td className="px-4 py-2 text-xs text-gray-500">-</td>
@@ -8203,19 +8239,19 @@ const ProductionPlanList: React.FC<{ onError: () => void; onGenerate: (ids: numb
       </div>
 
       <Card className="p-0 overflow-hidden shadow-lg border-2 border-indigo-50">
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-left text-sm">
+        <div className="hidden md:block overflow-x-auto max-h-[70vh] overflow-y-auto">
+          <table className="w-full text-left text-sm border-separate">
             <thead className="bg-[#0f172a] text-white text-[10px] font-black uppercase tracking-widest">
               <tr>
-                  <th className="px-6 py-5 w-10">
+                  <th className="px-6 py-5 w-10 sticky top-0 bg-[#0f172a] z-10">
                       <button onClick={toggleSelectAll} className="text-white hover:text-indigo-200">
                           {paginatedPlanOrders.length > 0 && paginatedPlanOrders.every(wo => selectedIds.includes(wo.id)) ? <CheckSquare size={18}/> : <Square size={18}/>} 
                       </button>
                   </th>
-                  <th className="px-6 py-5 whitespace-nowrap">Order ID</th>
-                  <th className="px-6 py-5 whitespace-nowrap">Client</th>
-                  <th className="px-6 py-5 whitespace-nowrap">Target Item</th>
-                  <th className="px-6 py-5 text-right whitespace-nowrap">Action</th>
+                  <th className="px-6 py-5 whitespace-nowrap sticky left-0 top-0 bg-[#0f172a] z-20">Order ID</th>
+                  <th className="px-6 py-5 whitespace-nowrap sticky top-0 bg-[#0f172a] z-10">Client</th>
+                  <th className="px-6 py-5 whitespace-nowrap sticky top-0 bg-[#0f172a] z-10">Target Item</th>
+                  <th className="px-6 py-5 text-right whitespace-nowrap sticky top-0 bg-[#0f172a] z-10">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -8226,7 +8262,7 @@ const ProductionPlanList: React.FC<{ onError: () => void; onGenerate: (ids: numb
                           {selectedIds.includes(wo.id) ? <CheckSquare size={18} className="text-indigo-600"/> : <Square size={18}/>}
                       </button>
                   </td>
-                  <td className="px-6 py-4 font-black text-indigo-600">#{wo.id}</td>
+                  <td className="px-6 py-4 font-black text-indigo-600 sticky left-0 bg-white z-10">#{wo.id}</td>
                   <td className="px-6 py-4 font-bold text-gray-800">{wo.customer}</td>
                   <td className="px-6 py-4">
                     <div className="text-xs font-bold text-gray-700">{wo.job_details}</div>
@@ -8764,47 +8800,47 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
       </div>
 
       <Card className="hidden md:block p-0 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1180px] text-sm">
+        <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
+          <table className="w-full min-w-[1180px] text-sm border-separate">
             <thead className="bg-gray-50 text-[10px] uppercase tracking-widest text-gray-500 font-black border-b">
               <tr>
-                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('time')}>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors sticky left-0 top-0 bg-gray-50 z-20" onClick={() => handleSort('time')}>
                   <span className="inline-flex items-center">Time<SortIcon col="time" /></span>
                 </th>
-                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('type')}>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('type')}>
                   <span className="inline-flex items-center">Type<SortIcon col="type" /></span>
                 </th>
-                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('action')}>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('action')}>
                   <span className="inline-flex items-center">Action<SortIcon col="action" /></span>
                 </th>
-                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('title')}>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('title')}>
                   <span className="inline-flex items-center">Title<SortIcon col="title" /></span>
                 </th>
-                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('body')}>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('body')}>
                   <span className="inline-flex items-center">Message<SortIcon col="body" /></span>
                 </th>
-                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('actor')}>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('actor')}>
                   <span className="inline-flex items-center">Done By<SortIcon col="actor" /></span>
                 </th>
-                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('departments')}>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('departments')}>
                   <span className="inline-flex items-center">Departments<SortIcon col="departments" /></span>
                 </th>
-                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('wo')}>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('wo')}>
                   <span className="inline-flex items-center">WO #<SortIcon col="wo" /></span>
                 </th>
-                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('customer')}>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('customer')}>
                   <span className="inline-flex items-center">Customer<SortIcon col="customer" /></span>
                 </th>
-                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('target')}>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('target')}>
                   <span className="inline-flex items-center">Item/Target<SortIcon col="target" /></span>
                 </th>
-                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('targets')}>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('targets')}>
                   <span className="inline-flex items-center">Targets<SortIcon col="targets" /></span>
                 </th>
-                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('sent')}>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('sent')}>
                   <span className="inline-flex items-center">Sent<SortIcon col="sent" /></span>
                 </th>
-                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort('failed')}>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('failed')}>
                   <span className="inline-flex items-center">Failed<SortIcon col="failed" /></span>
                 </th>
               </tr>
@@ -8814,7 +8850,7 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
                 const departments = getEventDepartments(ev);
                 return (
                   <tr key={`${ev._source}-${ev.id}`}>
-                    <td className="px-4 py-2 text-xs text-gray-500 whitespace-nowrap">{formatEventTime(ev)}</td>
+                    <td className="px-4 py-2 text-xs text-gray-500 whitespace-nowrap sticky left-0 bg-white z-10">{formatEventTime(ev)}</td>
                     <td className="px-4 py-2"><Badge color="gray">{getEventType(ev)}</Badge></td>
                     <td className="px-4 py-2 text-xs font-black text-slate-700 whitespace-nowrap">{getEventAction(ev)}</td>
                     <td className="px-4 py-2 font-black text-slate-800 whitespace-nowrap">{ev.title}</td>
@@ -9285,7 +9321,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
 
   if (loading) return <LoadingState message="Loading reports..." />;
 
-  const thClass = "px-4 py-3 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors whitespace-nowrap";
+  const thClass = "px-4 py-3 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors whitespace-nowrap sticky top-0 bg-gray-50 z-10";
 
   const SortIcon = ({ col }: { col: string }) => (
     sortConfig?.key === col
@@ -9491,10 +9527,10 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
 
       {/* Component Usage table */}
       {reportType === 'component-usage' && (
-        <Card className="p-0 overflow-hidden shadow-sm border border-gray-200/60 rounded-xl">
+        <Card className="p-0 shadow-sm border border-gray-200/60 rounded-xl">
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full min-w-[750px] text-sm">
-              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
+              <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
                 <tr>
                   <th className="px-4 py-3 w-8"></th>
                   <th className={thClass} onClick={() => handleSort('component')}>Component <SortIcon col="component" /></th>
@@ -9578,10 +9614,10 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
 
       {/* Item Usage table */}
       {reportType === 'item-usage' && (
-        <Card className="p-0 overflow-hidden shadow-sm border border-gray-200/60 rounded-xl">
+        <Card className="p-0 shadow-sm border border-gray-200/60 rounded-xl">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[600px] text-sm">
-              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
+              <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
                 <tr>
                   <th className={thClass} onClick={() => handleSort('item')}>Item Name <SortIcon col="item" /></th>
                   <th className={`${thClass} text-right`} onClick={() => handleSort('orders')}>Orders <SortIcon col="orders" /></th>
@@ -9607,10 +9643,10 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
 
       {/* On-Time Delivery table */}
       {reportType === 'on-time' && (
-        <Card className="p-0 overflow-hidden shadow-sm border border-gray-200/60 rounded-xl">
+        <Card className="p-0 shadow-sm border border-gray-200/60 rounded-xl">
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full min-w-[800px] text-sm">
-              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-green-300">
+              <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-green-300">
                 <tr>
                   <th className={thClass} onClick={() => handleSort('_date')}>Date <SortIcon col="_date" /></th>
                   <th className={`${thClass} text-right`} onClick={() => handleSort('work_order_id')}>WO <SortIcon col="work_order_id" /></th>
@@ -9652,10 +9688,10 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
 
       {/* Delayed Delivery table */}
       {reportType === 'delayed' && (
-        <Card className="p-0 overflow-hidden shadow-sm border border-gray-200/60 rounded-xl">
+        <Card className="p-0 shadow-sm border border-gray-200/60 rounded-xl">
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full min-w-[900px] text-sm">
-              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-red-300">
+              <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-red-300">
                 <tr>
                   <th className={thClass} onClick={() => handleSort('_date')}>Date <SortIcon col="_date" /></th>
                   <th className={`${thClass} text-right`} onClick={() => handleSort('work_order_id')}>WO <SortIcon col="work_order_id" /></th>
@@ -9697,10 +9733,10 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
 
       {/* Department-Wise table */}
       {reportType === 'dept-wise' && (
-        <Card className="p-0 overflow-hidden shadow-sm border border-gray-200/60 rounded-xl">
+        <Card className="p-0 shadow-sm border border-gray-200/60 rounded-xl">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[700px] text-sm">
-              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
+              <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
                 <tr>
                   <th className={thClass} onClick={() => handleSort('dept')}>Department <SortIcon col="dept" /></th>
                   <th className={`${thClass} text-right`} onClick={() => handleSort('reports')}>Reports <SortIcon col="reports" /></th>
@@ -9730,10 +9766,10 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
 
       {/* Company Performance table */}
       {reportType === 'company-performance' && (
-        <Card className="p-0 overflow-hidden shadow-sm border border-gray-200/60 rounded-xl">
+        <Card className="p-0 shadow-sm border border-gray-200/60 rounded-xl">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[700px] text-sm">
-              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
+              <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
                 <tr>
                   <th className={thClass} onClick={() => handleSort('company')}>Company <SortIcon col="company" /></th>
                   <th className={`${thClass} text-right`} onClick={() => handleSort('totalWOs')}>Total WOs <SortIcon col="totalWOs" /></th>
@@ -11617,13 +11653,25 @@ export default function App() {
         items: [
           { id: 'dashboard' as AppView, label: 'Dashboard', icon: LayoutDashboard },
           { id: 'worker-dashboard' as AppView, label: 'My Jobs', icon: Hammer },
-          { id: 'dispatch-dashboard' as AppView, label: 'Dispatch', icon: Truck },
           { id: 'work-orders' as AppView, label: 'Orders', icon: ClipboardList },
+          { id: 'client-orders' as AppView, label: 'Client Orders', icon: ShoppingCart },
+        ],
+      },
+      {
+        key: 'dispatch-other',
+        label: 'Dispatch and Other',
+        items: [
+          { id: 'dispatch-dashboard' as AppView, label: 'Dispatch', icon: Truck },
           { id: 'daily-tasks' as AppView, label: 'Daily Tasks', icon: ListTodo },
           { id: 'my-tasks' as AppView, label: 'My Tasks', icon: CheckSquare },
-          { id: 'live-screen' as AppView, label: 'Live Screen', icon: Monitor },
           { id: 'notification-audit' as AppView, label: 'Alerts Log', icon: AlertCircle },
-          { id: 'client-orders' as AppView, label: 'Client Orders', icon: ShoppingCart },
+        ],
+      },
+      {
+        key: 'live-screen-nav',
+        label: 'Live Screen',
+        items: [
+          { id: 'live-screen' as AppView, label: 'Live Screen', icon: Monitor },
         ],
       },
       {
@@ -11644,6 +11692,12 @@ export default function App() {
          items: [
            { id: 'production-plan' as AppView, label: 'Prod Plan', icon: FileText, highlight: true },
            { id: 'custom-bom-plan' as AppView, label: 'Custom BOM', icon: ListPlus, highlight: true },
+         ],
+       },
+       {
+         key: 'reports',
+         label: 'Reports',
+         items: [
            { id: 'production-reports' as AppView, label: 'Production Entry', icon: ClipboardList, highlight: true },
            { id: 'reports' as AppView, label: 'Reports', icon: GanttChartSquare, highlight: true },
          ],
@@ -12283,8 +12337,24 @@ export default function App() {
               )}
 
               {navGroups.map(group => {
-                const isGroupOpen = openNavGroup === group.key;
+                const isSingleItem = group.items.length === 1;
                 const hasActiveInGroup = group.items.some(i => i.id === view);
+
+                if (isSingleItem) {
+                  const item = group.items[0];
+                  const isActive = view === item.id;
+                  return (
+                    <button
+                      key={group.key}
+                      onClick={() => handleNavClick(item.id)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${isActive ? 'bg-white/15 text-white' : 'text-blue-100/80 hover:bg-white/10 hover:text-white'}`}
+                    >
+                      {group.label}
+                    </button>
+                  );
+                }
+
+                const isGroupOpen = openNavGroup === group.key;
                 return (
                   <div key={group.key} className="relative" onClick={e => e.stopPropagation()}>
                     <button
@@ -12404,6 +12474,112 @@ export default function App() {
                   </div>
                 )}
               </div>
+              <div className="relative">
+                <button
+                  onClick={() => { setIsNotificationMenuOpen(prev => !prev); }}
+                  className="relative rounded-full bg-white/15 px-3 py-1.5 text-xs font-bold text-white hover:bg-white/25 transition-colors flex items-center gap-1.5"
+                  title="Notifications"
+                >
+                  <Bell size={14} />
+                  {(() => {
+                    const unread = notificationEventsPreview.filter((e: any) => !readIds.has(e.id)).length;
+                    return unread > 0 ? (
+                      <span className="absolute -top-1 -right-1 h-4 min-w-[16px] px-1 flex items-center justify-center rounded-full bg-red-500 text-[10px] font-black text-white">{unread}</span>
+                    ) : null;
+                  })()}
+                </button>
+                {isNotificationMenuOpen && (
+                  <div className="absolute right-0 top-full mt-1.5 z-50 w-[380px] overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-800 shadow-2xl shadow-blue-950/20 erp-scale-in">
+                    <div className="bg-[#0176d3] px-4 py-4 text-white">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="relative rounded-2xl bg-white/15 p-2">
+                            <Bell size={20} />
+                            <span className={`absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-[#0176d3] ${notificationDotClass}`} />
+                          </div>
+                          <div>
+                            <div className="text-sm font-black">Notifications</div>
+                            <div className="text-xs font-semibold text-blue-100">{notificationStatusText}</div>
+                          </div>
+                        </div>
+                        <button onClick={() => setIsNotificationMenuOpen(false)} className="rounded-full p-1.5 text-white/80 transition-colors hover:bg-white/15 hover:text-white" aria-label="Close notifications">
+                          <X size={18} />
+                        </button>
+                      </div>
+                      <div className="mt-2 flex items-center gap-2">
+                        <span className="text-[11px] font-semibold text-blue-100/80">{notificationEventsPreview.filter(e => !readIds.has(e.id)).length} unread</span>
+                        {notificationEventsPreview.some(e => !readIds.has(e.id)) && (
+                          <button onClick={() => setReadIds(new Set(notificationEventsPreview.map(e => e.id)))} className="rounded-lg bg-white/15 px-2 py-1 text-[10px] font-black text-white hover:bg-white/25 transition-colors">Mark all read</button>
+                        )}
+                      </div>
+                      {notificationHealth.lastError && (
+                        <div className="mt-2 rounded-xl bg-white/12 px-3 py-2 text-[11px] font-semibold text-blue-50">{notificationHealth.lastError}</div>
+                      )}
+                    </div>
+
+                    <div className="max-h-[360px] overflow-y-auto p-3">
+                      {notificationEventsLoading && (
+                        <div className="space-y-2 p-2">
+                          <div className="erp-skeleton h-12 rounded-2xl" />
+                          <div className="erp-skeleton h-12 rounded-2xl" />
+                          <div className="erp-skeleton h-12 rounded-2xl" />
+                        </div>
+                      )}
+                      {!notificationEventsLoading && notificationEventsPreview.length === 0 && (
+                        <div className="px-4 py-10 text-center text-sm font-semibold text-slate-400">No notification events yet.</div>
+                      )}
+                      {!notificationEventsLoading && notificationEventsPreview.map((event) => {
+                        const failed = Number(event.failed || 0);
+                        const sent = Number(event.sent || 0);
+                        const tone = failed > 0 ? 'bg-red-500' : sent > 0 ? 'bg-emerald-500' : 'bg-amber-400';
+                        const isRead = readIds.has(event.id);
+                        return (
+                          <div key={event.id} className={`mb-2 rounded-2xl border p-3 last:mb-0 transition-opacity ${isRead ? 'border-slate-200 bg-white opacity-50' : 'border-slate-100 bg-slate-50/80'}`}>
+                            <div className="flex items-start gap-3">
+                              <span className={`mt-1 h-2.5 w-2.5 flex-shrink-0 rounded-full ${tone}`} />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="truncate text-sm font-black text-slate-900">{event.title || 'Notification'}</div>
+                                  <div className="whitespace-nowrap text-[10px] font-bold text-slate-400">{formatNotificationEventTime(event)}</div>
+                                </div>
+                                <div className="mt-1 line-clamp-2 whitespace-pre-line text-xs font-semibold text-slate-600">{event.body || '-'}</div>
+                                <div className="mt-2 flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-wider">
+                                  <button
+                                    onClick={() => setReadIds(prev => { const next = new Set(prev); isRead ? next.delete(event.id) : next.add(event.id); return next; })}
+                                    className="text-blue-500 hover:text-blue-700 hover:underline transition-colors"
+                                  >
+                                    {isRead ? 'Unread' : 'Read'}
+                                  </button>
+                                  <span className="text-slate-400">WO #{event.work_order_id || '-'}</span>
+                                  <span className="text-slate-400">{sent} sent / {failed} failed</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 border-t border-slate-100 bg-slate-50 p-3">
+                      {!notificationsReady ? (
+                        <button
+                          onClick={() => void handleEnableNotifications()}
+                          disabled={notificationBusy || notificationHealth.permission === 'denied'}
+                          className="col-span-3 rounded-xl bg-blue-600 px-3 py-2.5 text-xs font-black text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {notificationBusy ? 'Enabling...' : 'Enable Notifications'}
+                        </button>
+                      ) : null}
+                      <button onClick={() => { navigateTo('notification-audit'); setIsNotificationMenuOpen(false); }} className="col-span-2 rounded-xl bg-white px-3 py-2.5 text-xs font-black text-slate-700 shadow-sm transition-colors hover:bg-blue-50 hover:text-blue-700">
+                        Open Alerts Log
+                      </button>
+                      <button onClick={() => { void refreshNotificationHealth(); void fetchNotificationEventsPreview(); }} className="rounded-xl bg-white px-3 py-2.5 text-xs font-black text-slate-700 shadow-sm transition-colors hover:bg-blue-50 hover:text-blue-700">
+                        Refresh
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
               <button onClick={handleAppRefresh} className="rounded-full bg-white/15 p-2 hover:bg-white/25 transition-colors" aria-label="Refresh app data" title="Refresh data">
                 <RefreshCw size={17} />
               </button>
@@ -12424,7 +12600,7 @@ export default function App() {
                 <RefreshCw size={20} />
               </button>
           </header>
-          <div className={`p-3 pb-24 sm:p-3 md:p-4 lg:pb-4 mx-auto w-full flex-1 ${view === 'work-orders' ? 'max-w-none' : 'max-w-[1700px]'}`}>
+          <div className={`p-3 pb-24 sm:p-3 md:p-4 lg:pb-4 mx-auto w-full flex-1 ${view === 'work-orders' || view === 'dispatch-dashboard' || view === 'notification-audit' || view === 'users' || view === 'customers' || view === 'items' || view === 'child-items' || view === 'vehicles' || view === 'production-plan' || view === 'custom-bom-plan' || view === 'production-reports' || view === 'reports' ? 'max-w-none' : 'max-w-[1700px]'}`}>
            {showExitHint && (
              <div className="mb-2 rounded-lg bg-slate-900 text-white px-3 py-2 text-xs font-bold no-print inline-block">
                Press back again to exit
@@ -12460,110 +12636,8 @@ export default function App() {
             <div key={`${view}-${refreshCounter}`} className="erp-fade-only">
               {renderContent()}
             </div>
-          </div>
-          <div className="hidden lg:block no-print">
-            {isNotificationMenuOpen && (
-              <div className="erp-scale-in fixed bottom-24 right-6 z-50 w-[380px] overflow-hidden rounded-3xl border border-slate-200 bg-white text-slate-800 shadow-2xl shadow-blue-950/20">
-                <div className="bg-[#0176d3] px-4 py-4 text-white">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="relative rounded-2xl bg-white/15 p-2">
-                        <Bell size={20} />
-                        <span className={`absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-[#0176d3] ${notificationDotClass}`} />
-                      </div>
-                      <div>
-                        <div className="text-sm font-black">Notifications</div>
-                        <div className="text-xs font-semibold text-blue-100">{notificationStatusText}</div>
-                      </div>
-                    </div>
-                    <button onClick={() => setIsNotificationMenuOpen(false)} className="rounded-full p-1.5 text-white/80 transition-colors hover:bg-white/15 hover:text-white" aria-label="Close notifications">
-                      <X size={18} />
-                    </button>
-                  </div>
-                  <div className="mt-2 flex items-center gap-2">
-                    <span className="text-[11px] font-semibold text-blue-100/80">{notificationEventsPreview.filter(e => !readIds.has(e.id)).length} unread</span>
-                    {notificationEventsPreview.some(e => !readIds.has(e.id)) && (
-                      <button onClick={() => setReadIds(new Set(notificationEventsPreview.map(e => e.id)))} className="rounded-lg bg-white/15 px-2 py-1 text-[10px] font-black text-white hover:bg-white/25 transition-colors">Mark all read</button>
-                    )}
-                  </div>
-                  {notificationHealth.lastError && (
-                    <div className="mt-2 rounded-xl bg-white/12 px-3 py-2 text-[11px] font-semibold text-blue-50">{notificationHealth.lastError}</div>
-                  )}
-                </div>
-
-                <div className="max-h-[360px] overflow-y-auto p-3">
-                  {notificationEventsLoading && (
-                    <div className="space-y-2 p-2">
-                      <div className="erp-skeleton h-12 rounded-2xl" />
-                      <div className="erp-skeleton h-12 rounded-2xl" />
-                      <div className="erp-skeleton h-12 rounded-2xl" />
-                    </div>
-                  )}
-                  {!notificationEventsLoading && notificationEventsPreview.length === 0 && (
-                    <div className="px-4 py-10 text-center text-sm font-semibold text-slate-400">No notification events yet.</div>
-                  )}
-                  {!notificationEventsLoading && notificationEventsPreview.map((event) => {
-                    const failed = Number(event.failed || 0);
-                    const sent = Number(event.sent || 0);
-                    const tone = failed > 0 ? 'bg-red-500' : sent > 0 ? 'bg-emerald-500' : 'bg-amber-400';
-                    const isRead = readIds.has(event.id);
-                    return (
-                      <div key={event.id} className={`mb-2 rounded-2xl border p-3 last:mb-0 transition-opacity ${isRead ? 'border-slate-200 bg-white opacity-50' : 'border-slate-100 bg-slate-50/80'}`}>
-                        <div className="flex items-start gap-3">
-                          <span className={`mt-1 h-2.5 w-2.5 flex-shrink-0 rounded-full ${tone}`} />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="truncate text-sm font-black text-slate-900">{event.title || 'Notification'}</div>
-                              <div className="whitespace-nowrap text-[10px] font-bold text-slate-400">{formatNotificationEventTime(event)}</div>
-                            </div>
-                            <div className="mt-1 line-clamp-2 whitespace-pre-line text-xs font-semibold text-slate-600">{event.body || '-'}</div>
-                            <div className="mt-2 flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-wider">
-                              <button
-                                onClick={() => setReadIds(prev => { const next = new Set(prev); isRead ? next.delete(event.id) : next.add(event.id); return next; })}
-                                className="text-blue-500 hover:text-blue-700 hover:underline transition-colors"
-                              >
-                                {isRead ? 'Unread' : 'Read'}
-                              </button>
-                              <span className="text-slate-400">WO #{event.work_order_id || '-'}</span>
-                              <span className="text-slate-400">{sent} sent / {failed} failed</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 border-t border-slate-100 bg-slate-50 p-3">
-                  {!notificationsReady ? (
-                    <button
-                      onClick={() => void handleEnableNotifications()}
-                      disabled={notificationBusy || notificationHealth.permission === 'denied'}
-                      className="col-span-3 rounded-xl bg-blue-600 px-3 py-2.5 text-xs font-black text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {notificationBusy ? 'Enabling...' : 'Enable Notifications'}
-                    </button>
-                  ) : null}
-                  <button onClick={() => { navigateTo('notification-audit'); setIsNotificationMenuOpen(false); }} className="col-span-2 rounded-xl bg-white px-3 py-2.5 text-xs font-black text-slate-700 shadow-sm transition-colors hover:bg-blue-50 hover:text-blue-700">
-                    Open Alerts Log
-                  </button>
-                  <button onClick={() => { void refreshNotificationHealth(); void fetchNotificationEventsPreview(); }} className="rounded-xl bg-white px-3 py-2.5 text-xs font-black text-slate-700 shadow-sm transition-colors hover:bg-blue-50 hover:text-blue-700">
-                    Refresh
-                  </button>
-                </div>
-              </div>
-            )}
-            <button
-              onClick={() => setIsNotificationMenuOpen(prev => !prev)}
-              className="fixed bottom-6 right-6 z-50 flex h-16 w-16 items-center justify-center rounded-full bg-[#0176d3] text-white shadow-2xl shadow-blue-300/80 transition-all hover:bg-[#0b5cab] hover:shadow-blue-400/80"
-              aria-label="Open notifications"
-              title="Notifications"
-            >
-              <Bell size={25} />
-              <span className={`absolute right-3 top-3 h-3.5 w-3.5 rounded-full border-2 border-[#0176d3] ${notificationDotClass}`} />
-            </button>
-          </div>
-          <nav className="lg:hidden fixed bottom-3 left-3 right-3 z-40 no-print border border-white/70 bg-white/82 backdrop-blur-2xl rounded-3xl px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-2xl shadow-slate-300/50">
+           </div>
+           <nav className="lg:hidden fixed bottom-3 left-3 right-3 z-40 no-print border border-white/70 bg-white/82 backdrop-blur-2xl rounded-3xl px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-2xl shadow-slate-300/50">
             <div className="grid grid-cols-5 gap-1">
               {navGroups.flatMap(group => group.items).slice(0, 5).map(item => (
                 <button
