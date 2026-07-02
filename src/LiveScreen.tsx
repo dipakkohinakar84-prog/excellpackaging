@@ -110,7 +110,7 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
         return orders.some(o => o.status === 'Dispatched' && todayDispatchIds.has(o.id));
       }
       if (p.key === 'ready-dispatch') {
-        return orders.some(o => o.status === 'Ready for despatch');
+        return orders.some(o => o.status === 'Ready for despatch' || (o.status === 'Dispatched' && (o.qty - (o.qty_dispatched || 0)) > 0));
       }
       const targetStatus = p.status;
       return orders.some(o => {
@@ -130,7 +130,7 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
       return orders.filter(o => o.status === 'Dispatched' && todayDispatchIds.has(o.id));
     }
     if (page.key === 'ready-dispatch') {
-      return orders.filter(o => o.status === 'Ready for despatch');
+      return orders.filter(o => o.status === 'Ready for despatch' || (o.status === 'Dispatched' && (o.qty - (o.qty_dispatched || 0)) > 0));
     }
     const targetStatus = page.status;
     return orders.filter(o => {
@@ -362,18 +362,18 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
       <div className="flex-1 flex flex-col min-h-0 px-4 pt-1 pb-1" style={{fontFamily:'IBM Plex Sans,sans-serif'}}>
         {/* Page Header - Stage Panel */}
         {page && (
-        <div className="shrink-0 flex items-center gap-3 mb-3" style={{background:'#23262b',border:'1px solid #34393e',borderRadius:'8px',padding:'8px 16px',overflow:'hidden',position:'relative',justifyContent:'center'}}>
-          <div style={{position:'absolute',left:0,top:0,bottom:0,width:'10px',background:page.key === 'wip' ? 'repeating-linear-gradient(135deg, #5b9cf6 0 8px, #15171a 8px 16px)' : page.key === 'qc' ? 'repeating-linear-gradient(135deg, #f59e0b 0 8px, #15171a 8px 16px)' : page.key === 'ready-dispatch' ? 'repeating-linear-gradient(135deg, #60c17a 0 8px, #15171a 8px 16px)' : page.key === 'dispatched-today' ? 'repeating-linear-gradient(135deg, #a78bfa 0 8px, #15171a 8px 16px)' : 'repeating-linear-gradient(135deg, #5e6469 0 8px, #15171a 8px 16px)'}} />
+        <div className="shrink-0 flex items-center gap-3 mb-3" style={{background:page.key === 'wip' ? '#5b9cf6' : page.key === 'qc' ? '#eab308' : page.key === 'ready-dispatch' ? '#60c17a' : page.key === 'dispatched-today' ? '#a78bfa' : page.key === 'pending' ? '#f3f4f6' : '#23262b',border:page.key === 'wip' ? '1px solid #5b9cf6' : page.key === 'qc' ? '1px solid #eab308' : page.key === 'ready-dispatch' ? '1px solid #60c17a' : page.key === 'dispatched-today' ? '1px solid #a78bfa' : page.key === 'pending' ? '1px solid #e5e7eb' : '1px solid #34393e',borderRadius:'8px',padding:'8px 16px',overflow:'hidden',position:'relative',justifyContent:'center'}}>
+          <div style={{position:'absolute',left:0,top:0,bottom:0,width:'10px',background:page.key === 'wip' ? 'repeating-linear-gradient(135deg, #5b9cf6 0 8px, #15171a 8px 16px)' : page.key === 'qc' ? 'repeating-linear-gradient(135deg, #eab308 0 8px, #15171a 8px 16px)' : page.key === 'ready-dispatch' ? 'repeating-linear-gradient(135deg, #60c17a 0 8px, #15171a 8px 16px)' : page.key === 'dispatched-today' ? 'repeating-linear-gradient(135deg, #a78bfa 0 8px, #15171a 8px 16px)' : page.key === 'pending' ? 'repeating-linear-gradient(135deg, #9ca3af 0 8px, #f3f4f6 8px 16px)' : 'repeating-linear-gradient(135deg, #5e6469 0 8px, #15171a 8px 16px)'}} />
           <div style={{display:'flex',alignItems:'center',flexShrink:0}}>
-            <span style={{color:page.key === 'wip' ? '#5b9cf6' : page.key === 'qc' ? '#f59e0b' : page.key === 'pending' ? '#9aa0a6' : page.key === 'ready-dispatch' ? '#60c17a' : '#a78bfa',fontSize:'18px'}}>{page.icon}</span>
+            <span style={{color:page.key === 'wip' ? '#5b9cf6' : page.key === 'qc' ? '#f3f4f6' : page.key === 'ready-dispatch' ? '#f3f4f6' : page.key === 'dispatched-today' ? '#f3f4f6' : page.key === 'pending' ? '#6b7280' : '#a78bfa',fontSize:'18px'}}>{page.icon}</span>
           </div>
-          <h1 style={{fontFamily:'Oswald,sans-serif',fontWeight:600,textTransform:'uppercase',fontSize:'26px',letterSpacing:'0.02em',color:'#f3f4f6'}}>{page.label}</h1>
+          <h1 style={{fontFamily:'Oswald,sans-serif',fontWeight:600,textTransform:'uppercase',fontSize:'26px',letterSpacing:'0.02em',color:page.key === 'wip' ? '#15171a' : page.key === 'qc' ? '#15171a' : page.key === 'ready-dispatch' ? '#15171a' : page.key === 'dispatched-today' ? '#15171a' : page.key === 'pending' ? '#15171a' : '#f3f4f6'}}>{page.label}</h1>
           <span className={`stage-badge ${badgePop ? 'animate-pop' : ''}`} style={{
             fontFamily:'IBM Plex Mono,monospace',
             fontWeight:600,
             fontSize:'14px',
-            background: page.key === 'wip' ? '#5b9cf6' : page.key === 'qc' ? '#f59e0b' : page.key === 'pending' ? '#5e6469' : page.key === 'ready-dispatch' ? '#60c17a' : '#a78bfa',
-            color:'#15171a',
+            background: page.key === 'wip' ? '#1e40af' : page.key === 'qc' ? '#a16207' : page.key === 'ready-dispatch' ? '#15803d' : page.key === 'dispatched-today' ? '#7c3aed' : page.key === 'pending' ? '#6b7280' : '#a78bfa',
+            color: page.key === 'wip' ? '#ffffff' : page.key === 'qc' ? '#ffffff' : page.key === 'ready-dispatch' ? '#ffffff' : page.key === 'dispatched-today' ? '#ffffff' : page.key === 'pending' ? '#ffffff' : '#15171a',
             padding:'4px 12px',
             borderRadius:'6px',
             flexShrink:0
@@ -397,8 +397,8 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
           </div>
         ) : (
           (() => {
-            const accentColor = page.key === 'wip' ? '#5b9cf6' : page.key === 'qc' ? '#f59e0b' : page.key === 'pending' ? '#9aa0a6' : page.key === 'ready-dispatch' ? '#60c17a' : '#a78bfa';
-            const textColor = page.key === 'wip' ? '#5b9cf6' : page.key === 'qc' ? '#f59e0b' : page.key === 'pending' ? '#f3f4f6' : page.key === 'ready-dispatch' ? '#60c17a' : '#a78bfa';
+            const accentColor = page.key === 'wip' ? '#5b9cf6' : page.key === 'qc' ? '#eab308' : page.key === 'pending' ? '#9ca3af' : page.key === 'ready-dispatch' ? '#60c17a' : '#a78bfa';
+            const textColor = page.key === 'wip' ? '#e5e7eb' : page.key === 'qc' ? '#f3f4f6' : page.key === 'pending' ? '#f3f4f6' : page.key === 'ready-dispatch' ? '#f3f4f6' : page.key === 'dispatched-today' ? '#f3f4f6' : '#a78bfa';
             return (
           <div className="flex-1 grid grid-cols-2 gap-3 min-h-0 overflow-hidden">
             {DEPT_COLUMNS.map((col, idx) => {
@@ -406,10 +406,10 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
               return (
                 <div key={col.key} className="flex flex-col min-h-0 overflow-hidden" style={{background:'#1d2024',border:'1px solid #34393e',borderRadius:'8px'}}>
                   {/* Column Header */}
-                  <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'12px',padding:'14px 16px',borderBottom:'1px solid #34393e',background:'#23262b'}}>
-                    <div style={{width:'12px',height:'12px',borderRadius:'50%',background:accentColor}} />
-                    <span style={{fontFamily:'Oswald,sans-serif',fontWeight:600,textTransform:'uppercase',fontSize:'20px',letterSpacing:'0.04em',color:'#f3f4f6'}}>{col.label}</span>
-                    <span style={{fontFamily:'IBM Plex Mono,monospace',fontWeight:600,fontSize:'13px',padding:'3px 12px',borderRadius:'5px',background:accentColor,color:'#15171a'}}>{colOrders.length}</span>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'12px',padding:'14px 16px',borderBottom:page.key === 'wip' ? '1px solid #93c5fd' : page.key === 'qc' ? '1px solid #a16207' : page.key === 'ready-dispatch' ? '1px solid #15803d' : page.key === 'dispatched-today' ? '1px solid #7c3aed' : page.key === 'pending' ? '1px solid #e5e7eb' : '1px solid #34393e',background:page.key === 'wip' ? '#5b9cf6' : page.key === 'qc' ? '#eab308' : page.key === 'ready-dispatch' ? '#60c17a' : page.key === 'dispatched-today' ? '#a78bfa' : page.key === 'pending' ? '#f3f4f6' : '#23262b'}}>
+                    <div style={{width:'12px',height:'12px',borderRadius:'50%',background:page.key === 'wip' ? '#93c5fd' : page.key === 'qc' ? '#fef08a' : page.key === 'ready-dispatch' ? '#86efac' : page.key === 'dispatched-today' ? '#c4b5fd' : page.key === 'pending' ? '#9ca3af' : accentColor}} />
+                    <span style={{fontFamily:'Oswald,sans-serif',fontWeight:600,textTransform:'uppercase',fontSize:'20px',letterSpacing:'0.04em',color:page.key === 'wip' ? '#15171a' : page.key === 'qc' ? '#15171a' : page.key === 'ready-dispatch' ? '#15171a' : page.key === 'dispatched-today' ? '#15171a' : page.key === 'pending' ? '#15171a' : '#f3f4f6'}}>{col.label}</span>
+                    <span style={{fontFamily:'IBM Plex Mono,monospace',fontWeight:600,fontSize:'13px',padding:'3px 12px',borderRadius:'5px',background:page.key === 'wip' ? '#93c5fd' : page.key === 'qc' ? '#a16207' : page.key === 'ready-dispatch' ? '#15803d' : page.key === 'dispatched-today' ? '#7c3aed' : page.key === 'pending' ? '#6b7280' : accentColor,color:page.key === 'wip' ? '#1e3a5f' : page.key === 'qc' ? '#ffffff' : page.key === 'ready-dispatch' ? '#ffffff' : page.key === 'dispatched-today' ? '#ffffff' : page.key === 'pending' ? '#ffffff' : '#15171a'}}>{colOrders.length}</span>
                   </div>
                   {/* Column Body */}
                   <div ref={el => { scrollRefs.current[idx] = el; }} className="flex-1 overflow-y-scroll scrollbar-thin" style={{padding:'4px'}} onMouseEnter={() => { scrollPausedRef.current = true; }} onMouseLeave={() => { scrollPausedRef.current = false; }}>

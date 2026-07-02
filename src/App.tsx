@@ -241,6 +241,13 @@ const isInvolvingDepartment = (departmentName: string) => {
 };
 
 const PLAN_DEPARTMENT_COLUMNS = ['Wood_Work', 'Corrugation', 'Trading_Consumables'];
+const DEPARTMENT_PRIORITY: Record<string, number> = {
+  'Wood_Work': 0,
+  'Plywood': 1,
+  'Corrugation': 2,
+  'Trading_Consumables': 3,
+  'Foam_Plastic_bags': 4,
+};
 
 type BomRowType = 'component' | 'item';
 
@@ -2345,12 +2352,12 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
       </Modal>
 
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-        <div className="hidden md:block overflow-x-auto max-h-[70vh] overflow-y-auto">
-          <table className="w-full border-separate">
+        <div className="hidden md:block overflow-x-auto max-h-[85vh] overflow-y-auto">
+          <table className="w-full border-separate border-spacing-0">
             <thead className="bg-gray-50 border-b">
               <tr>
                 {dispatchMode && (
-                  <th className="px-4 py-3 w-12 sticky top-0 bg-gray-50 z-10">
+                  <th className="px-4 py-3 w-12 sticky left-0 top-0 bg-gray-50 z-20">
                     <input 
                       type="checkbox" 
                       className="w-4 h-4 rounded"
@@ -2372,7 +2379,8 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                     />
                   </th>
                 )}
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky left-0 top-0 bg-gray-50 z-20" onClick={() => handleSort('id')}><span className="inline-flex items-center">Order #<SortIcon col="id" /></span></th>
+                <th className={`px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors ${dispatchMode ? 'sticky left-12 top-0 bg-gray-50 z-10' : 'sticky left-0 top-0 bg-gray-50 z-20'}`}><span className="inline-flex items-center">Sr. No.</span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('id')}><span className="inline-flex items-center">Order #<SortIcon col="id" /></span></th>
                 <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('entry_date')}><span className="inline-flex items-center">Entry Date<SortIcon col="entry_date" /></span></th>
                 <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('customer')}><span className="inline-flex items-center">Customer<SortIcon col="customer" /></span></th>
                 <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('job_details')}><span className="inline-flex items-center">Job Details<SortIcon col="job_details" /></span></th>
@@ -2381,6 +2389,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                 <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('etd')}><span className="inline-flex items-center">ETD<SortIcon col="etd" /></span></th>
                 <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('dispatched')}><span className="inline-flex items-center">Dispatched<SortIcon col="dispatched" /></span></th>
                 <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('remaining')}><span className="inline-flex items-center">Remaining<SortIcon col="remaining" /></span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Depts</th>
                 {statusFilter === 'Dispatched' && (
                   <>
                     <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Invoice</th>
@@ -2408,9 +2417,12 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                   return logs.length > 0
                     ? logs.map((log, i) => ({ log, wo, key: `log-${wo.id}-${log.id || i}` }))
                     : [{ log: null, wo, key: `wo-${wo.id}` }];
-                }).map(({ log, wo }) => (
+                }).map(({ log, wo }, flatIdx) => {
+                  const srNo = flatIdx + 1;
+                  return (
                   <tr key={`log-${wo.id}-${log?.id || 0}`} className="border-b hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 sticky left-0 bg-white z-10"><span className="text-blue-600 font-bold">#{wo.id}</span></td>
+                    <td className="px-6 py-4 text-xs font-bold text-gray-400 sticky left-0 bg-white z-10">{srNo}</td>
+                    <td className="px-6 py-4"><span className="text-blue-600 font-bold">#{wo.id}</span></td>
                     <td className="px-6 py-4"><div className="text-xs font-bold text-gray-600 whitespace-nowrap">{formatEntryDate(wo.entry_date || (wo as any).created_at || (wo as any).created)}</div></td>
                     <td className="px-6 py-4"><div className="font-semibold text-gray-800">{wo.customer}</div></td>
                     <td className="px-6 py-4"><div className="text-gray-700">{wo.job_details}</div></td>
@@ -2419,6 +2431,11 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                     <td className="px-6 py-4"><div className="text-xs font-bold text-orange-600 whitespace-nowrap">{wo.etd || 'TBD'}</div></td>
                     <td className="px-6 py-4"><div className="font-bold text-blue-600">{log?.dispatch_qty || wo.qty_dispatched || 0}</div></td>
                     <td className="px-6 py-4"><div className="font-bold text-green-600">0</div></td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-nowrap gap-1">
+                        {(wo.assigned_departments || []).map(d => <Badge key={d} color="indigo" className="!text-xs">{d.replace(/_/g, ' ')}</Badge>)}
+                      </div>
+                    </td>
                     <td className="px-6 py-4"><span className="text-xs font-bold text-gray-600">{log?.invoice_no || wo.last_invoice_no || '-'}</span></td>
                     <td className="px-6 py-4"><span className="text-xs font-bold text-gray-600">{log?.vehicle_no || wo.last_vehicle_no || '-'}</span></td>
                     <td className="px-6 py-4">
@@ -2435,13 +2452,14 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                     <td className="px-6 py-4"><StatusBadge status="Dispatched" /></td>
                     <td className="px-6 py-4"><div className="flex justify-end"><button onClick={() => onView(wo.id)} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors" title="View Details"><Eye size={16}/></button></div></td>
                   </tr>
-                ))
+                );})
               ) : (
                 <>
-                  {paginatedOrders.map(wo => {
+                  {paginatedOrders.map((wo, idx) => {
                     const remaining = getRemainingQty(wo);
                     const isSelected = selectedOrders[wo.id] !== undefined;
                     const canDispatch = remaining > 0;
+                    const srNo = idx + 1;
 
                     return (
                       <tr 
@@ -2449,7 +2467,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                         className={`border-b transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
                       >
                         {dispatchMode && (
-                          <td className="px-4 py-4">
+                          <td className="px-4 py-4 sticky left-0 bg-white z-20">
                             <input
                               type="checkbox"
                               className="w-4 h-4 rounded"
@@ -2459,7 +2477,10 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                             />
                           </td>
                         )}
-                        <td className="px-6 py-4 sticky left-0 bg-white z-10">
+                        <td className={`px-6 py-4 text-xs font-bold text-gray-400 ${dispatchMode ? 'sticky left-12 bg-white z-10' : 'sticky left-0 bg-white z-10'}`}>
+                          {srNo}
+                        </td>
+                        <td className="px-6 py-4">
                           <span className="text-blue-600 font-bold">#{wo.id}</span>
                         </td>
                         <td className="px-6 py-4">
@@ -2488,6 +2509,11 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                             {remaining}
                           </div>
                         </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-nowrap gap-1">
+                            {(wo.assigned_departments || []).map(d => <Badge key={d} color="indigo" className="!text-xs">{d.replace(/_/g, ' ')}</Badge>)}
+                          </div>
+                        </td>
                         {dispatchMode && (
                           <td className="px-6 py-4">
                             {isSelected ? (
@@ -2505,11 +2531,24 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                           </td>
                         )}
                         <td className="px-6 py-4">
-                          {wo.status === 'Dispatched' && remaining > 0 ? (
-                            <span className="px-3 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-600">Partially Dispatched</span>
-                          ) : (
-                            <StatusBadge status={wo.status} />
-                          )}
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {(wo.assigned_departments || []).map(dept => {
+                              const ds = (wo.department_statuses || []).find(s => normalizeDepartment(s.department) === normalizeDepartment(dept));
+                              const qc = ds?.qc_status;
+                              let badgeClass = 'bg-gray-100 text-gray-600';
+                              let label = ds?.status ? STATUS_LABELS[ds.status] || ds.status : '—';
+                              if (qc === 'QC Approved') { badgeClass = 'bg-green-100 text-green-700'; label = 'QC Approved'; }
+                              else if (qc === 'QC Denied') { badgeClass = 'bg-red-100 text-red-700'; label = 'Denied'; }
+                              else if (ds?.status === 'Work Started') { badgeClass = 'bg-blue-100 text-blue-700'; }
+                              else if (ds?.status === 'Ready for QC') { badgeClass = 'bg-yellow-100 text-yellow-700'; }
+                              const deptLabel = dept.replace(/_/g, ' ');
+                              return (
+                                <span key={dept} className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${badgeClass}`}>
+                                  {deptLabel}: {label}
+                                </span>
+                              );
+                            })}
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex justify-end">
@@ -2578,11 +2617,13 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
               return logs.length > 0
                 ? logs.map((log, i) => ({ log, wo, key: `card-${wo.id}-${log.id || i}` }))
                 : [{ log: null, wo, key: `card-${wo.id}` }];
-            }).map(({ log, wo }) => (
+            }).map(({ log, wo }, idx) => {
+              const srNo = idx + 1;
+              return (
               <div key={`card-${wo.id}-${log?.id || 0}`} className="rounded-xl border border-gray-200 bg-white px-3 py-2">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <div className="text-[10px] font-black text-blue-600">#{wo.id}</div>
+                    <div className="text-[10px] font-black text-blue-600">#{srNo}  #{wo.id}</div>
                     <div className="font-black text-gray-800 leading-tight text-xs mt-0.5">{wo.job_details}</div>
                     <div className="text-[11px] font-semibold text-gray-500 mt-0.5">{wo.customer}</div>
                   </div>
@@ -2635,27 +2676,49 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                   View Details
                 </button>
               </div>
-            ))
+            );
+          })
           ) : (
             <>
-              {paginatedOrders.map(wo => {
+              {paginatedOrders.map((wo, idx) => {
                 const remaining = getRemainingQty(wo);
                 const isSelected = selectedOrders[wo.id] !== undefined;
                 const canDispatch = remaining > 0;
+                const srNo = idx + 1;
 
                 return (
                   <div key={wo.id} className={`rounded-xl border px-3 py-2 ${isSelected ? 'border-blue-300 bg-blue-50/50' : 'border-gray-200 bg-white'}`}>
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <div className="text-[10px] font-black text-blue-600">#{wo.id}</div>
+                        <div className="text-[10px] font-black text-blue-600">#{srNo}  #{wo.id}</div>
                         <div className="font-black text-gray-800 leading-tight text-xs mt-0.5">{wo.job_details}</div>
                         <div className="text-[11px] font-semibold text-gray-500 mt-0.5">{wo.customer}</div>
                       </div>
-                      {wo.status === 'Dispatched' && remaining > 0 ? (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-600">Partially Dispatched</span>
-                      ) : (
-                        <StatusBadge status={wo.status} />
-                      )}
+                      <div className="flex flex-col items-end gap-1">
+                        {wo.status === 'Dispatched' && remaining > 0 ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-600">Partially Dispatched</span>
+                        ) : (
+                          <StatusBadge status={wo.status} />
+                        )}
+                        <div className="flex flex-wrap gap-1 justify-end">
+                          {(wo.assigned_departments || []).map(dept => {
+                            const ds = (wo.department_statuses || []).find(s => normalizeDepartment(s.department) === normalizeDepartment(dept));
+                            const qc = ds?.qc_status;
+                            let badgeClass = 'bg-gray-100 text-gray-600';
+                            let label = ds?.status ? STATUS_LABELS[ds.status] || ds.status : '—';
+                            if (qc === 'QC Approved') { badgeClass = 'bg-green-100 text-green-700'; label = 'QC Approved'; }
+                            else if (qc === 'QC Denied') { badgeClass = 'bg-red-100 text-red-700'; label = 'Denied'; }
+                            else if (ds?.status === 'Work Started') { badgeClass = 'bg-blue-100 text-blue-700'; }
+                            else if (ds?.status === 'Ready for QC') { badgeClass = 'bg-yellow-100 text-yellow-700'; }
+                            const deptLabel = dept.replace(/_/g, ' ');
+                            return (
+                              <span key={dept} className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${badgeClass}`}>
+                                {deptLabel}: {label}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-3 gap-1.5 mt-2 text-center">
@@ -3095,7 +3158,7 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
       </Modal>
 
       <Card className="p-0 overflow-hidden shadow-md">
-        <div className="hidden md:block overflow-x-auto max-h-[70vh] overflow-y-auto">
+        <div className="hidden md:block overflow-x-auto max-h-[85vh] overflow-y-auto">
           <table className="w-full min-w-[760px] text-left text-sm border-separate">
             <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-500 border-b">
               <tr><th className="px-6 py-4 whitespace-nowrap sticky left-0 top-0 bg-gray-50 z-20">Name</th><th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Contact</th><th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Vehicle</th><th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Dept</th><th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Actions</th></tr>
@@ -3448,7 +3511,7 @@ const CustomerManagement: React.FC<{ onError: () => void; editingId?: number }> 
       </Modal>
 
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-        <div className="hidden md:block overflow-x-auto max-h-[70vh] overflow-y-auto">
+        <div className="hidden md:block overflow-x-auto max-h-[85vh] overflow-y-auto">
           <table className="w-full min-w-[900px] text-left text-sm border-separate">
             <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-500 border-b">
               <tr>
@@ -4319,7 +4382,7 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
       </Modal>
 
       <Card className="p-0 overflow-hidden shadow-md">
-        <div className="hidden md:block overflow-x-auto max-h-[70vh] overflow-y-auto">
+        <div className="hidden md:block overflow-x-auto max-h-[85vh] overflow-y-auto">
           <table className="w-full min-w-[780px] text-left text-sm border-separate">
             <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-500 border-b">
               <tr>
@@ -4742,7 +4805,7 @@ const ChildItemListView: React.FC<{ onError: () => void; editingId?: number | st
       </Modal>
 
       <Card className="p-0 overflow-hidden shadow-md">
-        <div className="hidden md:block overflow-x-auto max-h-[70vh] overflow-y-auto">
+        <div className="hidden md:block overflow-x-auto max-h-[85vh] overflow-y-auto">
           <table className="w-full min-w-[680px] text-left text-sm border-separate">
             <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-500 border-b">
               <tr>
@@ -4919,7 +4982,7 @@ const VehicleList: React.FC<{ onError: () => void }> = ({ onError }) => {
       </Modal>
 
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-        <div className="hidden md:block overflow-x-auto max-h-[70vh] overflow-y-auto">
+        <div className="hidden md:block overflow-x-auto max-h-[85vh] overflow-y-auto">
           <table className="w-full min-w-[600px] text-left text-sm border-separate">
             <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-500 border-b">
               <tr>
@@ -5250,17 +5313,34 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
             className="group bg-white rounded-2xl sm:rounded-xl border border-gray-100 p-3 sm:p-3 space-y-1.5 sm:space-y-2 shadow-sm hover:shadow-md hover:border-blue-100 transition-all cursor-pointer active:scale-[0.99]"
           >
             <div className="flex items-start justify-between gap-2">
-              <div>
+              <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1 flex-wrap">
                   <span className="text-[10px] font-black text-indigo-600">#{wo.id}</span>
                   {wo.order_type === 'suborder' && <Badge color="purple" className="!text-[10px]">Suborder Of #{wo.parent_work_order_id || '-'}</Badge>}
                   <span className="text-[10px] text-gray-400 font-semibold">Entry: {formatEntryDate(wo.entry_date || wo.created_at || (wo as any).created)}</span>
                 </div>
-                <h3 className="text-xs font-black text-slate-800 leading-tight mt-0.5 line-clamp-1 md:line-clamp-2">{wo.job_details}</h3>
-                <p className="hidden md:block text-[10px] font-bold text-gray-500 uppercase">{wo.customer}</p>
+                <h3 className="text-xs font-black text-slate-800 leading-tight mt-0.5">{wo.job_details}</h3>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {(wo.assigned_departments || []).map(dept => {
+                    const ds = (wo.department_statuses || []).find(s => normalizeDepartment(s.department) === normalizeDepartment(dept));
+                    const qc = ds?.qc_status;
+                    let badgeClass = 'bg-gray-100 text-gray-600';
+                    let label = ds?.status ? STATUS_LABELS[ds.status] || ds.status : '—';
+                    if (qc === 'QC Approved') { badgeClass = 'bg-green-100 text-green-700'; label = 'QC Approved'; }
+                    else if (qc === 'QC Denied') { badgeClass = 'bg-red-100 text-red-700'; label = 'Denied'; }
+                    else if (ds?.status === 'Work Started') { badgeClass = 'bg-blue-100 text-blue-700'; }
+                    else if (ds?.status === 'Ready for QC') { badgeClass = 'bg-yellow-100 text-yellow-700'; }
+                    const deptLabel = dept.replace(/_/g, ' ');
+                    return (
+                      <span key={dept} className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${badgeClass}`}>
+                        {deptLabel}: {label}
+                      </span>
+                    );
+                  })}
+                </div>
+                <p className="hidden md:block text-[10px] font-bold text-gray-500 uppercase mt-1">{wo.customer}</p>
               </div>
-              <div className="flex flex-col items-end gap-1">
-                <StatusBadge status={wo.status} />
+              <div className="flex flex-col items-end gap-1 shrink-0">
                 {getQCApprovalProgress(wo) === 'partial' && <Badge color="orange">Partially Approved</Badge>}
               </div>
             </div>
@@ -5311,7 +5391,7 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
 
 // --- Work Order Management ---
 
-const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => void; onViewPlan: (id: number) => void; loggedInUser: User }> = ({ onError, onView, onViewPlan, loggedInUser }) => {
+const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => void; onViewPlan: (id: number) => void; onCreatePlan?: (ids: number[]) => void; loggedInUser: User }> = ({ onError, onView, onViewPlan, onCreatePlan, loggedInUser }) => {
   const [data, setData] = useState<(WorkOrder & { itemInfo?: Item })[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -5344,6 +5424,8 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
   const [viewMode, setViewMode] = useState<'table' | 'card'>(() => (
     typeof window !== 'undefined' && window.innerWidth < 768 ? 'card' : 'table'
   ));
+  const [planMode, setPlanMode] = useState(false);
+  const [planSelectedIds, setPlanSelectedIds] = useState<Set<number>>(new Set());
 
   const isOrderOverdue = (wo: WorkOrder & { itemInfo?: Item }) => {
     if (!wo.etd || wo.status === 'Dispatched') return false;
@@ -5714,7 +5796,8 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
       wo.id.toString().includes(lowerCaseQuery) ||
       wo.customer.toLowerCase().includes(lowerCaseQuery) ||
       wo.job_details.toLowerCase().includes(lowerCaseQuery) ||
-      (wo.drawing || '').toLowerCase().includes(lowerCaseQuery)
+      (wo.drawing || '').toLowerCase().includes(lowerCaseQuery) ||
+      (wo.etd || '').toLowerCase().includes(lowerCaseQuery)
     );
   }, [data, deferredSearchQuery, statusFilter, departmentFilter, canFilterByDepartment, orderDateFilter, orderCustomFrom, orderCustomTo, overdueOnly]);
 
@@ -5919,6 +6002,20 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
               </button>
             )}
             <button
+              onClick={() => { setPlanMode(v => !v); if (planMode) setPlanSelectedIds(new Set()); }}
+              className={`w-full px-4 py-2 rounded-xl font-bold flex items-center justify-center gap-2 text-sm ${planMode ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 border border-gray-200'}`}
+            >
+              <FileText size={16} /> {planMode ? 'Exit Plan Mode' : 'Production Plan'}
+            </button>
+            {planMode && planSelectedIds.size > 0 && (
+              <button
+                onClick={() => { onCreatePlan?.(Array.from(planSelectedIds)); setPlanMode(false); }}
+                className="w-full bg-green-600 text-white px-4 py-2 rounded-xl font-bold flex items-center justify-center gap-2 text-sm"
+              >
+                <Calculator size={16} /> Generate Plan ({planSelectedIds.size})
+              </button>
+            )}
+            <button
               onClick={() => setOverdueOnly(v => !v)}
               className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${
                 overdueOnly ? 'bg-red-600 text-white border-red-600' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'
@@ -5984,8 +6081,34 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
               <Plus size={14} /> New Order
             </button>
           )}
+          <button
+            onClick={() => { setPlanMode(v => !v); if (planMode) setPlanSelectedIds(new Set()); }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${planMode ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
+          >
+            <FileText size={14} className="inline mr-1" /> Production Plan
+          </button>
         </div>
       </div>
+
+      {planMode && (
+        <div className="flex items-center gap-2 px-1 py-2 bg-green-50 border border-green-200 rounded-lg">
+          <span className="text-xs font-bold text-green-700">{planSelectedIds.size} order(s) selected</span>
+          <div className="flex-1" />
+          <button
+            onClick={() => { setPlanMode(false); setPlanSelectedIds(new Set()); }}
+            className="px-3 py-1 rounded-lg text-xs font-bold border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            disabled={planSelectedIds.size === 0}
+            onClick={() => { onCreatePlan?.(Array.from(planSelectedIds)); }}
+            className="px-3 py-1 rounded-lg text-xs font-bold bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Calculator size={14} className="inline mr-1" /> Generate Plan ({planSelectedIds.size})
+          </button>
+        </div>
+      )}
 
       <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setCustomer(''); setLineItems([createBlankLineItem()]); setItemSearchQueries({}); setOpenDropdownKey(null); }} title="Create Work Orders">
         <form onSubmit={handleSave} className="space-y-4">
@@ -6169,59 +6292,100 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
       </Modal>
 
       {viewMode === 'table' ? (
-        <Card className="hidden md:block p-0 overflow-x-auto overflow-y-auto max-h-[70vh] shadow-md border border-gray-100">
-                <table className="w-full min-w-[1660px] text-left text-sm border-separate">
+        <Card className="hidden md:block p-0 shadow-md border border-gray-100">
+          <div className="overflow-x-auto overflow-y-auto max-h-[85vh]">
+            <table className="w-full min-w-[1660px] text-left text-sm border-separate border-spacing-0">
                     <thead className="bg-gray-50 text-xs font-black uppercase text-gray-500 border-b border-gray-200">
                         <tr>
-                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky left-0 top-0 bg-gray-50 z-20" onClick={() => handleSort('id')}>
+                            {planMode && (
+                              <th className="px-2 py-1.5 w-10 sticky left-0 top-0 bg-gray-50 z-20">
+                                <input
+                                  type="checkbox"
+                                  className="w-4 h-4 rounded"
+                                  checked={paginatedOrders.length > 0 && paginatedOrders.every(wo => planSelectedIds.has(wo.id))}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setPlanSelectedIds(new Set(paginatedOrders.map(wo => wo.id)));
+                                    } else {
+                                      setPlanSelectedIds(new Set());
+                                    }
+                                  }}
+                                />
+                              </th>
+                            )}
+                            <th className={`px-4 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors ${planMode ? 'sticky left-10 top-0 bg-gray-50 z-10' : 'sticky left-0 top-0 bg-gray-50 z-20'}`}>
+                                <span className="inline-flex items-center">Sr. No.</span>
+                            </th>
+                            <th className="px-4 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('id')}>
                                 <span className="inline-flex items-center">Order #<SortIcon col="id" /></span>
                             </th>
-                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('created_at')}>
+                            <th className="px-4 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('created_at')}>
                                 <span className="inline-flex items-center">Entry Date<SortIcon col="created_at" /></span>
                             </th>
-                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('customer')}>
+                            <th className="px-4 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('customer')}>
                                 <span className="inline-flex items-center">Customer<SortIcon col="customer" /></span>
                             </th>
-                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('job_details')}>
+                            <th className="px-4 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('job_details')}>
                                 <span className="inline-flex items-center">Job Details<SortIcon col="job_details" /></span>
                             </th>
-                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('drawing')}>
+                            <th className="px-4 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('drawing')}>
                                 <span className="inline-flex items-center">Drawing<SortIcon col="drawing" /></span>
                             </th>
-                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('qty')}>
+                            <th className="px-4 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('qty')}>
                                 <span className="inline-flex items-center">Qty<SortIcon col="qty" /></span>
                             </th>
-                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('etd')}>
+                            <th className="px-4 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('etd')}>
                                 <span className="inline-flex items-center">ETD<SortIcon col="etd" /></span>
                             </th>
-                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('status')}>
-                                <span className="inline-flex items-center">Status<SortIcon col="status" /></span>
+                            <th className="px-4 py-1.5 whitespace-nowrap sticky top-0 bg-gray-50 z-10">
+                                <span className="inline-flex items-center">Status</span>
                             </th>
-                            <th className="px-4 py-2 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('departments')}>
-                                <span className="inline-flex items-center">Depts<SortIcon col="departments" /></span>
+                            <th className="px-4 py-1.5 whitespace-nowrap sticky top-0 bg-gray-50 z-10">
+                                <span className="inline-flex items-center">Depts</span>
                             </th>
-                            <th className="px-4 py-2 text-right whitespace-nowrap sticky top-0 bg-gray-50 z-10">Action</th>
+                            <th className="px-4 py-1.5 text-right whitespace-nowrap sticky top-0 bg-gray-50 z-10">Action</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                        {paginatedOrders.map(wo => (
+                        {paginatedOrders.map((wo, idx) => {
+                          const srNo = idx + 1;
+                          return (
                             <tr 
                                 key={wo.id} 
                                 onClick={() => onView(wo.id)} 
                                 className={`hover:bg-blue-50/50 cursor-pointer transition-colors group ${isOrderOverdue(wo) ? 'bg-red-100/60' : ''}`}
                             >
-                                <td className={`px-4 py-2 font-black text-indigo-600 text-sm whitespace-nowrap sticky left-0 z-10 ${isOrderOverdue(wo) ? 'bg-red-100/60' : 'bg-white'}`}>
+                                {planMode && (
+                                  <td className={`px-2 py-1.5 sticky left-0 z-20 ${isOrderOverdue(wo) ? 'bg-red-100/60' : 'bg-white'}`} onClick={e => e.stopPropagation()}>
+                                    <input
+                                      type="checkbox"
+                                      className="w-4 h-4 rounded"
+                                      checked={planSelectedIds.has(wo.id)}
+                                      onChange={() => {
+                                        setPlanSelectedIds(prev => {
+                                          const next = new Set(prev);
+                                          if (next.has(wo.id)) next.delete(wo.id); else next.add(wo.id);
+                                          return next;
+                                        });
+                                      }}
+                                    />
+                                  </td>
+                                )}
+                                <td className={`px-4 py-1.5 font-black text-gray-400 text-xs whitespace-nowrap ${planMode ? 'sticky left-10 z-10' : 'sticky left-0 z-10'} ${isOrderOverdue(wo) ? 'bg-red-100/60' : 'bg-white'}`}>
+                                    {srNo}
+                                </td>
+                                <td className={`px-4 py-1.5 font-black text-indigo-600 text-sm whitespace-nowrap`}>
                                   <div className="text-sm">#{wo.id}</div>
                                   {wo.order_type === 'suborder' && <Badge color="purple" className="!text-xs">Suborder Of #{wo.parent_work_order_id || '-'}</Badge>}
                                 </td>
-                                <td className="px-4 py-2 text-xs font-bold text-gray-600 whitespace-nowrap">
+                                <td className="px-4 py-1.5 text-xs font-bold text-gray-600 whitespace-nowrap">
                                   {formatEntryDate(wo.entry_date || wo.created_at || (wo as any).created)}
                                 </td>
-                                <td className="px-4 py-2 font-bold text-gray-700 text-sm whitespace-nowrap">{wo.customer}</td>
-                                <td className="px-4 py-2 font-semibold text-gray-800 text-sm whitespace-nowrap">
+                                <td className="px-4 py-1.5 font-bold text-gray-700 text-sm whitespace-nowrap">{wo.customer}</td>
+                                <td className="px-4 py-1.5 font-semibold text-gray-800 text-sm whitespace-nowrap">
                                   <div>{wo.job_details}</div>
                                 </td>
-                                <td className="px-4 py-2 whitespace-nowrap">
+                                <td className="px-4 py-1.5 whitespace-nowrap">
                                     <div className="flex items-center gap-2">
                                         <span className="font-mono text-sm text-gray-500 font-bold">{wo.drawing || wo.itemInfo?.drawing_no || 'TBD'}</span>
                                         {(wo.drawing_image_url || wo.itemInfo?.drawing_image_url) && (
@@ -6239,20 +6403,34 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                                         )}
                                     </div>
                                 </td>
-                                <td className="px-4 py-2 font-bold text-sm whitespace-nowrap">{wo.qty}</td>
-                                <td className="px-4 py-2 text-sm font-bold text-orange-600 whitespace-nowrap">{wo.etd || 'TBD'}</td>
-                <td className="px-4 py-2 whitespace-nowrap">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <StatusBadge status={wo.status} />
-                                    {getQCApprovalProgress(wo) === 'partial' && <Badge color="orange">Partially Approved</Badge>}
+                                <td className="px-4 py-1.5 font-bold text-sm whitespace-nowrap">{wo.qty}</td>
+                                <td className="px-4 py-1.5 text-sm font-bold text-orange-600 whitespace-nowrap">{wo.etd || 'TBD'}</td>
+                                <td className="px-4 py-1.5 whitespace-nowrap">
+                                  <div className="flex items-center gap-1 flex-wrap">
+                                    {(wo.assigned_departments || []).map(dept => {
+                                      const ds = (wo.department_statuses || []).find(s => normalizeDepartment(s.department) === normalizeDepartment(dept));
+                                      const qc = ds?.qc_status;
+                                      let badgeClass = 'bg-gray-100 text-gray-600';
+                                      let label = ds?.status ? STATUS_LABELS[ds.status] || ds.status : '—';
+                                      if (qc === 'QC Approved') { badgeClass = 'bg-green-100 text-green-700'; label = 'QC Approved'; }
+                                      else if (qc === 'QC Denied') { badgeClass = 'bg-red-100 text-red-700'; label = 'Denied'; }
+                                      else if (ds?.status === 'Work Started') { badgeClass = 'bg-blue-100 text-blue-700'; }
+                                      else if (ds?.status === 'Ready for QC') { badgeClass = 'bg-yellow-100 text-yellow-700'; }
+                                      const deptLabel = dept.replace(/_/g, ' ');
+                                      return (
+                                        <span key={dept} className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${badgeClass}`}>
+                                          {deptLabel}: {label}
+                                        </span>
+                                      );
+                                    })}
                                   </div>
                                 </td>
-                                <td className="px-4 py-2 whitespace-nowrap">
+                                <td className="px-4 py-1.5 whitespace-nowrap">
                                     <div className="flex flex-nowrap gap-1">
                                         {(wo.assigned_departments || []).map(d => <Badge key={d} color="indigo" className="!text-xs">{d.replace(/_/g, ' ')}</Badge>)}
                                     </div>
                                 </td>
-                                <td className="px-4 py-2 text-right whitespace-nowrap">
+                                <td className="px-4 py-1.5 text-right whitespace-nowrap">
                                     <button 
                                         onClick={(e) => { e.stopPropagation(); onView(wo.id); }}
                                         className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
@@ -6262,14 +6440,18 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                                     </button>
                                 </td>
                             </tr>
-                        ))}
+                          );
+                        })}
                     </tbody>
                 </table>
             {filteredOrders.length === 0 && <div className="p-12 text-center text-gray-500 italic font-semibold">No matching work orders found.</div>}
+          </div>
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5 md:gap-3">
-            {paginatedOrders.map(wo => (
+            {paginatedOrders.map((wo, idx) => {
+              const srNo = idx + 1;
+              return (
             <div 
                 key={wo.id} 
                 className={`group ${isOrderOverdue(wo) ? 'bg-red-100' : 'bg-white'} rounded-2xl md:rounded-xl border border-gray-100 p-3 md:p-3 space-y-1.5 md:space-y-2 shadow-sm hover:shadow-md hover:border-blue-100 transition-all active:scale-[0.99]`}
@@ -6277,26 +6459,32 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <div className="flex items-center gap-1 flex-wrap">
-                      <span className="text-xs font-black text-indigo-600">#{wo.id}</span>
+                      <span className="text-xs font-black text-indigo-600">#{srNo}  #{wo.id}</span>
                       {wo.order_type === 'suborder' && <Badge color="purple" className="!text-xs">Suborder Of #{wo.parent_work_order_id || '-'}</Badge>}
                       <span className="text-[10px] text-gray-500 font-semibold">Entry: {formatEntryDate(wo.entry_date || wo.created_at || (wo as any).created)}</span>
                     </div>
                     <h3 className="text-sm font-black text-slate-800 leading-tight mt-0.5 line-clamp-1 md:line-clamp-2">{wo.job_details}</h3>
                     <p className="hidden md:block text-xs font-bold text-gray-500 uppercase">{wo.customer}</p>
                   </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <StatusBadge status={wo.status} />
-                    {getQCApprovalProgress(wo) === 'partial' && <Badge color="orange">Partially Approved</Badge>}
-                  </div>
                 </div>
 
-                <div className="hidden md:flex flex-wrap gap-1">
-                  {(wo.assigned_departments || []).slice(0, 3).map(d => (
-                    <Badge key={d} color="indigo" className="!text-xs">{d.replace(/_/g, ' ')}</Badge>
-                  ))}
-                  {(wo.assigned_departments || []).length > 3 && (
-                    <Badge color="gray" className="!text-xs">+{(wo.assigned_departments || []).length - 3}</Badge>
-                  )}
+                <div className="flex flex-wrap gap-1">
+                  {(wo.assigned_departments || []).map(dept => {
+                    const ds = (wo.department_statuses || []).find(s => normalizeDepartment(s.department) === normalizeDepartment(dept));
+                    const qc = ds?.qc_status;
+                    let badgeClass = 'bg-gray-100 text-gray-600';
+                    let label = ds?.status ? STATUS_LABELS[ds.status] || ds.status : '—';
+                    if (qc === 'QC Approved') { badgeClass = 'bg-green-100 text-green-700'; label = 'QC Approved'; }
+                    else if (qc === 'QC Denied') { badgeClass = 'bg-red-100 text-red-700'; label = 'Denied'; }
+                    else if (ds?.status === 'Work Started') { badgeClass = 'bg-blue-100 text-blue-700'; }
+                    else if (ds?.status === 'Ready for QC') { badgeClass = 'bg-yellow-100 text-yellow-700'; }
+                    const deptLabel = dept.replace(/_/g, ' ');
+                    return (
+                      <span key={dept} className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${badgeClass}`}>
+                        {deptLabel}: {label}
+                      </span>
+                    );
+                  })}
                 </div>
 
                 <div className="flex items-center justify-between text-xs font-bold text-gray-600">
@@ -6336,7 +6524,8 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                   busy={busyCardStatusId === wo.id}
                 />
             </div>
-            ))}
+            );
+          })}
             {filteredOrders.length === 0 && <div className="p-10 md:p-20 text-center text-gray-500 italic font-semibold">No matching work orders found.</div>}
         </div>
       )}
@@ -7718,7 +7907,7 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
                     <button onClick={() => addComponentToItem(item.local_id, componentPicker[item.local_id] || '')} className="w-full md:w-auto px-3 py-2 bg-slate-900 text-white rounded-lg text-xs font-black">Add Component</button>
                   </div>
 
-                  <div className="hidden md:block overflow-x-auto max-h-[70vh] overflow-y-auto border border-gray-100 rounded-lg">
+                  <div className="hidden md:block overflow-x-auto max-h-[85vh] overflow-y-auto border border-gray-100 rounded-lg">
                     <table className="w-full min-w-[700px] text-sm border-separate">
                       <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black">
                         <tr>
@@ -7797,7 +7986,7 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
           <h3 className="font-black text-gray-800">{bomMode === 'unsaved' ? 'Items Without BOM Components' : 'Items With Saved BOM Components'}</h3>
           <span className="text-xs font-bold text-gray-500">{bomMode === 'unsaved' ? filteredUnsavedRows.length : filteredSavedRows.length} row(s)</span>
         </div>
-        <div className="hidden md:block overflow-x-auto max-h-[70vh] overflow-y-auto">
+        <div className="hidden md:block overflow-x-auto max-h-[85vh] overflow-y-auto">
           <table className="w-full min-w-[850px] text-sm border-separate">
             <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b">
               <tr>
@@ -8239,7 +8428,7 @@ const ProductionPlanList: React.FC<{ onError: () => void; onGenerate: (ids: numb
       </div>
 
       <Card className="p-0 overflow-hidden shadow-lg border-2 border-indigo-50">
-        <div className="hidden md:block overflow-x-auto max-h-[70vh] overflow-y-auto">
+        <div className="hidden md:block overflow-x-auto max-h-[85vh] overflow-y-auto">
           <table className="w-full text-left text-sm border-separate">
             <thead className="bg-[#0f172a] text-white text-[10px] font-black uppercase tracking-widest">
               <tr>
@@ -8800,7 +8989,7 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
       </div>
 
       <Card className="hidden md:block p-0 overflow-hidden">
-        <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
+        <div className="overflow-x-auto max-h-[85vh] overflow-y-auto">
           <table className="w-full min-w-[1180px] text-sm border-separate">
             <thead className="bg-gray-50 text-[10px] uppercase tracking-widest text-gray-500 font-black border-b">
               <tr>
@@ -9569,10 +9758,10 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
                               <tbody className="divide-y divide-gray-200/50">
                                 {applySortGeneric(detailRows.map((r: any) => ({ ...r }))).map((detail: any, di: number) => (
                                   <tr key={di} className={`hover:bg-indigo-50/20 ${di % 2 === 1 ? 'bg-gray-50/30' : ''}`}>
-                                    <td className="px-4 py-2 font-semibold text-gray-700 pl-8">{detail.parentItem}</td>
-                                    <td className="px-4 py-2 font-bold text-gray-800 text-right tabular-nums">{detail.qtyUsed}</td>
-                                    <td className="px-4 py-2 text-gray-600">{detail.company}</td>
-                                    <td className="px-4 py-2 font-semibold text-indigo-600 text-right tabular-nums">#{detail.orderId}</td>
+                                    <td className="px-4 py-1.5 font-semibold text-gray-700 pl-8">{detail.parentItem}</td>
+                                    <td className="px-4 py-1.5 font-bold text-gray-800 text-right tabular-nums">{detail.qtyUsed}</td>
+                                    <td className="px-4 py-1.5 text-gray-600">{detail.company}</td>
+                                    <td className="px-4 py-1.5 font-semibold text-indigo-600 text-right tabular-nums">#{detail.orderId}</td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -12013,7 +12202,7 @@ export default function App() {
       case 'items': return <ItemList onError={onError} editingId={(window as any)._id} />;
       case 'child-items': return <ChildItemListView onError={onError} editingId={(window as any)._id} />;
       case 'vehicles': return <VehicleList onError={onError} />;
-      case 'work-orders': return <WorkOrderList onError={onError} onView={id => navigateTo('wo-details', { payload: { id } })} onViewPlan={id => navigateTo('plan-generator', { payload: { ids: [id], backView: 'work-orders' } })} loggedInUser={loggedInUser} />;
+      case 'work-orders': return <WorkOrderList onError={onError} onView={id => navigateTo('wo-details', { payload: { id } })} onViewPlan={id => navigateTo('plan-generator', { payload: { ids: [id], backView: 'work-orders' } })} onCreatePlan={ids => navigateTo('plan-generator', { payload: { ids, backView: 'work-orders' } })} loggedInUser={loggedInUser} />;
       case 'wo-details': return <WODetails id={(window as any)._id} onBack={() => {
          const normDept = normalizeDepartment(loggedInUser.department);
          if (normDept === 'Office') {
