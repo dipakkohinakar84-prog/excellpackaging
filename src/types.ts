@@ -26,12 +26,14 @@ export type AppView =
   | 'client-login'
   | 'client-dashboard'
   | 'client-orders'
-  | 'verify';
+  | 'verify'
+  | 'vehicles';
 
 export interface User {
   id: number;
   username: string;
   email: string;
+  login_email?: string;
   mobile: string;
   vehicle_number?: string;
   passkey?: string;
@@ -53,6 +55,8 @@ export interface User {
   can_access_components?: boolean;
   can_access_custom_bom?: boolean;
   can_access_production_entry?: boolean;
+  can_place_order?: boolean;
+  can_access_vehicles?: boolean;
 }
 
 export const FEATURE_FLAG_MAP: Record<string, keyof User> = {
@@ -77,6 +81,7 @@ export const FEATURE_FLAG_MAP: Record<string, keyof User> = {
   'live-screen': 'can_access_live_screen',
   'live-screen-login': 'can_access_live_screen',
   'client-orders': 'can_access_client_orders',
+  vehicles: 'can_access_vehicles',
 };
 
 export const FEATURE_FLAG_GROUPS = [
@@ -85,7 +90,8 @@ export const FEATURE_FLAG_GROUPS = [
     flags: [
       { key: 'can_access_dashboard', label: 'Dashboard' },
       { key: 'can_access_dispatch', label: 'Dispatch' },
-      { key: 'can_access_work_orders', label: 'Orders' },
+      { key: 'can_access_work_orders', label: 'Access Orders' },
+      { key: 'can_place_order', label: 'Create Orders' },
       { key: 'can_access_daily_tasks', label: 'Daily Tasks' },
       { key: 'can_access_live_screen', label: 'Live Screen' },
       { key: 'can_access_notifications', label: 'Alerts Log' },
@@ -100,6 +106,7 @@ export const FEATURE_FLAG_GROUPS = [
       { key: 'can_access_customers', label: 'Clients' },
       { key: 'can_access_items', label: 'Items' },
       { key: 'can_access_components', label: 'Components' },
+      { key: 'can_access_vehicles', label: 'Vehicles' },
     ],
   },
   {
@@ -139,6 +146,13 @@ export interface Customer {
   type: string;
   reference: string;
   remarks: string;
+}
+
+export interface Vehicle {
+  id: number;
+  vehicle_no: string;
+  driver_name?: string;
+  is_active?: boolean;
 }
 
 export type BomChildType = 'component' | 'item';
@@ -210,12 +224,22 @@ export type DepartmentWOStatus = 'Not Started' | 'Work Started' | 'Ready for QC'
 export type QCStatus = 'Pending QC' | 'QC Denied' | 'QC Approved';
 export type WOStatus = 'Not Started' | 'Work Started' | 'Ready for QC' | 'Ready for despatch' | 'Dispatched';
 
+export interface DeptStatusHistoryEntry {
+  status: string;
+  qc_status?: string;
+  by: string;
+  at: string;
+}
+
 export interface DepartmentStatus {
   department: string;
   status: DepartmentWOStatus;
   qc_status?: QCStatus;
   updated_at?: string;
   updated_by?: string;
+  created_by?: string;
+  created_at?: string;
+  history?: DeptStatusHistoryEntry[];
 }
 
 export interface DailyTask {
@@ -277,6 +301,9 @@ export interface WorkOrder {
   customer: string;
   job_details: string;
   drawing: string;
+  drawing_image_url?: string;
+  drawing_file?: string;
+  entry_date?: string;
   qty: number;
   qty_dispatched?: number;
   last_invoice_no?: string;

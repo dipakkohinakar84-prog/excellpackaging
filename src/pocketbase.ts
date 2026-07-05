@@ -129,6 +129,7 @@ const FEATURE_FLAG_FIELDS: (keyof User)[] = [
   'can_access_client_orders', 'can_access_live_screen', 'can_access_dispatch',
   'can_access_notifications', 'can_access_components', 'can_access_custom_bom',
   'can_access_production_entry',
+  'can_place_order',
 ];
 
 export const mapAuthRecordToUser = (record: RecordModel | Record<string, any> | null | undefined): User | null => {
@@ -137,7 +138,7 @@ export const mapAuthRecordToUser = (record: RecordModel | Record<string, any> | 
   const user: User = {
     id: Number(normalized.id || (normalized as any).legacy_id || 0),
     username: String((record as any).display_name || normalized.username || ''),
-    email: String(normalized.email || ''),
+    email: String(normalized.email || normalized.login_email || ''),
     mobile: String(normalized.mobile || (record as any).username || ''),
     vehicle_number: normalized.vehicle_number || '',
     department: String(normalized.department || ''),

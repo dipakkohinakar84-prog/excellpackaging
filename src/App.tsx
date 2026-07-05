@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue, Fragment } from 'react';
+﻿import React, { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue, Fragment } from 'react';
 import { 
   Users, 
   Building2, 
@@ -61,10 +61,9 @@ import {
   ListTodo,
   Monitor,
   ShoppingCart,
-  CalendarDays,
-  Wrench
+  CalendarDays
 } from 'lucide-react';
-import { AppView, User, Customer, Item, WorkOrder, Department, WOStatus, ChildItem, DepartmentStatus, Metric, FEATURE_FLAG_GROUPS } from './types';
+import { AppView, User, Customer, Item, WorkOrder, Department, WOStatus, ChildItem, DepartmentStatus, Metric, Vehicle, FEATURE_FLAG_GROUPS } from './types';
 import { supabase, supabaseAnonKey, pb, loginWithMobilePassword, getCurrentAuthUser, logoutAuth, mapAuthRecordToUser } from './supabase';
 import Login from './LoginComponent';
 import { canAccessView, filterWorkOrdersByDepartment, getQCApprovalProgress, sendNotification, normalizeDepartment } from './utils';
@@ -114,7 +113,7 @@ const StatusBadge: React.FC<{ status: WOStatus }> = ({ status }) => {
     'Not Started': { bg: 'bg-gray-100', text: 'text-gray-600', label: 'In Queue' },
     'Work Started': { bg: 'bg-blue-100', text: 'text-blue-600', label: 'Work In Progress' },
     'Ready for QC': { bg: 'bg-yellow-100', text: 'text-yellow-600', label: 'Ready for QC' },
-    'Ready for despatch': { bg: 'bg-purple-100', text: 'text-purple-600', label: 'Ready for Despatch' },
+    'Ready for despatch': { bg: 'bg-purple-100', text: 'text-purple-600', label: 'Ready for Dispatch' },
     'Dispatched': { bg: 'bg-indigo-100', text: 'text-indigo-600', label: 'Dispatched' },
   };
   
@@ -138,7 +137,7 @@ const STATUS_LABELS: Record<string, string> = {
   'Not Started': 'In Queue',
   'Work Started': 'Work In Progress',
   'Ready for QC': 'Ready for QC',
-  'Ready for despatch': 'Ready for Despatch',
+  'Ready for despatch': 'Ready for Dispatch',
   'Dispatched': 'Dispatched',
 };
 
@@ -242,6 +241,13 @@ const isInvolvingDepartment = (departmentName: string) => {
 };
 
 const PLAN_DEPARTMENT_COLUMNS = ['Wood_Work', 'Corrugation', 'Trading_Consumables'];
+const DEPARTMENT_PRIORITY: Record<string, number> = {
+  'Wood_Work': 0,
+  'Plywood': 1,
+  'Corrugation': 2,
+  'Trading_Consumables': 3,
+  'Foam_Plastic_bags': 4,
+};
 
 type BomRowType = 'component' | 'item';
 
@@ -369,12 +375,18 @@ const collectDirectWorkDepartments = (item: Item | undefined): string[] => {
   return Array.from(departments);
 };
 
-const makeDepartmentStatuses = (departments: string[], username: string) => departments.map(dept => ({
-  department: dept,
-  status: 'Not Started',
-  updated_at: new Date().toISOString(),
-  updated_by: username,
-}));
+const makeDepartmentStatuses = (departments: string[], username: string) => {
+  const now = new Date().toISOString();
+  return departments.map(dept => ({
+    department: dept,
+    status: 'Not Started',
+    updated_at: now,
+    updated_by: username,
+    created_by: username,
+    created_at: now,
+    history: [{ status: 'Not Started', by: username, at: now }],
+  }));
+};
 
 const getItemForWorkOrder = (items: Item[], wo: WorkOrder) => {
   const customerKey = normalizeDuplicateKey(wo.customer || '');
@@ -407,6 +419,29 @@ const getEditableDepartmentForUser = (wo: WorkOrder, user: User) => {
   }
 
   return departments.find(dept => normalizeDepartment(dept) === userDept) || '';
+};
+
+const canEditDeptCard = (dept: string, wo: WorkOrder, user: User): boolean => {
+  const userDept = normalizeDepartment(user.department);
+  const normDept = normalizeDepartment(dept);
+  const deptSt = (wo.department_statuses || []).find(s => normalizeDepartment(s.department) === normDept);
+  const currentQcStatus = deptSt?.qc_status;
+  const currentDeptStatus = deptSt?.status || 'Not Started';
+
+  if (userDept === 'Office') return true;
+
+  if (userDept === 'Quality_Control') {
+    return currentDeptStatus === 'Ready for QC' && (!currentQcStatus || currentQcStatus === 'Pending QC');
+  }
+
+  if (userDept === normDept) {
+    if (currentQcStatus === 'QC Denied') return true;
+    if (currentQcStatus === 'QC Approved') return false;
+    if (currentDeptStatus === 'Ready for QC') return false;
+    return true;
+  }
+
+  return false;
 };
 
 const getCardStatusOptions = (wo: WorkOrder, user: User): string[] => {
@@ -453,25 +488,46 @@ const buildDepartmentStatusUpdate = (wo: WorkOrder, user: User, nextStatus: stri
   const isQCAction = userDept === 'Quality_Control';
   let found = false;
 
+  const recordStatus = isQCAction ? 'Ready for QC' : nextStatus;
+  const recordQcStatus = isQCAction ? nextStatus : undefined;
+
   const departmentStatuses: DepartmentStatus[] = existingStatuses.map(status => {
     if (normalizeDepartment(status.department) !== targetDeptNorm) return status;
     found = true;
+    const history = (status as any).history ? [...(status as any).history] : [];
+    history.push({
+      status: recordStatus,
+      qc_status: recordQcStatus,
+      by: user.username,
+      at: now,
+    });
     return {
       ...status,
-      status: isQCAction ? 'Ready for QC' : nextStatus as any,
-      qc_status: isQCAction ? nextStatus as any : status.qc_status,
+      status: recordStatus as any,
+      qc_status: recordQcStatus as any,
       updated_at: now,
       updated_by: user.username,
+      created_by: (status as any).created_by != null ? (status as any).created_by : user.username,
+      created_at: (status as any).created_at != null ? (status as any).created_at : now,
+      history,
     };
   });
 
   if (!found) {
     departmentStatuses.push({
       department: targetDepartment,
-      status: isQCAction ? 'Ready for QC' : nextStatus as any,
-      qc_status: isQCAction ? nextStatus as any : undefined,
+      status: recordStatus as any,
+      qc_status: recordQcStatus as any,
       updated_at: now,
       updated_by: user.username,
+      created_by: user.username,
+      created_at: now,
+      history: [{
+        status: recordStatus,
+        qc_status: recordQcStatus,
+        by: user.username,
+        at: now,
+      }],
     });
   }
 
@@ -488,24 +544,45 @@ const updateSingleDepartmentStatus = (wo: WorkOrder, department: string, user: U
   const existingStatuses = Array.isArray(wo.department_statuses) ? wo.department_statuses : [];
   const targetDeptNorm = normalizeDepartment(department);
   let found = false;
+  const recordStatus = (nextStatus === 'QC Approved' || nextStatus === 'QC Denied') ? 'Ready for QC' : nextStatus;
+  const recordQcStatus = nextStatus === 'QC Approved' || nextStatus === 'QC Denied' ? nextStatus : undefined;
+
   const departmentStatuses: DepartmentStatus[] = existingStatuses.map(s => {
     if (normalizeDepartment(s.department) !== targetDeptNorm) return s;
     found = true;
+    const history = (s as any).history ? [...(s as any).history] : [];
+    history.push({
+      status: recordStatus,
+      qc_status: recordQcStatus,
+      by: user.username,
+      at: now,
+    });
     return {
       ...s,
-      status: (nextStatus === 'QC Approved' || nextStatus === 'QC Denied') ? 'Ready for QC' as DepartmentWOStatus : nextStatus as DepartmentWOStatus,
-      qc_status: nextStatus === 'QC Approved' || nextStatus === 'QC Denied' ? nextStatus as QCStatus : s.qc_status,
+      status: recordStatus as DepartmentWOStatus,
+      qc_status: recordQcStatus as QCStatus,
       updated_at: now,
       updated_by: user.username,
+      created_by: (s as any).created_by != null ? (s as any).created_by : user.username,
+      created_at: (s as any).created_at != null ? (s as any).created_at : now,
+      history,
     };
   });
   if (!found) {
     departmentStatuses.push({
       department,
-      status: (nextStatus === 'QC Approved' || nextStatus === 'QC Denied') ? 'Ready for QC' as DepartmentWOStatus : nextStatus as DepartmentWOStatus,
-      qc_status: nextStatus === 'QC Approved' || nextStatus === 'QC Denied' ? nextStatus as QCStatus : undefined,
+      status: recordStatus as DepartmentWOStatus,
+      qc_status: recordQcStatus as QCStatus,
       updated_at: now,
       updated_by: user.username,
+      created_by: user.username,
+      created_at: now,
+      history: [{
+        status: recordStatus,
+        qc_status: recordQcStatus,
+        by: user.username,
+        at: now,
+      }],
     });
   }
   const overallStatus = deriveOverallStatusFromDepartmentStatuses(wo, departmentStatuses);
@@ -545,12 +622,31 @@ const deriveDepartmentStatusesFromOverallStatus = (wo: WorkOrder, newStatus: str
   const departments = wo.assigned_departments || [];
   return departments.map(dept => {
     const existingEntry = existing.find(d => normalizeDepartment(d.department) === normalizeDepartment(dept));
-    const base: DepartmentStatus = { department: dept, status: 'Not Started', updated_at: now, updated_by: user.username };
-    if (newStatus === 'Not Started') return { ...base, ...existingEntry, status: 'Not Started' };
-    if (newStatus === 'Work Started') return { ...base, ...existingEntry, status: 'Work Started' };
-    if (newStatus === 'Ready for QC') return { ...base, ...existingEntry, status: 'Ready for QC' };
-    if (newStatus === 'Ready for despatch') return { ...base, ...existingEntry, status: 'Ready for QC', qc_status: 'QC Approved' as QCStatus };
-    return existingEntry || base;
+    const history = existingEntry && (existingEntry as any).history ? [...(existingEntry as any).history] : [];
+    const pushHistory = (status: string, qcStatus?: string) => {
+      const last = history[history.length - 1];
+      if (!last || last.status !== status || last.qc_status !== qcStatus) {
+        history.push({ status, qc_status: qcStatus, by: user.username, at: now });
+      }
+    };
+    const merged: any = {
+      department: dept,
+      status: 'Not Started',
+      updated_at: now,
+      updated_by: user.username,
+      created_by: user.username,
+      created_at: now,
+      history,
+      ...existingEntry,
+    };
+    if (merged.created_by == null) merged.created_by = user.username;
+    if (merged.created_at == null) merged.created_at = now;
+    if (newStatus === 'Not Started') { merged.status = 'Not Started'; pushHistory('Not Started'); }
+    else if (newStatus === 'Work Started') { merged.status = 'Work Started'; pushHistory('Work Started'); }
+    else if (newStatus === 'Ready for QC') { merged.status = 'Ready for QC'; pushHistory('Ready for QC'); }
+    else if (newStatus === 'Ready for despatch') { merged.status = 'Ready for QC'; merged.qc_status = 'QC Approved' as QCStatus; pushHistory('Ready for QC', 'QC Approved'); }
+    else if (newStatus === 'Dispatched') { pushHistory('Dispatched'); }
+    return merged;
   });
 };
 
@@ -688,7 +784,7 @@ const WorkOrderCardActions: React.FC<{
   busy?: boolean;
 }> = ({ wo, loggedInUser, onViewPlan, onViewDrawing, onChangeStatus, busy = false }) => {
   const statusOptions = getCardStatusOptions(wo, loggedInUser);
-  const drawingUrl = wo.itemInfo?.drawing_image_url;
+  const drawingUrl = wo.drawing_image_url || wo.itemInfo?.drawing_image_url;
   const [showOptions, setShowOptions] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
 
@@ -787,7 +883,7 @@ const WorkOrderCardActions: React.FC<{
                     : `${getRadioColor(status)} border border-transparent hover:border-current`
                 } disabled:opacity-60`}
               >
-                <span className={`text-[10px] ${isCurrent ? '' : 'opacity-40'}`}>{isCurrent ? '●' : '○'}</span>
+                <span className={`text-[10px] ${isCurrent ? '' : 'opacity-40'}`}>{isCurrent ? (status === 'Dispatched' ? '✓' : '●') : '○'}</span>
                 {STATUS_LABELS[status] || status}
               </button>
             );
@@ -1384,9 +1480,8 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
     const openOrders = analyticsOrders.filter(wo => wo.status !== 'Dispatched').length;
     const dispatchedOrders = analyticsOrders.filter(wo => wo.status === 'Dispatched').length;
     const overdue = analyticsOrders.filter(wo => {
-      if (!wo.etd) return false;
-      const etd = new Date(`${wo.etd}T12:00:00`);
-      return !Number.isNaN(etd.getTime()) && etd < new Date() && wo.status !== 'Dispatched';
+      if (!wo.etd || wo.status === 'Dispatched') return false;
+      return wo.etd < new Date().toISOString().slice(0, 10);
     }).length;
     return { totalOrders, openOrders, dispatchedOrders, overdue };
   }, [analyticsOrders]);
@@ -1655,7 +1750,10 @@ const Dashboard: React.FC<{ user: User; setView: (v: AppView) => void; onError: 
               <button key={wo.id} onClick={() => openOrderDetails(wo.id)} className="group w-full px-4 py-3 text-left transition-colors hover:bg-gray-50" style={{ animationDelay: `${index * 20}ms` }}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="text-[11px] font-black text-slate-600">#{wo.id}</div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[11px] font-black text-slate-600">#{wo.id}</span>
+                      <span className="text-[10px] font-semibold text-gray-400">Entry: {formatEntryDate(wo.entry_date || wo.created_at || (wo as any).created)}</span>
+                    </div>
                     <div className="mt-0.5 truncate text-sm font-black text-gray-900 group-hover:text-slate-700">{wo.job_details}</div>
                     <div className="truncate text-xs font-semibold text-gray-500">{wo.customer}</div>
                   </div>
@@ -1819,14 +1917,17 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
   const [data, setData] = useState<(WorkOrder & { itemInfo?: Item })[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All');
+  const [statusFilter, setStatusFilter] = useState<'Ready for despatch' | 'Dispatched'>('Ready for despatch');
   const [dispatchDateFilter, setDispatchDateFilter] = useState('all');
   const [dispatchCustomFrom, setDispatchCustomFrom] = useState('');
   const [dispatchCustomTo, setDispatchCustomTo] = useState('');
   const [dispatchCompanyFilter, setDispatchCompanyFilter] = useState('All');
+  const [dispatchDepartmentFilter, setDispatchDepartmentFilter] = useState('All');
+  const [overdueOnly, setOverdueOnly] = useState(false);
+  const [dispatchLogsMap, setDispatchLogsMap] = useState<Map<number, any[]>>(new Map());
   const [page, setPage] = useState(1);
   const deferredSearchQuery = useDeferredValue(searchQuery);
-  const [vehicleOptions, setVehicleOptions] = useState<string[]>([]);
+  const [vehicleOptions, setVehicleOptions] = useState<Vehicle[]>([]);
   const [isDispatchMetaModalOpen, setIsDispatchMetaModalOpen] = useState(false);
   const todayDateStr = new Date().toISOString().slice(0, 10);
   const [dispatchMeta, setDispatchMeta] = useState({ invoiceNo: '', vehicleNo: '', dispatchDate: todayDateStr });
@@ -1835,16 +1936,44 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
   // Track selected orders and their dispatch quantities using Record to be TS friendly
   const [selectedOrders, setSelectedOrders] = useState<Record<number, number>>({});
   const [dispatchMode, setDispatchMode] = useState(false);
+  const [editingDispatchDateId, setEditingDispatchDateId] = useState<number | null>(null);
+  const [editingDateValue, setEditingDateValue] = useState('');
+
+  const isOrderOverdue = (wo: WorkOrder) => {
+    if (!wo.etd || wo.status === 'Dispatched') return false;
+    return wo.etd < new Date().toISOString().slice(0, 10);
+  };
+
+  const [sortConfig, setSortConfig] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
+
+  const handleSort = (key: string) => {
+    setSortConfig(prev => {
+      if (prev?.key === key) {
+        if (prev.dir === 'desc') return null;
+        return { key, dir: 'desc' };
+      }
+      return { key, dir: 'asc' };
+    });
+  };
+
+  const SortIcon = ({ col }: { col: string }) => (
+    sortConfig?.key === col
+      ? <span className="ml-1 text-indigo-500">{sortConfig.dir === 'asc' ? '↑' : '↓'}</span>
+      : <span className="ml-1 opacity-25">↕</span>
+  );
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [woResult, itemRes, usersRes] = await Promise.all([
+      const [woResult, itemRes, vehiclesRes, logsRes] = await Promise.all([
         supabase.from('work_orders').select('*').order('id', { ascending: false }),
         loadCachedCollection<Item>('items'),
-        loadCachedCollection<User>('users', 'id', 200),
+        loadCachedCollection<Vehicle>('vehicles', 'vehicle_no'),
+        supabase.from('dispatch_logs').select('*').order('dispatch_date', { ascending: true }),
       ]);
       const { data: woRes, error: woErr } = woResult;
+      const { data: logsRaw } = logsRes;
+      const logsData = Array.isArray(logsRaw) ? logsRaw : [];
 
       if (woErr?.code === '42P01') { onError(); return; }
 
@@ -1856,6 +1985,15 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
           qty_dispatched: wo.qty_dispatched ?? 0,
         }));
 
+        // Build dispatch logs map
+        const logsMap = new Map<number, any[]>();
+        logsData.forEach((log: any) => {
+          const oid = log.work_order_id;
+          if (!logsMap.has(oid)) logsMap.set(oid, []);
+          logsMap.get(oid)!.push(log);
+        });
+        setDispatchLogsMap(logsMap);
+
         // Show orders that are Ready for despatch or already in dispatch process
         const dispatchOrders = enriched.filter(wo => 
           wo.status === 'Ready for despatch' || 
@@ -1864,10 +2002,8 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
 
         setData(dispatchOrders);
 
-        const dispatchVehicles = (usersRes || [])
-          .filter((u: any) => normalizeDepartment(u.department) === 'Dispatch' && (u.vehicle_number || '').trim() !== '')
-          .map((u: any) => String(u.vehicle_number).trim());
-        setVehicleOptions(Array.from(new Set(dispatchVehicles)));
+        const activeVehicles = (vehiclesRes || []).filter((v: Vehicle) => v.is_active !== false);
+        setVehicleOptions(activeVehicles);
       }
     } catch (e) { 
       console.error('Error fetching dispatch orders:', e);
@@ -2033,8 +2169,14 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
       return;
     }
 
-    setDispatchMeta({ invoiceNo: '', vehicleNo: vehicleOptions[0] || '', dispatchDate: todayDateStr });
+    setDispatchMeta({ invoiceNo: '', vehicleNo: vehicleOptions[0]?.vehicle_no || '', dispatchDate: todayDateStr });
     setIsDispatchMetaModalOpen(true);
+  };
+
+  const saveSingleDispatchDate = async (logId: number, date: string) => {
+    if (!date) return;
+    await supabase.from('dispatch_logs').update({ dispatch_date: date }).eq('id', logId);
+    fetchData();
   };
 
   const dispatchCompanyOptions = useMemo(() => {
@@ -2043,10 +2185,28 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
     return Array.from(companies).sort();
   }, [data]);
 
+  const dispatchDepartmentOptions = useMemo(() => {
+    const depts = new Set<string>();
+    data.forEach(wo => (wo.assigned_departments || []).forEach(d => depts.add(d)));
+    return Array.from(depts).sort();
+  }, [data]);
+
   const filteredOrders = useMemo(() => {
-    const statusFiltered = statusFilter === 'All' ? data.filter(wo => wo.status !== 'Dispatched') : data.filter(wo => wo.status === statusFilter);
+    const statusFiltered = statusFilter === 'Ready for despatch' ? data.filter(wo => wo.status === 'Ready for despatch' || (wo.status === 'Dispatched' && (wo.qty - (wo.qty_dispatched || 0)) > 0)) : data.filter(wo => wo.status === 'Dispatched');
     const companyFiltered = dispatchCompanyFilter === 'All' ? statusFiltered : statusFiltered.filter(wo => wo.customer === dispatchCompanyFilter);
-    const dateFiltered = companyFiltered.filter(wo => filterByDate(wo.etd, dispatchDateFilter, dispatchCustomFrom, dispatchCustomTo));
+    const deptFiltered = dispatchDepartmentFilter === 'All' ? companyFiltered : companyFiltered.filter(wo => (wo.assigned_departments || []).some(dept => normalizeDepartment(dept) === normalizeDepartment(dispatchDepartmentFilter)));
+    const overdueFiltered = overdueOnly ? deptFiltered.filter(wo => isOrderOverdue(wo)) : deptFiltered;
+    const dateFiltered = overdueFiltered.filter(wo => {
+      if (statusFilter === 'Dispatched') {
+        const logs = dispatchLogsMap.get(wo.id) || [];
+        if (logs.length === 0) return dispatchDateFilter === 'all';
+        return logs.some((log: any) => {
+          if (dispatchDateFilter !== 'all' && !log.dispatch_date) return false;
+          return filterByDate(log.dispatch_date, dispatchDateFilter, dispatchCustomFrom, dispatchCustomTo);
+        });
+      }
+      return filterByDate(wo.entry_date, dispatchDateFilter, dispatchCustomFrom, dispatchCustomTo);
+    });
     if (!deferredSearchQuery) return dateFiltered;
     const lowerQuery = deferredSearchQuery.toLowerCase();
     return dateFiltered.filter(wo =>
@@ -2054,20 +2214,52 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
       wo.customer.toLowerCase().includes(lowerQuery) ||
       wo.job_details.toLowerCase().includes(lowerQuery)
     );
-  }, [data, deferredSearchQuery, statusFilter, dispatchDateFilter, dispatchCustomFrom, dispatchCustomTo, dispatchCompanyFilter]);
+  }, [data, deferredSearchQuery, statusFilter, dispatchDateFilter, dispatchCustomFrom, dispatchCustomTo, dispatchCompanyFilter, dispatchDepartmentFilter, overdueOnly, dispatchLogsMap]);
 
-  const statusOptions = useMemo(() => {
-    const uniqueStatuses = Array.from(new Set(data.map(wo => wo.status))).filter(s => s !== 'QC Approved');
-    return sortStatuses(uniqueStatuses);
-  }, [data]);
+  const sortedOrders = useMemo(() => {
+    if (!sortConfig) return filteredOrders;
+    const { key, dir } = sortConfig;
+    const sortDir = dir === 'asc' ? 1 : -1;
+    return [...filteredOrders].sort((a, b) => {
+      let aVal: any;
+      let bVal: any;
+      if (key === 'id') {
+        aVal = a.id; bVal = b.id;
+      } else if (key === 'entry_date') {
+        aVal = a.entry_date || (a as any).created_at || (a as any).created || '';
+        bVal = b.entry_date || (b as any).created_at || (b as any).created || '';
+      } else if (key === 'customer') {
+        aVal = (a.customer || '').toLowerCase(); bVal = (b.customer || '').toLowerCase();
+      } else if (key === 'job_details') {
+        aVal = (a.job_details || '').toLowerCase(); bVal = (b.job_details || '').toLowerCase();
+      } else if (key === 'drawing') {
+        aVal = (a.drawing || '').toLowerCase(); bVal = (b.drawing || '').toLowerCase();
+      } else if (key === 'qty') {
+        aVal = Number(a.qty) || 0; bVal = Number(b.qty) || 0;
+      } else if (key === 'etd') {
+        aVal = a.etd || ''; bVal = b.etd || '';
+      } else if (key === 'dispatched') {
+        aVal = Number(a.qty_dispatched) || 0; bVal = Number(b.qty_dispatched) || 0;
+      } else if (key === 'remaining') {
+        aVal = (a.qty || 0) - (a.qty_dispatched || 0); bVal = (b.qty || 0) - (b.qty_dispatched || 0);
+      } else if (key === 'status') {
+        aVal = a.status || ''; bVal = b.status || '';
+      } else {
+        return 0;
+      }
+      if (aVal < bVal) return -1 * sortDir;
+      if (aVal > bVal) return 1 * sortDir;
+      return 0;
+    });
+  }, [filteredOrders, sortConfig]);
 
   useEffect(() => {
     setPage(1);
-  }, [searchQuery, statusFilter, data.length]);
+  }, [searchQuery, statusFilter, data.length, sortConfig, dispatchDepartmentFilter, overdueOnly]);
 
   const { pageRows: paginatedOrders, totalPages, safePage, totalRows, startIndex } = useMemo(
-    () => getPageSlice(filteredOrders, page, LIST_PAGE_SIZE),
-    [filteredOrders, page]
+    () => getPageSlice(sortedOrders, page, LIST_PAGE_SIZE),
+    [sortedOrders, page]
   );
 
   const getRemainingQty = (wo: WorkOrder) => {
@@ -2078,38 +2270,98 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
 
   return (
     <div className="space-y-6 custom-bom-print">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={20} />
-          <input 
-            type="text" 
-            placeholder="Search by order, customer, or job..." 
-            value={searchQuery} 
-            onChange={e => setSearchQuery(e.target.value)} 
-            className="w-full pl-12 pr-4 py-3 bg-white border rounded-xl" 
-          />
-        </div>
-        <div className="flex gap-1.5 flex-wrap items-center">
-          <button onClick={() => setStatusFilter('All')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === 'All' ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>All</button>
-          {statusOptions.map(s => (
-            <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === s ? (statusTabColors[s] || 'bg-slate-900 text-white') : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS[s] || s}</button>
-          ))}
-          {!dispatchMode && (
-            <button onClick={() => setDispatchMode(true)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 transition-colors flex items-center gap-1.5">
-              <Package size={14} /> Bulk Dispatch
-            </button>
+      <details className="md:hidden rounded-2xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
+        <summary className="list-none cursor-pointer flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-500">
+          <span>Filters &amp; Search</span>
+          <span className="text-blue-600">{overdueOnly || dispatchDepartmentFilter !== 'All' || dispatchCompanyFilter !== 'All' || dispatchDateFilter !== 'all' ? 'Active' : 'Open'}</span>
+        </summary>
+        <div className="mt-2 grid gap-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+            <input type="text" placeholder="Search order, customer, job..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-9 pr-3 py-1.5 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-xs" />
+          </div>
+          <div className="flex gap-1.5 flex-wrap">
+            <button onClick={() => setStatusFilter('Ready for despatch')} className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all whitespace-nowrap ${statusFilter === 'Ready for despatch' ? statusTabColors['Ready for despatch'] : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS['Ready for despatch']}</button>
+            <button onClick={() => setStatusFilter('Dispatched')} className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all whitespace-nowrap ${statusFilter === 'Dispatched' ? statusTabColors['Dispatched'] : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS['Dispatched']}</button>
+          </div>
+          <select value={dispatchCompanyFilter} onChange={e => setDispatchCompanyFilter(e.target.value)} className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="All">All Companies</option>
+            {dispatchCompanyOptions.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          {dispatchDepartmentOptions.length > 0 && (
+            <select value={dispatchDepartmentFilter} onChange={e => setDispatchDepartmentFilter(e.target.value)} className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="All">All Departments</option>
+              {dispatchDepartmentOptions.map(d => <option key={d} value={d}>{d.replace(/_/g, ' ')}</option>)}
+            </select>
           )}
-          {dispatchMode && (
-            <>
-              <button onClick={() => { setDispatchMode(false); setSelectedOrders({}); }} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors">
-                Cancel
-              </button>
-              <button onClick={handleBulkDispatch} disabled={Object.keys(selectedOrders).length === 0} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
-                <Check size={14} /> Dispatch ({Object.keys(selectedOrders).length})
-              </button>
-            </>
+          <button onClick={() => setOverdueOnly(v => !v)} className={`w-full px-2.5 py-1.5 rounded-lg text-[10px] font-bold border transition-all text-center ${overdueOnly ? 'bg-red-600 text-white border-red-600' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>Overdue Only {overdueOnly && '✓'}</button>
+          <select value={dispatchDateFilter} onChange={e => { setDispatchDateFilter(e.target.value); if (e.target.value !== 'custom') { setDispatchCustomFrom(''); setDispatchCustomTo(''); } }} className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="all">All Dates</option>
+            <option value="today">Today</option>
+            <option value="week">This Week</option>
+            <option value="month">This Month</option>
+            <option value="custom">Custom</option>
+          </select>
+          {dispatchDateFilter === 'custom' && (
+            <div className="flex items-center gap-2">
+              <input type="date" value={dispatchCustomFrom} onChange={e => setDispatchCustomFrom(e.target.value)} className="flex-1 px-3 py-1.5 border border-gray-200 rounded-xl text-xs bg-white" />
+              <span className="text-gray-500 text-xs">to</span>
+              <input type="date" value={dispatchCustomTo} onChange={e => setDispatchCustomTo(e.target.value)} className="flex-1 px-3 py-1.5 border border-gray-200 rounded-xl text-xs bg-white" />
+            </div>
+          )}
+          {statusFilter === 'Ready for despatch' && !dispatchMode && (
+            <button onClick={() => setDispatchMode(true)} className="w-full px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-1.5 justify-center"><Package size={14} /> Bulk Dispatch</button>
+          )}
+          {statusFilter === 'Ready for despatch' && dispatchMode && (
+            <div className="flex gap-2">
+              <button onClick={() => { setDispatchMode(false); setSelectedOrders({}); }} className="flex-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">Cancel</button>
+              <button onClick={handleBulkDispatch} disabled={Object.keys(selectedOrders).length === 0} className="flex-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 justify-center"><Check size={14} /> Dispatch ({Object.keys(selectedOrders).length})</button>
+            </div>
           )}
         </div>
+      </details>
+
+      <div className="hidden md:flex flex-wrap items-center gap-2">
+        <button onClick={() => setStatusFilter('Ready for despatch')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all whitespace-nowrap ${statusFilter === 'Ready for despatch' ? statusTabColors['Ready for despatch'] : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS['Ready for despatch']}</button>
+        <button onClick={() => setStatusFilter('Dispatched')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all whitespace-nowrap ${statusFilter === 'Dispatched' ? statusTabColors['Dispatched'] : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS['Dispatched']}</button>
+        <button onClick={() => setOverdueOnly(v => !v)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${overdueOnly ? 'bg-red-600 text-white border-red-600' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>Overdue Only {overdueOnly && '✓'}</button>
+        <div className="relative flex-1 min-w-0 max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+          <input type="text" placeholder="Search by order, customer, or job..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-9 pr-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <select value={dispatchCompanyFilter} onChange={e => setDispatchCompanyFilter(e.target.value)} className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="All">All Companies</option>
+          {dispatchCompanyOptions.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        {dispatchDepartmentOptions.length > 0 && (
+          <select value={dispatchDepartmentFilter} onChange={e => setDispatchDepartmentFilter(e.target.value)} className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="All">All Departments</option>
+            {dispatchDepartmentOptions.map(d => <option key={d} value={d}>{d.replace(/_/g, ' ')}</option>)}
+          </select>
+        )}
+        <select value={dispatchDateFilter} onChange={e => { setDispatchDateFilter(e.target.value); if (e.target.value !== 'custom') { setDispatchCustomFrom(''); setDispatchCustomTo(''); } }} className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="all">All Dates</option>
+          <option value="today">Today</option>
+          <option value="week">This Week</option>
+          <option value="month">This Month</option>
+          <option value="custom">Custom</option>
+        </select>
+        {dispatchDateFilter === 'custom' && (
+          <>
+            <input type="date" value={dispatchCustomFrom} onChange={e => setDispatchCustomFrom(e.target.value)} className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs bg-white" />
+            <span className="text-gray-500 text-xs">to</span>
+            <input type="date" value={dispatchCustomTo} onChange={e => setDispatchCustomTo(e.target.value)} className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs bg-white" />
+          </>
+        )}
+        {!dispatchMode && (
+          <button onClick={() => setDispatchMode(true)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-1.5"><Package size={14} /> Bulk Dispatch</button>
+        )}
+        {dispatchMode && (
+          <>
+            <button onClick={() => { setDispatchMode(false); setSelectedOrders({}); }} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">Cancel</button>
+            <button onClick={handleBulkDispatch} disabled={Object.keys(selectedOrders).length === 0} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"><Check size={14} /> Dispatch ({Object.keys(selectedOrders).length})</button>
+          </>
+        )}
       </div>
 
       <Modal isOpen={isDispatchMetaModalOpen} onClose={() => { if (!isSubmittingDispatch) setIsDispatchMetaModalOpen(false); }} title="Dispatch Details">
@@ -2135,7 +2387,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                 className="w-full px-4 py-3 bg-gray-50 border rounded-xl"
               >
                 <option value="">Select Vehicle</option>
-                {vehicleOptions.map(v => <option key={v} value={v}>{v}</option>)}
+                {vehicleOptions.map(v => <option key={v.id} value={v.vehicle_no}>{v.vehicle_no}{v.driver_name ? ` — ${v.driver_name}` : ''}</option>)}
               </select>
               <input
                 value={dispatchMeta.vehicleNo}
@@ -2167,12 +2419,12 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
       </Modal>
 
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full">
+        <div className="hidden md:block overflow-x-auto max-h-[85vh] overflow-y-auto">
+          <table className="w-full border-separate border-spacing-0">
             <thead className="bg-gray-50 border-b">
               <tr>
                 {dispatchMode && (
-                  <th className="px-4 py-3 w-12">
+                  <th className="px-4 py-3 w-12 sticky left-0 top-0 bg-gray-50 z-20">
                     <input 
                       type="checkbox" 
                       className="w-4 h-4 rounded"
@@ -2194,106 +2446,199 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                     />
                   </th>
                 )}
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Order #</th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Customer</th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Job Details</th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Total Qty</th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Dispatched</th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Remaining</th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Invoice</th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Vehicle</th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Dispatched Date</th>
-                {dispatchMode && (
-                  <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Dispatch Qty</th>
+                <th className={`px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors ${dispatchMode ? 'sticky left-12 top-0 bg-gray-50 z-10' : 'sticky left-0 top-0 bg-gray-50 z-20'}`}><span className="inline-flex items-center">Sr. No.</span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('id')}><span className="inline-flex items-center">Order #<SortIcon col="id" /></span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('entry_date')}><span className="inline-flex items-center">Entry Date<SortIcon col="entry_date" /></span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('customer')}><span className="inline-flex items-center">Customer<SortIcon col="customer" /></span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('job_details')}><span className="inline-flex items-center">Job Details<SortIcon col="job_details" /></span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('drawing')}><span className="inline-flex items-center">Drawing No<SortIcon col="drawing" /></span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('qty')}><span className="inline-flex items-center">Total Qty<SortIcon col="qty" /></span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('etd')}><span className="inline-flex items-center">ETD<SortIcon col="etd" /></span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('dispatched')}><span className="inline-flex items-center">Dispatched<SortIcon col="dispatched" /></span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('remaining')}><span className="inline-flex items-center">Remaining<SortIcon col="remaining" /></span></th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Depts</th>
+                {statusFilter === 'Dispatched' && (
+                  <>
+                    <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Invoice</th>
+                    <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Vehicle</th>
+                    <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Dispatch Date</th>
+                  </>
                 )}
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Status</th>
-                <th className="px-6 py-3 text-right text-[10px] font-black uppercase text-gray-500 whitespace-nowrap">Actions</th>
+                {dispatchMode && (
+                  <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Dispatch Qty</th>
+                )}
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('status')}><span className="inline-flex items-center">Status<SortIcon col="status" /></span></th>
+                <th className="px-6 py-3 text-right text-[10px] font-black uppercase text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {paginatedOrders.map(wo => {
-                const remaining = getRemainingQty(wo);
-                const isSelected = selectedOrders[wo.id] !== undefined;
-                const canDispatch = remaining > 0;
-
-                return (
-                  <tr 
-                    key={wo.id}
-                    className={`border-b transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
-                  >
-                    {dispatchMode && (
-                      <td className="px-4 py-4">
-                        <input
-                          type="checkbox"
-                          className="w-4 h-4 rounded"
-                          checked={isSelected}
-                          disabled={!canDispatch}
-                          onChange={() => toggleOrderSelection(wo.id, remaining)}
-                        />
-                      </td>
-                    )}
+              {statusFilter === 'Dispatched' ? (
+                paginatedOrders.flatMap(wo => {
+                  let logs = dispatchLogsMap.get(wo.id) || [];
+                  if (dispatchDateFilter !== 'all') {
+                    logs = logs.filter((log: any) => {
+                      if (!log.dispatch_date) return false;
+                      return filterByDate(log.dispatch_date, dispatchDateFilter, dispatchCustomFrom, dispatchCustomTo);
+                    });
+                  }
+                  return logs.length > 0
+                    ? logs.map((log, i) => ({ log, wo, key: `log-${wo.id}-${log.id || i}` }))
+                    : [{ log: null, wo, key: `wo-${wo.id}` }];
+                }).map(({ log, wo }, flatIdx) => {
+                  const srNo = flatIdx + 1;
+                  return (
+                  <tr key={`log-${wo.id}-${log?.id || 0}`} className="border-b hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4 text-xs font-bold text-gray-400 sticky left-0 bg-white z-10">{srNo}</td>
+                    <td className="px-6 py-4"><span className="text-blue-600 font-bold">#{wo.id}</span></td>
+                    <td className="px-6 py-4"><div className="text-xs font-bold text-gray-600 whitespace-nowrap">{formatEntryDate(wo.entry_date || (wo as any).created_at || (wo as any).created)}</div></td>
+                    <td className="px-6 py-4"><div className="font-semibold text-gray-800">{wo.customer}</div></td>
+                    <td className="px-6 py-4"><div className="text-gray-700">{wo.job_details}</div></td>
+                    <td className="px-6 py-4"><span className="font-mono font-bold text-gray-700 whitespace-nowrap">{wo.drawing || wo.itemInfo?.drawing_no || '-'}</span></td>
+                    <td className="px-6 py-4"><div className="font-bold text-gray-800">{wo.qty}</div></td>
+                    <td className="px-6 py-4"><div className="text-xs font-bold text-orange-600 whitespace-nowrap">{wo.etd || 'TBD'}</div></td>
+                    <td className="px-6 py-4"><div className="font-bold text-blue-600">{log?.dispatch_qty || wo.qty_dispatched || 0}</div></td>
+                    <td className="px-6 py-4"><div className="font-bold text-green-600">0</div></td>
                     <td className="px-6 py-4">
-                      <span className="text-blue-600 font-bold">#{wo.id}</span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="font-semibold text-gray-800">{wo.customer}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-gray-700">{wo.job_details}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="font-bold text-gray-800">{wo.qty}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="font-bold text-blue-600">{wo.qty_dispatched || 0}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className={`font-bold ${remaining > 0 ? 'text-orange-600' : 'text-green-600'}`}>
-                        {remaining}
+                      <div className="flex flex-nowrap gap-1">
+                        {(wo.assigned_departments || []).map(d => <Badge key={d} color="indigo" className="!text-xs">{d.replace(/_/g, ' ')}</Badge>)}
                       </div>
                     </td>
-                    <td className="px-6 py-4"><span className="text-xs font-bold text-gray-600">{wo.last_invoice_no || '-'}</span></td>
-                    <td className="px-6 py-4"><span className="text-xs font-bold text-gray-600">{wo.last_vehicle_no || '-'}</span></td>
-                    <td className="px-6 py-4"><span className="text-xs font-bold text-gray-600">{wo.dispatch_date ? formatDateDMY(wo.dispatch_date) : '-'}</span></td>
-                    {dispatchMode && (
-                      <td className="px-6 py-4">
-                        {isSelected ? (
-                          <input
-                            type="number"
-                            min="1"
-                            max={remaining}
-                            value={selectedOrders[wo.id]}
-                            onChange={(e) => updateDispatchQty(wo.id, parseInt(e.target.value) || 0, remaining)}
-                            className="w-20 px-2 py-1 border rounded-lg text-center font-bold"
-                          />
-                        ) : (
-                          <span className="text-gray-500">—</span>
-                        )}
-                      </td>
-                    )}
+                    <td className="px-6 py-4"><span className="text-xs font-bold text-gray-600">{log?.invoice_no || wo.last_invoice_no || '-'}</span></td>
+                    <td className="px-6 py-4"><span className="text-xs font-bold text-gray-600">{log?.vehicle_no || wo.last_vehicle_no || '-'}</span></td>
                     <td className="px-6 py-4">
-                      <StatusBadge status={wo.status} />
+                      {log && editingDispatchDateId === log.id ? (
+                        <div className="flex items-center gap-1">
+                          <input type="date" value={editingDateValue} onChange={e => setEditingDateValue(e.target.value)} className="text-xs border border-gray-300 rounded px-1.5 py-0.5 w-[130px]" autoFocus />
+                          <button onClick={async () => { await saveSingleDispatchDate(log.id, editingDateValue); setEditingDispatchDateId(null); }} className="text-xs bg-green-500 text-white px-1.5 py-0.5 rounded font-bold" title="Save">✓</button>
+                          <button onClick={() => setEditingDispatchDateId(null)} className="text-xs bg-gray-400 text-white px-1.5 py-0.5 rounded font-bold" title="Cancel">✗</button>
+                        </div>
+                      ) : (
+                        <span onClick={() => { if (log) { setEditingDateValue(log?.dispatch_date || ''); setEditingDispatchDateId(log.id); } }} className={`text-sm font-bold ${log ? 'cursor-pointer hover:text-blue-600' : 'text-gray-400'} ${log?.dispatch_date ? 'text-gray-600' : 'text-blue-500'}`} title={log ? 'Click to edit date' : ''}>{log?.dispatch_date ? formatDateDMY(log.dispatch_date) : (log ? 'Add date' : '-')}</span>
+                      )}
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="flex justify-end">
-                        <button 
-                          onClick={() => onView(wo.id)} 
-                          className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
-                          title="View Details"
-                        >
-                          <Eye size={16}/>
-                        </button>
-                      </div>
-                    </td>
+                    <td className="px-6 py-4"><StatusBadge status="Dispatched" /></td>
+                    <td className="px-6 py-4"><div className="flex justify-end"><button onClick={() => onView(wo.id)} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors" title="View Details"><Eye size={16}/></button></div></td>
                   </tr>
-                );
-              })}
-              {filteredOrders.length === 0 && (
-                <tr>
-                  <td colSpan={dispatchMode ? 12 : 11} className="px-6 py-12 text-center text-gray-500 italic font-semibold">
-                    No orders for dispatch
-                  </td>
-                </tr>
+                );})
+              ) : (
+                <>
+                  {paginatedOrders.map((wo, idx) => {
+                    const remaining = getRemainingQty(wo);
+                    const isSelected = selectedOrders[wo.id] !== undefined;
+                    const canDispatch = remaining > 0;
+                    const srNo = idx + 1;
+
+                    return (
+                      <tr 
+                        key={wo.id}
+                        className={`border-b transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                      >
+                        {dispatchMode && (
+                          <td className="px-4 py-4 sticky left-0 bg-white z-20">
+                            <input
+                              type="checkbox"
+                              className="w-4 h-4 rounded"
+                              checked={isSelected}
+                              disabled={!canDispatch}
+                              onChange={() => toggleOrderSelection(wo.id, remaining)}
+                            />
+                          </td>
+                        )}
+                        <td className={`px-6 py-4 text-xs font-bold text-gray-400 ${dispatchMode ? 'sticky left-12 bg-white z-10' : 'sticky left-0 bg-white z-10'}`}>
+                          {srNo}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-blue-600 font-bold">#{wo.id}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-xs font-bold text-gray-600 whitespace-nowrap">{formatEntryDate(wo.entry_date || (wo as any).created_at || (wo as any).created)}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="font-semibold text-gray-800">{wo.customer}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-gray-700">{wo.job_details}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="font-mono font-bold text-gray-700 whitespace-nowrap">{wo.drawing || wo.itemInfo?.drawing_no || '-'}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="font-bold text-gray-800">{wo.qty}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-xs font-bold text-orange-600 whitespace-nowrap">{wo.etd || 'TBD'}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="font-bold text-blue-600">{wo.qty_dispatched || 0}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className={`font-bold ${remaining > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                            {remaining}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-nowrap gap-1">
+                            {(wo.assigned_departments || []).map(d => <Badge key={d} color="indigo" className="!text-xs">{d.replace(/_/g, ' ')}</Badge>)}
+                          </div>
+                        </td>
+                        {dispatchMode && (
+                          <td className="px-6 py-4">
+                            {isSelected ? (
+                              <input
+                                type="number"
+                                min="1"
+                                max={remaining}
+                                value={selectedOrders[wo.id]}
+                                onChange={(e) => updateDispatchQty(wo.id, parseInt(e.target.value) || 0, remaining)}
+                                className="w-20 px-2 py-1 border rounded-lg text-center font-bold"
+                              />
+                            ) : (
+                              <span className="text-gray-500">—</span>
+                            )}
+                          </td>
+                        )}
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {(wo.assigned_departments || []).map(dept => {
+                              const ds = (wo.department_statuses || []).find(s => normalizeDepartment(s.department) === normalizeDepartment(dept));
+                              const qc = ds?.qc_status;
+                              let badgeClass = 'bg-gray-100 text-gray-600';
+                              let label = ds?.status ? STATUS_LABELS[ds.status] || ds.status : '—';
+                              if (qc === 'QC Approved') { badgeClass = 'bg-green-100 text-green-700'; label = 'QC Approved'; }
+                              else if (qc === 'QC Denied') { badgeClass = 'bg-red-100 text-red-700'; label = 'Denied'; }
+                              else if (ds?.status === 'Work Started') { badgeClass = 'bg-blue-100 text-blue-700'; }
+                              else if (ds?.status === 'Ready for QC') { badgeClass = 'bg-yellow-100 text-yellow-700'; }
+                              const deptLabel = dept.replace(/_/g, ' ');
+                              return (
+                                <span key={dept} className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${badgeClass}`}>
+                                  {deptLabel}: {label}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex justify-end">
+                            <button 
+                              onClick={() => onView(wo.id)} 
+                              className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
+                              title="View Details"
+                            >
+                              <Eye size={16}/>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {filteredOrders.length === 0 && (
+                    <tr>
+                      <td colSpan={dispatchMode ? 14 : 13} className="px-6 py-12 text-center text-gray-500 italic font-semibold">
+                        No orders for dispatch
+                      </td>
+                    </tr>
+                  )}
+                </>
               )}
             </tbody>
           </table>
@@ -2327,70 +2672,69 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
             </button>
           )}
 
-          {paginatedOrders.map(wo => {
-            const remaining = getRemainingQty(wo);
-            const isSelected = selectedOrders[wo.id] !== undefined;
-            const canDispatch = remaining > 0;
-
-            return (
-              <div key={wo.id} className={`rounded-xl border px-3 py-2 ${isSelected ? 'border-blue-300 bg-blue-50/50' : 'border-gray-200 bg-white'}`}>
+          {statusFilter === 'Dispatched' ? (
+            paginatedOrders.flatMap(wo => {
+              let logs = dispatchLogsMap.get(wo.id) || [];
+              if (dispatchDateFilter !== 'all') {
+                logs = logs.filter((log: any) => {
+                  if (!log.dispatch_date) return false;
+                  return filterByDate(log.dispatch_date, dispatchDateFilter, dispatchCustomFrom, dispatchCustomTo);
+                });
+              }
+              return logs.length > 0
+                ? logs.map((log, i) => ({ log, wo, key: `card-${wo.id}-${log.id || i}` }))
+                : [{ log: null, wo, key: `card-${wo.id}` }];
+            }).map(({ log, wo }, idx) => {
+              const srNo = idx + 1;
+              return (
+              <div key={`card-${wo.id}-${log?.id || 0}`} className="rounded-xl border border-gray-200 bg-white px-3 py-2">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <div className="text-[10px] font-black text-blue-600">#{wo.id}</div>
+                    <div className="text-[10px] font-black text-blue-600">#{srNo}  #{wo.id}</div>
                     <div className="font-black text-gray-800 leading-tight text-xs mt-0.5">{wo.job_details}</div>
                     <div className="text-[11px] font-semibold text-gray-500 mt-0.5">{wo.customer}</div>
                   </div>
-                  <StatusBadge status={wo.status} />
+                  <StatusBadge status="Dispatched" />
                 </div>
 
-                <div className="grid grid-cols-3 gap-1.5 mt-2 text-center">
+                <div className="mt-2 grid grid-cols-2 gap-1.5 text-center">
                   <div className="bg-gray-50 rounded-lg py-1">
                     <div className="text-[10px] font-black text-gray-500 uppercase">Total</div>
                     <div className="font-black text-gray-800 text-xs">{wo.qty}</div>
                   </div>
                   <div className="bg-blue-50 rounded-lg py-1">
-                    <div className="text-[10px] font-black text-blue-400 uppercase">Done</div>
-                    <div className="font-black text-blue-600 text-xs">{wo.qty_dispatched || 0}</div>
-                  </div>
-                  <div className="bg-orange-50 rounded-lg py-1">
-                    <div className="text-[10px] font-black text-orange-400 uppercase">Left</div>
-                    <div className="font-black text-orange-600 text-xs">{remaining}</div>
+                    <div className="text-[10px] font-black text-blue-400 uppercase">Dispatch Qty</div>
+                    <div className="font-black text-blue-600 text-xs">{log?.dispatch_qty || wo.qty_dispatched || 0}</div>
                   </div>
                 </div>
 
-                <div className="mt-2 grid grid-cols-2 gap-1.5 text-[10px]">
+                <div className="mt-2 bg-orange-50 rounded-lg px-2 py-1 text-[10px]">
+                  <span className="font-black text-orange-500 uppercase">ETD</span>
+                  <div className="font-bold text-orange-600 truncate">{wo.etd || 'TBD'}</div>
+                </div>
+
+                <div className="mt-2 grid grid-cols-3 gap-1.5 text-[10px]">
                   <div className="bg-gray-50 rounded-lg px-2 py-1">
                     <span className="font-black text-gray-500 uppercase">Inv</span>
-                    <div className="font-bold text-gray-700 truncate">{wo.last_invoice_no || '-'}</div>
+                    <div className="font-bold text-gray-700 truncate">{log?.invoice_no || wo.last_invoice_no || '-'}</div>
                   </div>
                   <div className="bg-gray-50 rounded-lg px-2 py-1">
                     <span className="font-black text-gray-500 uppercase">Vehicle</span>
-                    <div className="font-bold text-gray-700 truncate">{wo.last_vehicle_no || '-'}</div>
+                    <div className="font-bold text-gray-700 truncate">{log?.vehicle_no || wo.last_vehicle_no || '-'}</div>
                   </div>
-                </div>
-
-                {dispatchMode && (
-                  <div className="mt-2 flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      className="w-4 h-4 rounded"
-                      checked={isSelected}
-                      disabled={!canDispatch}
-                      onChange={() => toggleOrderSelection(wo.id, remaining)}
-                    />
-                    <span className="text-xs font-semibold text-gray-600 flex-1">Include</span>
-                    {isSelected && (
-                      <input
-                        type="number"
-                        min="1"
-                        max={remaining}
-                        value={selectedOrders[wo.id]}
-                        onChange={(e) => updateDispatchQty(wo.id, parseInt(e.target.value) || 0, remaining)}
-                        className="w-16 px-2 py-1 border rounded-lg text-center font-bold text-xs"
-                      />
+                  <div className="bg-gray-50 rounded-lg px-2 py-1">
+                    <span className="font-black text-gray-500 uppercase">Date</span>
+                    {log && editingDispatchDateId === log.id ? (
+                      <div className="flex items-center gap-0.5 mt-0.5">
+                        <input type="date" value={editingDateValue} onChange={e => setEditingDateValue(e.target.value)} className="text-[10px] border border-gray-300 rounded px-1 py-0.5 w-[110px]" autoFocus />
+                        <button onClick={async () => { await saveSingleDispatchDate(log.id, editingDateValue); setEditingDispatchDateId(null); }} className="text-[10px] bg-green-500 text-white px-1 py-0.5 rounded font-bold">✓</button>
+                        <button onClick={() => setEditingDispatchDateId(null)} className="text-[10px] bg-gray-400 text-white px-1 py-0.5 rounded font-bold">✗</button>
+                      </div>
+                    ) : (
+                      <div onClick={() => { if (log) { setEditingDateValue(log?.dispatch_date || ''); setEditingDispatchDateId(log.id); } }} className={`font-bold truncate ${log ? 'cursor-pointer hover:text-blue-600' : 'text-gray-400'} ${log?.dispatch_date ? 'text-gray-700' : 'text-blue-500'}`}>{log?.dispatch_date ? formatDateDMY(log.dispatch_date) : (log ? 'Add date' : '-')}</div>
                     )}
                   </div>
-                )}
+                </div>
 
                 <button
                   onClick={() => onView(wo.id)}
@@ -2400,9 +2744,117 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                 </button>
               </div>
             );
-          })}
+          })
+          ) : (
+            <>
+              {paginatedOrders.map((wo, idx) => {
+                const remaining = getRemainingQty(wo);
+                const isSelected = selectedOrders[wo.id] !== undefined;
+                const canDispatch = remaining > 0;
+                const srNo = idx + 1;
 
-          {filteredOrders.length === 0 && (
+                return (
+                  <div key={wo.id} className={`rounded-xl border px-3 py-2 ${isSelected ? 'border-blue-300 bg-blue-50/50' : 'border-gray-200 bg-white'}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="text-[10px] font-black text-blue-600">#{srNo}  #{wo.id}</div>
+                        <div className="font-black text-gray-800 leading-tight text-xs mt-0.5">{wo.job_details}</div>
+                        <div className="text-[11px] font-semibold text-gray-500 mt-0.5">{wo.customer}</div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        {wo.status === 'Dispatched' && remaining > 0 ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-600">Partially Dispatched</span>
+                        ) : (
+                          <StatusBadge status={wo.status} />
+                        )}
+                        <div className="flex flex-wrap gap-1 justify-end">
+                          {(wo.assigned_departments || []).map(dept => {
+                            const ds = (wo.department_statuses || []).find(s => normalizeDepartment(s.department) === normalizeDepartment(dept));
+                            const qc = ds?.qc_status;
+                            let badgeClass = 'bg-gray-100 text-gray-600';
+                            let label = ds?.status ? STATUS_LABELS[ds.status] || ds.status : '—';
+                            if (qc === 'QC Approved') { badgeClass = 'bg-green-100 text-green-700'; label = 'QC Approved'; }
+                            else if (qc === 'QC Denied') { badgeClass = 'bg-red-100 text-red-700'; label = 'Denied'; }
+                            else if (ds?.status === 'Work Started') { badgeClass = 'bg-blue-100 text-blue-700'; }
+                            else if (ds?.status === 'Ready for QC') { badgeClass = 'bg-yellow-100 text-yellow-700'; }
+                            const deptLabel = dept.replace(/_/g, ' ');
+                            return (
+                              <span key={dept} className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${badgeClass}`}>
+                                {deptLabel}: {label}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-1.5 mt-2 text-center">
+                      <div className="bg-gray-50 rounded-lg py-1">
+                        <div className="text-[10px] font-black text-gray-500 uppercase">Total</div>
+                        <div className="font-black text-gray-800 text-xs">{wo.qty}</div>
+                      </div>
+                      <div className="bg-blue-50 rounded-lg py-1">
+                        <div className="text-[10px] font-black text-blue-400 uppercase">Done</div>
+                        <div className="font-black text-blue-600 text-xs">{wo.qty_dispatched || 0}</div>
+                      </div>
+                      <div className="bg-orange-50 rounded-lg py-1">
+                        <div className="text-[10px] font-black text-orange-400 uppercase">Left</div>
+                        <div className="font-black text-orange-600 text-xs">{remaining}</div>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 bg-orange-50 rounded-lg px-2 py-1 text-[10px]">
+                      <span className="font-black text-orange-500 uppercase">ETD</span>
+                      <div className="font-bold text-orange-600 truncate">{wo.etd || 'TBD'}</div>
+                    </div>
+
+                    <div className="mt-2 grid grid-cols-2 gap-1.5 text-[10px]">
+                      <div className="bg-gray-50 rounded-lg px-2 py-1">
+                        <span className="font-black text-gray-500 uppercase">Inv</span>
+                        <div className="font-bold text-gray-700 truncate">{(dispatchLogsMap.get(wo.id) || []).map((log: any) => log.invoice_no || '-').join(', ')}</div>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg px-2 py-1">
+                        <span className="font-black text-gray-500 uppercase">Vehicle</span>
+                        <div className="font-bold text-gray-700 truncate">{(dispatchLogsMap.get(wo.id) || []).map((log: any) => log.vehicle_no || '-').join(', ')}</div>
+                      </div>
+                    </div>
+
+                    {dispatchMode && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 rounded"
+                          checked={isSelected}
+                          disabled={!canDispatch}
+                          onChange={() => toggleOrderSelection(wo.id, remaining)}
+                        />
+                        <span className="text-xs font-semibold text-gray-600 flex-1">Include</span>
+                        {isSelected && (
+                          <input
+                            type="number"
+                            min="1"
+                            max={remaining}
+                            value={selectedOrders[wo.id]}
+                            onChange={(e) => updateDispatchQty(wo.id, parseInt(e.target.value) || 0, remaining)}
+                            className="w-16 px-2 py-1 border rounded-lg text-center font-bold text-xs"
+                          />
+                        )}
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => onView(wo.id)}
+                      className="mt-2 w-full py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold"
+                    >
+                      View Details
+                    </button>
+                  </div>
+                );
+              })}
+            </>
+          )}
+
+          {(statusFilter === 'Dispatched' ? paginatedOrders.length === 0 : filteredOrders.length === 0) && (
             <div className="py-8 text-center text-gray-500 italic font-semibold text-sm">No orders for dispatch</div>
           )}
         </div>
@@ -2470,6 +2922,7 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
     can_access_client_orders: true, can_access_live_screen: true, can_access_dispatch: true,
     can_access_notifications: true, can_access_components: true, can_access_custom_bom: true,
     can_access_production_entry: true,
+    can_place_order: true,
   };
   const [featureFlags, setFeatureFlags] = useState<Record<string, boolean>>(initialFeatureFlags);
 
@@ -2597,7 +3050,7 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
     setEditingUser(user);
     setFormData({
       username: user.username || '',
-      email: user.email || '',
+      email: user.email || user.login_email || '',
       mobile: user.mobile || '',
       vehicle_number: user.vehicle_number || '',
       passkey: '',
@@ -2621,6 +3074,7 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
       can_access_components: user.can_access_components !== false,
       can_access_custom_bom: user.can_access_custom_bom !== false,
       can_access_production_entry: user.can_access_production_entry !== false,
+      can_place_order: user.can_place_order !== false,
     });
     setIsModalOpen(true);
   };
@@ -2771,15 +3225,15 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
       </Modal>
 
       <Card className="p-0 overflow-hidden shadow-md">
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full min-w-[760px] text-left text-sm">
+        <div className="hidden md:block overflow-x-auto max-h-[85vh] overflow-y-auto">
+          <table className="w-full min-w-[760px] text-left text-sm border-separate">
             <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-500 border-b">
-              <tr><th className="px-6 py-4 whitespace-nowrap">Name</th><th className="px-6 py-4 whitespace-nowrap">Contact</th><th className="px-6 py-4 whitespace-nowrap">Vehicle</th><th className="px-6 py-4 whitespace-nowrap">Dept</th><th className="px-6 py-4 whitespace-nowrap">Actions</th></tr>
+              <tr><th className="px-6 py-4 whitespace-nowrap sticky left-0 top-0 bg-gray-50 z-20">Name</th><th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Contact</th><th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Vehicle</th><th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Dept</th><th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Actions</th></tr>
             </thead>
             <tbody className="divide-y">
               {filteredUsers.map(u => (
                 <tr key={u.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 font-bold">{u.username}</td>
+                  <td className="px-6 py-4 font-bold sticky left-0 bg-white z-10">{u.username}</td>
                   <td className="px-6 py-4">{u.mobile}</td>
                   <td className="px-6 py-4 text-xs font-bold text-gray-600">{u.vehicle_number || '-'}</td>
                   <td className="px-6 py-4"><Badge color="purple">{u.department}</Badge></td>
@@ -2804,7 +3258,7 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="font-black text-gray-800 text-sm break-words">{u.username}</div>
-                  <div className="text-[11px] text-gray-500 font-semibold mt-0.5 break-all">{u.email}</div>
+                  <div className="text-[11px] text-gray-500 font-semibold mt-0.5 break-all">{u.email || u.login_email}</div>
                 </div>
                 <Badge color="purple">{u.department}</Badge>
               </div>
@@ -2924,58 +3378,58 @@ const DepartmentList: React.FC<{ onError: () => void }> = ({ onError }) => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {data.map(d => (
-          <Card key={d.id} className="hover:border-purple-200 transition-all border-l-4 border-l-purple-500">
-            <div className="flex justify-between items-start mb-2">
-              <h3 className="text-lg font-black text-gray-800">{d.name}</h3>
-              <div className="flex gap-1">
-                <button onClick={() => { setEditingDepartment(d); setFormData({ name: d.name, incharge: d.incharge || '', supervisor: d.supervisor || '', info: d.info || '', metrics: d.metrics || [] }); setIsModalOpen(true); }} className="text-blue-500 hover:text-blue-700 transition-colors"><Edit size={16} /></button>
-                <button onClick={async () => {
-                  const deptName = d.name;
-                  const lower = deptName.trim().toLowerCase();
-                  if (lower === 'dispatch' || lower === 'quality control' || lower === 'quality_control') {
-                    alert(`"${deptName}" is a system-required department and cannot be deleted.`);
-                    return;
-                  }
-                  const [{ data: users }, { data: allItems }, { data: allChildItems }] = await Promise.all([
-                    supabase.from('erp_users').select('*').eq('department', deptName),
-                    supabase.from('items').select('*'),
-                    supabase.from('child_items').select('*'),
-                  ]);
-                  const linkedUsers = (users || []).filter((u: any) => u.department === deptName);
-                  const linkedItems = (allItems || []).filter((i: Item) => i.departments?.includes(deptName));
-                  const linkedComponents = (allChildItems || []).filter((c: ChildItem) => c.departments?.includes(deptName));
-                  if (linkedUsers.length > 0 || linkedItems.length > 0 || linkedComponents.length > 0) {
-                    let msg = 'Cannot delete this department:\n';
-                    if (linkedUsers.length > 0) msg += `\n- ${linkedUsers.length} user(s) are assigned to this department`;
-                    if (linkedItems.length > 0) msg += `\n- ${linkedItems.length} item(s) use this department`;
-                    if (linkedComponents.length > 0) msg += `\n- ${linkedComponents.length} component(s) use this department`;
-                    msg += '\n\nRemove these associations first.';
-                    alert(msg);
-                    return;
-                  }
-                  if(confirm("Delete?")) { await supabase.from('departments').delete().eq('id', d.id); void logActivity({ eventType: 'department', action: 'deleted', title: 'Department Deleted', body: `Deleted department: ${d.name}`, actor: getStoredLoggedInUser(), targetCollection: 'departments', targetId: d.id, targetLabel: d.name, department: d.name, severity: 'warning' }); invalidateCollectionCache('departments'); fetchData(); }
-                }} className="text-red-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
-              </div>
+          <Card key={d.id} className="relative border-l-4 border-l-purple-500 hover:shadow-lg transition-all group overflow-hidden">
+            <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+              <button onClick={() => { setEditingDepartment(d); setFormData({ name: d.name, incharge: d.incharge || '', supervisor: d.supervisor || '', info: d.info || '', metrics: d.metrics || [] }); setIsModalOpen(true); }} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg bg-white shadow-sm"><Edit size={15} /></button>
+              <button onClick={async () => {
+                const deptName = d.name;
+                const lower = deptName.trim().toLowerCase();
+                if (lower === 'dispatch' || lower === 'quality control' || lower === 'quality_control') {
+                  alert(`"${deptName}" is a system-required department and cannot be deleted.`);
+                  return;
+                }
+                const [{ data: users }, { data: allItems }, { data: allChildItems }] = await Promise.all([
+                  supabase.from('erp_users').select('*').eq('department', deptName),
+                  supabase.from('items').select('*'),
+                  supabase.from('child_items').select('*'),
+                ]);
+                const linkedUsers = (users || []).filter((u: any) => u.department === deptName);
+                const linkedItems = (allItems || []).filter((i: Item) => i.departments?.includes(deptName));
+                const linkedComponents = (allChildItems || []).filter((c: ChildItem) => c.departments?.includes(deptName));
+                if (linkedUsers.length > 0 || linkedItems.length > 0 || linkedComponents.length > 0) {
+                  let msg = 'Cannot delete this department:\n';
+                  if (linkedUsers.length > 0) msg += `\n- ${linkedUsers.length} user(s) are assigned to this department`;
+                  if (linkedItems.length > 0) msg += `\n- ${linkedItems.length} item(s) use this department`;
+                  if (linkedComponents.length > 0) msg += `\n- ${linkedComponents.length} component(s) use this department`;
+                  msg += '\n\nRemove these associations first.';
+                  alert(msg);
+                  return;
+                }
+                if(confirm("Delete?")) { await supabase.from('departments').delete().eq('id', d.id); void logActivity({ eventType: 'department', action: 'deleted', title: 'Department Deleted', body: `Deleted department: ${d.name}`, actor: getStoredLoggedInUser(), targetCollection: 'departments', targetId: d.id, targetLabel: d.name, department: d.name, severity: 'warning' }); invalidateCollectionCache('departments'); fetchData(); }
+              }} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg bg-white shadow-sm"><Trash2 size={15} /></button>
             </div>
-            <div className="space-y-2 mt-4">
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 font-bold text-[10px] uppercase tracking-wider">In-charge</span>
-                <span className="font-bold text-gray-700">{d.incharge || 'N/A'}</span>
-              </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 font-bold text-[10px] uppercase tracking-wider">Supervisor</span>
-                <span className="font-bold text-gray-700">{d.supervisor || 'N/A'}</span>
+            <div>
+              <h3 className="text-base font-black text-gray-800 pr-16">{d.name}</h3>
+            </div>
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <span className="text-gray-400 font-semibold text-[10px] uppercase tracking-wider block">In-charge</span>
+                  <span className="font-semibold text-gray-700">{d.incharge || '—'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 font-semibold text-[10px] uppercase tracking-wider block">Supervisor</span>
+                  <span className="font-semibold text-gray-700">{d.supervisor || '—'}</span>
+                </div>
               </div>
             </div>
             {d.metrics && d.metrics.length > 0 && (
-              <div className="border-t pt-3 mt-3">
-                <span className="text-gray-500 font-bold text-[10px] uppercase tracking-wider">📊 Metrics</span>
-                {d.metrics.map((m, i) => (
-                  <div key={i} className="flex justify-between text-sm text-gray-700 mt-1">
-                    <span className="font-semibold">{m.type}</span>
-                    <span className="text-gray-500">{m.unit}</span>
-                  </div>
-                ))}
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <div className="flex flex-wrap gap-2">
+                  {d.metrics.map((m, i) => (
+                    <span key={i} className="text-[11px] font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md">{m.type} ({m.unit})</span>
+                  ))}
+                </div>
               </div>
             )}
           </Card>
@@ -3123,31 +3577,55 @@ const CustomerManagement: React.FC<{ onError: () => void; editingId?: number }> 
         </form>
       </Modal>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {data.map(c => (
-          <Card key={c.id} className="relative group hover:border-green-200 transition-all">
-            <div className="flex justify-between items-start mb-4 pr-10">
-              <div>
-                <h3 className="text-lg font-black text-gray-800 leading-tight">{c.name}</h3>
-                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mt-1 flex items-center gap-1">
-                   <MapPin size={10} /> {c.city || 'Location N/A'}
-                </p>
+      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+        <div className="hidden md:block overflow-x-auto max-h-[85vh] overflow-y-auto">
+          <table className="w-full min-w-[900px] text-left text-sm border-separate">
+            <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-500 border-b">
+              <tr>
+                <th className="px-6 py-4 whitespace-nowrap sticky left-0 top-0 bg-gray-50 z-20">Client Name</th>
+                <th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">City</th>
+                <th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Contact</th>
+                <th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Email</th>
+                <th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">GST</th>
+                <th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Type</th>
+                <th className="px-6 py-4 text-right whitespace-nowrap sticky top-0 bg-gray-50 z-10">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {data.map(c => (
+                <tr key={c.id} className="hover:bg-gray-50/80 transition-colors group">
+                  <td className="px-6 py-4 font-bold text-gray-800 sticky left-0 bg-white z-10">{c.name}</td>
+                  <td className="px-6 py-4 text-gray-600">{c.city || '—'}</td>
+                  <td className="px-6 py-4 text-gray-600">{c.contact || '—'}</td>
+                  <td className="px-6 py-4 text-gray-600 truncate max-w-[200px]">{c.email || '—'}</td>
+                  <td className="px-6 py-4 font-mono text-xs text-gray-600">{c.gst || '—'}</td>
+                  <td className="px-6 py-4"><Badge color="green">{c.type}</Badge></td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => { setEditingCustomer(c); setFormData({ name: c.name || '', proprietor: c.proprietor || '', address: c.address || '', city: c.city || '', contact: c.contact || '', email: c.email || '', gst: c.gst || '', type: c.type || 'Direct', reference: c.reference || '', remarks: c.remarks || '' }); setIsModalOpen(true); }} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg"><Edit size={15} /></button>
+                      <button onClick={() => deleteCustomer(c)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={15} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="block md:hidden divide-y">
+          {data.map(c => (
+            <div key={c.id} className="px-4 py-3 space-y-1">
+              <div className="font-bold text-gray-800">{c.name}</div>
+              <div className="text-xs text-gray-500">{c.city || '—'} · {c.contact || '—'}</div>
+              <div className="flex justify-between items-center">
+                <Badge color="green">{c.type}</Badge>
+                <div className="flex gap-1">
+                  <button onClick={() => { setEditingCustomer(c); setFormData({ name: c.name || '', proprietor: c.proprietor || '', address: c.address || '', city: c.city || '', contact: c.contact || '', email: c.email || '', gst: c.gst || '', type: c.type || 'Direct', reference: c.reference || '', remarks: c.remarks || '' }); setIsModalOpen(true); }} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg"><Edit size={14} /></button>
+                  <button onClick={() => deleteCustomer(c)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={14} /></button>
+                </div>
               </div>
-              <Badge color="green">{c.type}</Badge>
             </div>
-            <div className="space-y-2 text-sm text-gray-600">
-              <div className="flex items-center gap-2"><Phone size={14} className="text-green-500" /> {c.contact || 'No phone'}</div>
-              <div className="flex items-center gap-2"><Mail size={14} className="text-blue-500" /> {c.email || 'No email'}</div>
-              <div className="flex items-center gap-2 font-mono text-[10px] bg-gray-100 px-2 py-1 rounded inline-flex mt-2">
-                 <Tag size={12} /> GST: {c.gst || 'N/A'}
-              </div>
-            </div>
-            <div className="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-              <button onClick={() => { setEditingCustomer(c); setFormData({ name: c.name || '', proprietor: c.proprietor || '', address: c.address || '', city: c.city || '', contact: c.contact || '', email: c.email || '', gst: c.gst || '', type: c.type || 'Direct', reference: c.reference || '', remarks: c.remarks || '' }); setIsModalOpen(true); }} className="p-2 text-blue-500 hover:text-blue-700 bg-blue-50 rounded-lg"><Edit size={16} /></button>
-              <button onClick={() => deleteCustomer(c)} className="p-2 text-red-300 hover:text-red-500 bg-red-50 rounded-lg"><Trash2 size={16} /></button>
-            </div>
-          </Card>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -3355,6 +3833,30 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
       await supabase.from('items').update({ children: nextChildren }).eq('id', parent.id);
     }
   };
+
+  const updateItemReferencesInWorkOrders = async (item: Item, nextData: { name: string; drawing_no: string; drawing_image_url?: string; drawing_file?: string }) => {
+    try {
+      const workOrderUpdates: Record<string, any> = {};
+      if (nextData.name !== undefined) workOrderUpdates.job_details = nextData.name;
+      if (nextData.drawing_no !== undefined) workOrderUpdates.drawing = nextData.drawing_no;
+      if (nextData.drawing_image_url !== undefined) workOrderUpdates.drawing_image_url = nextData.drawing_image_url;
+      if (nextData.drawing_file !== undefined) workOrderUpdates.drawing_file = nextData.drawing_file;
+
+      if (Object.keys(workOrderUpdates).length === 0) return;
+
+      const { error } = await supabase
+        .from('work_orders')
+        .update(workOrderUpdates)
+        .eq('source_item_id', item.id);
+
+      if (error) {
+        console.error('Failed to propagate item changes to work orders:', error);
+      }
+    } catch (e) {
+      console.error('Work order propagation error:', e);
+    }
+  };
+
 
   const filteredComponents = allLibraryComponents.filter(c => 
     c.name.toLowerCase().includes(componentSearch.toLowerCase()) ||
@@ -3663,7 +4165,10 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
           const { error } = result; 
           if(error) alert(error.message);
           else {
-            if (editingItem) await updateItemReferencesInBoms(editingItem, { name: rowsToInsert[0].name, drawing_no: rowsToInsert[0].drawing_no, departments: rowsToInsert[0].departments });
+            if (editingItem) {
+              await updateItemReferencesInBoms(editingItem, { name: rowsToInsert[0].name, drawing_no: rowsToInsert[0].drawing_no, departments: rowsToInsert[0].departments });
+              await updateItemReferencesInWorkOrders(editingItem, { name: rowsToInsert[0].name, drawing_no: rowsToInsert[0].drawing_no, drawing_image_url: rowsToInsert[0].drawing_image_url, drawing_file: rowsToInsert[0].drawing_file });
+            }
             void logActivity({
               eventType: 'item',
               action: editingItem ? 'updated' : 'created',
@@ -3678,11 +4183,12 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
               metadata: { count: rowsToInsert.length, drawing_nos: rowsToInsert.map(row => row.drawing_no), departments: rowsToInsert.map(row => row.departments) },
               severity: 'info',
             });
-            setIsModalOpen(false); 
+            setIsModalOpen(false);
             setEditingItem(null);
             resetItemForm();
             invalidateCollectionCache('items');
-            fetchData(); 
+            invalidateCollectionCache('work_orders');
+            fetchData();
           }
         }} className="flex flex-col h-full gap-6">
 
@@ -3773,27 +4279,6 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
                         )}
                         <button type="button" onClick={() => { const updated = [...(itemRows[index].metric_requirements || []), { metric: '', unit: '', qtyPerUnit: 0 }]; updateItemRow(index, 'metric_requirements', updated); }} className="text-purple-600 text-sm font-bold hover:text-purple-800 flex items-center gap-1"><Plus size={14} /> Add Metric Requirement</button>
         </div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <select value={dispatchCompanyFilter} onChange={e => setDispatchCompanyFilter(e.target.value)} className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
-          <option value="All">All Companies</option>
-          {dispatchCompanyOptions.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <select value={dispatchDateFilter} onChange={e => { setDispatchDateFilter(e.target.value); if (e.target.value !== 'custom') { setDispatchCustomFrom(''); setDispatchCustomTo(''); } }} className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
-          <option value="all">All Dates</option>
-          <option value="today">Today</option>
-          <option value="week">This Week</option>
-          <option value="month">This Month</option>
-          <option value="custom">Custom</option>
-        </select>
-        {dispatchDateFilter === 'custom' && (
-          <>
-            <input type="date" value={dispatchCustomFrom} onChange={e => setDispatchCustomFrom(e.target.value)} className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs bg-white" />
-            <span className="text-gray-500 text-xs">to</span>
-            <input type="date" value={dispatchCustomTo} onChange={e => setDispatchCustomTo(e.target.value)} className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs bg-white" />
-          </>
-        )}
       </div>
                 </div>
               </div>
@@ -3964,21 +4449,21 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
       </Modal>
 
       <Card className="p-0 overflow-hidden shadow-md">
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full min-w-[780px] text-left text-sm">
+        <div className="hidden md:block overflow-x-auto max-h-[85vh] overflow-y-auto">
+          <table className="w-full min-w-[780px] text-left text-sm border-separate">
             <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-500 border-b">
               <tr>
-                <th className="px-6 py-4 whitespace-nowrap">Item Name</th>
-                <th className="px-6 py-4 whitespace-nowrap">Customer</th>
-                <th className="px-6 py-4 whitespace-nowrap">Drawing No</th>
-                <th className="px-6 py-4 whitespace-nowrap">Depts</th>
-                <th className="px-6 py-4 text-right whitespace-nowrap">Actions</th>
+                <th className="px-6 py-4 whitespace-nowrap sticky left-0 top-0 bg-gray-50 z-20">Item Name</th>
+                <th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Customer</th>
+                <th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Drawing No</th>
+                <th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Depts</th>
+                <th className="px-6 py-4 text-right whitespace-nowrap sticky top-0 bg-gray-50 z-10">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {filteredData.map(c => (
                 <tr key={c.id} className="hover:bg-indigo-50/20 transition-colors">
-                  <td className="px-6 py-4 font-bold text-indigo-700">{c.name}</td>
+                  <td className="px-6 py-4 font-bold text-indigo-700 sticky left-0 bg-white z-10">{c.name}</td>
                   <td className="px-6 py-4">{c.customer_name}</td>
                   <td className="px-6 py-4 font-mono text-xs">{c.drawing_no}</td>
                   <td className="px-6 py-4">
@@ -4387,19 +4872,19 @@ const ChildItemListView: React.FC<{ onError: () => void; editingId?: number | st
       </Modal>
 
       <Card className="p-0 overflow-hidden shadow-md">
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full min-w-[680px] text-left text-sm">
+        <div className="hidden md:block overflow-x-auto max-h-[85vh] overflow-y-auto">
+          <table className="w-full min-w-[680px] text-left text-sm border-separate">
             <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-500 border-b">
               <tr>
-                <th className="px-6 py-4 whitespace-nowrap">Component Name</th>
-                <th className="px-6 py-4 whitespace-nowrap">Depts</th>
-                <th className="px-6 py-4 text-center whitespace-nowrap w-24">Actions</th>
+                <th className="px-6 py-4 whitespace-nowrap sticky left-0 top-0 bg-gray-50 z-20">Component Name</th>
+                <th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Depts</th>
+                <th className="px-6 py-4 text-center whitespace-nowrap w-24 sticky top-0 bg-gray-50 z-10">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {filteredComponents.map(c => (
                 <tr key={c.id} className="hover:bg-indigo-50/20 transition-colors">
-                  <td className="px-6 py-4 font-bold text-gray-800">{c.name}</td>
+                  <td className="px-6 py-4 font-bold text-gray-800 sticky left-0 bg-white z-10">{c.name}</td>
                   <td className="px-6 py-4">
                     <div className="flex flex-wrap gap-1">
                       {(c.departments || []).map((d: string) => <Badge key={d} color="gray">{d}</Badge>)}
@@ -4483,6 +4968,170 @@ const ChildItemListView: React.FC<{ onError: () => void; editingId?: number | st
   );
 };
 
+// --- Vehicle Management ---
+
+const VehicleList: React.FC<{ onError: () => void }> = ({ onError }) => {
+  const [data, setData] = useState<Vehicle[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+  const [formData, setFormData] = useState<{ vehicle_no: string; driver_name: string; is_active: boolean }>({ vehicle_no: '', driver_name: '', is_active: true });
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const res = await loadCachedCollection<Vehicle>('vehicles', 'vehicle_no');
+      setData(res);
+    } catch (e) { onError(); }
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchData(); }, []);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.vehicle_no.trim()) { alert('Vehicle number is required'); return; }
+
+    const payload = { vehicle_no: formData.vehicle_no.trim(), driver_name: formData.driver_name.trim(), is_active: formData.is_active };
+    const result = editingVehicle
+      ? await supabase.from('vehicles').update(payload).eq('id', editingVehicle.id)
+      : await supabase.from('vehicles').insert([payload]);
+    const { error } = result;
+    if (error) {
+      alert(error.message);
+    } else {
+      void logActivity({
+        eventType: 'vehicle',
+        action: editingVehicle ? 'updated' : 'created',
+        title: editingVehicle ? 'Vehicle Updated' : 'Vehicle Created',
+        body: `${editingVehicle ? 'Updated' : 'Created'} vehicle: ${payload.vehicle_no}`,
+        actor: getStoredLoggedInUser(),
+        targetCollection: 'vehicles',
+        targetId: editingVehicle?.id,
+        targetLabel: payload.vehicle_no,
+        severity: 'info',
+      });
+      setIsModalOpen(false);
+      setEditingVehicle(null);
+      setFormData({ vehicle_no: '', driver_name: '', is_active: true });
+      invalidateCollectionCache('vehicles');
+      fetchData();
+    }
+  };
+
+  if (loading && data.length === 0) return <LoadingState />;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-xl font-black text-gray-800">Vehicles</h2>
+        <button onClick={() => { setEditingVehicle(null); setFormData({ vehicle_no: '', driver_name: '', is_active: true }); setIsModalOpen(true); }} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg hover:bg-blue-700 transition-colors">
+          <Plus size={18} /> <span className="hidden sm:inline">Add Vehicle</span><span className="sm:hidden">Add</span>
+        </button>
+      </div>
+
+      <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingVehicle(null); }} title={editingVehicle ? "Edit Vehicle" : "New Vehicle"}>
+        <form onSubmit={handleSave} className="space-y-4">
+          <div>
+            <label className="text-[10px] font-black uppercase text-gray-500 block mb-1 tracking-widest">Vehicle Number <span className="text-red-500">*</span></label>
+            <input required placeholder="e.g. MH-12-AB-1234" value={formData.vehicle_no} onChange={e => setFormData({...formData, vehicle_no: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl" />
+          </div>
+          <div>
+            <label className="text-[10px] font-black uppercase text-gray-500 block mb-1 tracking-widest">Driver / Transport Name</label>
+            <input placeholder="e.g. Rajesh Transport" value={formData.driver_name} onChange={e => setFormData({...formData, driver_name: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl" />
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={formData.is_active} onChange={e => setFormData({...formData, is_active: e.target.checked})} className="rounded" />
+            <span className="text-sm font-bold text-gray-700">Active</span>
+          </label>
+          <button type="submit" className="w-full py-4 bg-blue-600 text-white rounded-xl font-black shadow-lg">{editingVehicle ? 'Update Vehicle' : 'Add Vehicle'}</button>
+        </form>
+      </Modal>
+
+      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+        <div className="hidden md:block overflow-x-auto max-h-[85vh] overflow-y-auto">
+          <table className="w-full min-w-[600px] text-left text-sm border-separate">
+            <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-500 border-b">
+              <tr>
+                <th className="px-6 py-4 whitespace-nowrap sticky left-0 top-0 bg-gray-50 z-20">Vehicle No</th>
+                <th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Driver / Transport</th>
+                <th className="px-6 py-4 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Status</th>
+                <th className="px-6 py-4 text-right whitespace-nowrap sticky top-0 bg-gray-50 z-10">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {data.map(v => (
+                <tr key={v.id} className="hover:bg-gray-50/80 transition-colors group">
+                  <td className="px-6 py-4 font-bold text-gray-800 sticky left-0 bg-white z-10">{v.vehicle_no}</td>
+                  <td className="px-6 py-4 text-gray-600">{v.driver_name || '—'}</td>
+                  <td className="px-6 py-4">
+                    <span className={`font-bold text-xs px-2.5 py-1 rounded-full ${v.is_active !== false ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{v.is_active !== false ? 'Active' : 'Inactive'}</span>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => { setEditingVehicle(v); setFormData({ vehicle_no: v.vehicle_no, driver_name: v.driver_name || '', is_active: v.is_active !== false }); setIsModalOpen(true); }} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg"><Edit size={15} /></button>
+                      <button onClick={async () => {
+                        if (!confirm(`Delete vehicle "${v.vehicle_no}"?`)) return;
+                        const { error } = await supabase.from('vehicles').delete().eq('id', v.id);
+                        if (error) { alert(error.message); return; }
+                        void logActivity({
+                          eventType: 'vehicle',
+                          action: 'deleted',
+                          title: 'Vehicle Deleted',
+                          body: `Deleted vehicle: ${v.vehicle_no}`,
+                          actor: getStoredLoggedInUser(),
+                          targetCollection: 'vehicles',
+                          targetId: v.id,
+                          targetLabel: v.vehicle_no,
+                          severity: 'warning',
+                        });
+                        invalidateCollectionCache('vehicles');
+                        fetchData();
+                      }} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={15} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="block md:hidden divide-y">
+          {data.map(v => (
+            <div key={v.id} className="px-4 py-3 space-y-1">
+              <div className="font-bold text-gray-800">{v.vehicle_no}</div>
+              <div className="text-xs text-gray-500">{v.driver_name || '—'}</div>
+              <div className="flex justify-between items-center">
+                <span className={`font-bold text-xs px-2 py-0.5 rounded-full ${v.is_active !== false ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{v.is_active !== false ? 'Active' : 'Inactive'}</span>
+                <div className="flex gap-1">
+                  <button onClick={() => { setEditingVehicle(v); setFormData({ vehicle_no: v.vehicle_no, driver_name: v.driver_name || '', is_active: v.is_active !== false }); setIsModalOpen(true); }} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg"><Edit size={14} /></button>
+                  <button onClick={async () => {
+                    if (!confirm(`Delete vehicle "${v.vehicle_no}"?`)) return;
+                    const { error } = await supabase.from('vehicles').delete().eq('id', v.id);
+                    if (error) { alert(error.message); return; }
+                    void logActivity({
+                      eventType: 'vehicle',
+                      action: 'deleted',
+                      title: 'Vehicle Deleted',
+                      body: `Deleted vehicle: ${v.vehicle_no}`,
+                      actor: getStoredLoggedInUser(),
+                      targetCollection: 'vehicles',
+                      targetId: v.id,
+                      targetLabel: v.vehicle_no,
+                      severity: 'warning',
+                    });
+                    invalidateCollectionCache('vehicles');
+                    fetchData();
+                  }} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={14} /></button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // --- Worker Dashboard ---
 
 const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => void; onViewPlan: (id: number) => void; loggedInUser: User }> = ({ onError, onView, onViewPlan, loggedInUser }) => {
@@ -4498,6 +5147,10 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
   const [jobsDateFilter, setJobsDateFilter] = useState('all');
   const [jobsCustomFrom, setJobsCustomFrom] = useState('');
   const [jobsCustomTo, setJobsCustomTo] = useState('');
+  const [departmentFilter, setDepartmentFilter] = useState('All');
+  const normalizedUserDept = normalizeDepartment(loggedInUser.department);
+  const isOfficeUser = normalizedUserDept === 'Office';
+  const canFilterByDepartment = isOfficeUser || normalizedUserDept === 'Quality_Control' || normalizedUserDept === 'Dispatch';
 
   useEffect(() => {
     const fetchData = async () => {
@@ -4532,25 +5185,53 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
   }, [loggedInUser]);
 
   const filteredOrders = useMemo(() => {
-    const statusFiltered = statusFilter === 'All' ? data.filter(wo => wo.status !== 'Dispatched') : data.filter(wo => wo.status === statusFilter);
+    const ORDER_ONLY_STATUSES = new Set(['Ready for despatch', 'Dispatched']);
+    const statusFiltered = statusFilter === 'All' ? data.filter(wo => wo.status !== 'Dispatched') : data.filter(wo => {
+      if (wo.status === statusFilter) return true;
+      if (canFilterByDepartment && departmentFilter !== 'All' && !ORDER_ONLY_STATUSES.has(statusFilter) && wo.status !== 'Dispatched') {
+        const deptStatuses = wo.department_statuses || [];
+        return deptStatuses.some(ds =>
+          normalizeDepartment(ds.department) === normalizeDepartment(departmentFilter) &&
+          ds.status === statusFilter && !ds.qc_status
+        );
+      }
+      return false;
+    });
     const dateFiltered = statusFiltered.filter(wo => filterByDate(wo.etd, jobsDateFilter, jobsCustomFrom, jobsCustomTo));
-    if (!deferredSearchQuery) return dateFiltered;
+    const departmentFiltered = canFilterByDepartment && departmentFilter !== 'All'
+      ? dateFiltered.filter(wo => {
+          const normDept = normalizeDepartment(departmentFilter);
+          if (statusFilter !== 'All' && !ORDER_ONLY_STATUSES.has(statusFilter)) {
+            const deptStatuses = wo.department_statuses || [];
+            return deptStatuses.some(ds =>
+              normalizeDepartment(ds.department) === normDept &&
+              ds.status === statusFilter && !ds.qc_status
+            );
+          }
+          return (wo.assigned_departments || []).some(dept => normalizeDepartment(dept) === normDept);
+        })
+      : dateFiltered;
+    if (!deferredSearchQuery) return departmentFiltered;
     const lowerCaseQuery = deferredSearchQuery.toLowerCase();
-    return dateFiltered.filter(wo =>
-      wo.id.toString().includes(lowerCaseQuery) ||
-      wo.customer.toLowerCase().includes(lowerCaseQuery) ||
-      wo.job_details.toLowerCase().includes(lowerCaseQuery)
-    );
-  }, [data, deferredSearchQuery, statusFilter, jobsDateFilter, jobsCustomFrom, jobsCustomTo]);
+    return departmentFiltered.filter(wo => wo.id.toString().includes(lowerCaseQuery) || wo.customer.toLowerCase().includes(lowerCaseQuery) || wo.job_details.toLowerCase().includes(lowerCaseQuery));
+  }, [data, deferredSearchQuery, statusFilter, jobsDateFilter, jobsCustomFrom, jobsCustomTo, departmentFilter, canFilterByDepartment]);
 
   const statusOptions = useMemo(() => {
     const uniqueStatuses = Array.from(new Set(data.map(wo => wo.status))).filter(s => s !== 'QC Approved');
     return sortStatuses(uniqueStatuses);
   }, [data]);
 
+  const departmentOptions = useMemo(() => {
+    const deptSet = new Set<string>();
+    data.forEach(wo => {
+      (wo.assigned_departments || []).forEach(dept => deptSet.add(normalizeDepartment(dept)));
+    });
+    return Array.from(deptSet).sort();
+  }, [data]);
+
   useEffect(() => {
     setPage(1);
-  }, [searchQuery, statusFilter, data.length]);
+  }, [searchQuery, statusFilter, data.length, departmentFilter]);
 
   const { pageRows: paginatedOrders, totalPages, safePage, totalRows, startIndex } = useMemo(
     () => getPageSlice(filteredOrders, page, LIST_PAGE_SIZE),
@@ -4637,25 +5318,21 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
 
   return (
     <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-300">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-6">
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={20} />
+      <div className="flex flex-wrap items-center gap-2 mb-3 sm:mb-6">
+        <div className="relative flex-1 min-w-[200px] max-w-[320px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
           <input 
             type="text" 
             placeholder="Search by order, customer, or job..." 
             value={searchQuery} 
             onChange={e => setSearchQuery(e.target.value)} 
-            className="w-full pl-12 pr-4 py-2.5 sm:py-4 bg-white border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm"
+            className="w-full pl-9 pr-3 py-1.5 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs"
           />
         </div>
-        <div className="flex gap-1.5 flex-wrap items-center">
-          <button onClick={() => setStatusFilter('All')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === 'All' ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>All</button>
-          {statusOptions.map(s => (
-            <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === s ? (statusTabColors[s] || 'bg-slate-900 text-white') : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS[s] || s}</button>
-          ))}
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
+        <button onClick={() => setStatusFilter('All')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === 'All' ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>All</button>
+        {statusOptions.map(s => (
+          <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === s ? (statusTabColors[s] || 'bg-slate-900 text-white') : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS[s] || s}</button>
+        ))}
         <select value={jobsDateFilter} onChange={e => { setJobsDateFilter(e.target.value); if (e.target.value !== 'custom') { setJobsCustomFrom(''); setJobsCustomTo(''); } }} className="px-3 py-1.5 border rounded-xl text-xs font-semibold bg-white">
           <option value="all">All Dates</option>
           <option value="today">Today</option>
@@ -4669,6 +5346,14 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
             <span className="text-gray-500 text-xs">to</span>
             <input type="date" value={jobsCustomTo} onChange={e => setJobsCustomTo(e.target.value)} className="px-3 py-1.5 border rounded-xl text-xs bg-white" />
           </>
+        )}
+        {canFilterByDepartment && (
+          <select value={departmentFilter} onChange={e => setDepartmentFilter(e.target.value)} className="px-3 py-1.5 border rounded-xl text-xs font-semibold bg-white">
+            <option value="All">All Depts</option>
+            {departmentOptions.map(d => (
+              <option key={d} value={d}>{d.replace(/_/g, ' ')}</option>
+            ))}
+          </select>
         )}
       </div>
 
@@ -4695,16 +5380,34 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
             className="group bg-white rounded-2xl sm:rounded-xl border border-gray-100 p-3 sm:p-3 space-y-1.5 sm:space-y-2 shadow-sm hover:shadow-md hover:border-blue-100 transition-all cursor-pointer active:scale-[0.99]"
           >
             <div className="flex items-start justify-between gap-2">
-              <div>
+              <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1 flex-wrap">
                   <span className="text-[10px] font-black text-indigo-600">#{wo.id}</span>
                   {wo.order_type === 'suborder' && <Badge color="purple" className="!text-[10px]">Suborder Of #{wo.parent_work_order_id || '-'}</Badge>}
+                  <span className="text-[10px] text-gray-400 font-semibold">Entry: {formatEntryDate(wo.entry_date || wo.created_at || (wo as any).created)}</span>
                 </div>
-                <h3 className="text-xs font-black text-slate-800 leading-tight mt-0.5 line-clamp-1 md:line-clamp-2">{wo.job_details}</h3>
-                <p className="hidden md:block text-[10px] font-bold text-gray-500 uppercase">{wo.customer}</p>
+                <h3 className="text-xs font-black text-slate-800 leading-tight mt-0.5">{wo.job_details}</h3>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {(wo.assigned_departments || []).map(dept => {
+                    const ds = (wo.department_statuses || []).find(s => normalizeDepartment(s.department) === normalizeDepartment(dept));
+                    const qc = ds?.qc_status;
+                    let badgeClass = 'bg-gray-100 text-gray-600';
+                    let label = ds?.status ? STATUS_LABELS[ds.status] || ds.status : '—';
+                    if (qc === 'QC Approved') { badgeClass = 'bg-green-100 text-green-700'; label = 'QC Approved'; }
+                    else if (qc === 'QC Denied') { badgeClass = 'bg-red-100 text-red-700'; label = 'Denied'; }
+                    else if (ds?.status === 'Work Started') { badgeClass = 'bg-blue-100 text-blue-700'; }
+                    else if (ds?.status === 'Ready for QC') { badgeClass = 'bg-yellow-100 text-yellow-700'; }
+                    const deptLabel = dept.replace(/_/g, ' ');
+                    return (
+                      <span key={dept} className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${badgeClass}`}>
+                        {deptLabel}: {label}
+                      </span>
+                    );
+                  })}
+                </div>
+                <p className="hidden md:block text-[10px] font-bold text-gray-500 uppercase mt-1">{wo.customer}</p>
               </div>
-              <div className="flex flex-col items-end gap-1">
-                <StatusBadge status={wo.status} />
+              <div className="flex flex-col items-end gap-1 shrink-0">
                 {getQCApprovalProgress(wo) === 'partial' && <Badge color="orange">Partially Approved</Badge>}
               </div>
             </div>
@@ -4755,7 +5458,7 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
 
 // --- Work Order Management ---
 
-const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => void; onViewPlan: (id: number) => void; loggedInUser: User }> = ({ onError, onView, onViewPlan, loggedInUser }) => {
+const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => void; onViewPlan: (id: number) => void; onCreatePlan?: (ids: number[]) => void; loggedInUser: User }> = ({ onError, onView, onViewPlan, onCreatePlan, loggedInUser }) => {
   const [data, setData] = useState<(WorkOrder & { itemInfo?: Item })[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -4764,23 +5467,36 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [selectedImageUrl, setSelectedImageUrl] = useState('');
-  const [searchQuery, setSearchQuery] = useState(''); 
-  const [statusFilter, setStatusFilter] = useState('All');
-  const [departmentFilter, setDepartmentFilter] = useState('All');
-  const [orderDateFilter, setOrderDateFilter] = useState('all');
-  const [orderCustomFrom, setOrderCustomFrom] = useState('');
-  const [orderCustomTo, setOrderCustomTo] = useState('');
-  const [page, setPage] = useState(1);
+  const ORDERS_FILTER_STORAGE_KEY = 'excell_erp_orders_filters';
+
+  const getSavedOrdersFilters = () => {
+    try {
+      const raw = sessionStorage.getItem(ORDERS_FILTER_STORAGE_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return {};
+  };
+
+  const [searchQuery, setSearchQuery] = useState(() => getSavedOrdersFilters().searchQuery ?? '');
+  const [statusFilter, setStatusFilter] = useState(() => getSavedOrdersFilters().statusFilter ?? 'All');
+  const [departmentFilter, setDepartmentFilter] = useState(() => getSavedOrdersFilters().departmentFilter ?? 'All');
+  const [orderDateFilter, setOrderDateFilter] = useState(() => getSavedOrdersFilters().orderDateFilter ?? 'all');
+  const [orderCustomFrom, setOrderCustomFrom] = useState(() => getSavedOrdersFilters().orderCustomFrom ?? '');
+  const [orderCustomTo, setOrderCustomTo] = useState(() => getSavedOrdersFilters().orderCustomTo ?? '');
+  const [overdueOnly, setOverdueOnly] = useState(() => getSavedOrdersFilters().overdueOnly ?? false);
+  const [sortConfig, setSortConfig] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(() => getSavedOrdersFilters().sortConfig ?? null);
+  const [page, setPage] = useState(() => getSavedOrdersFilters().page ?? 1);
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [busyCardStatusId, setBusyCardStatusId] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'card'>(() => (
     typeof window !== 'undefined' && window.innerWidth < 768 ? 'card' : 'table'
   ));
+  const [planMode, setPlanMode] = useState(false);
+  const [planSelectedIds, setPlanSelectedIds] = useState<Set<number>>(new Set());
 
   const isOrderOverdue = (wo: WorkOrder & { itemInfo?: Item }) => {
     if (!wo.etd || wo.status === 'Dispatched') return false;
-    const etd = new Date(`${wo.etd}T12:00:00`);
-    return !Number.isNaN(etd.getTime()) && etd < new Date();
+    return wo.etd < new Date().toISOString().slice(0, 10);
   };
 
   useEffect(() => {
@@ -4794,6 +5510,13 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    sessionStorage.setItem(ORDERS_FILTER_STORAGE_KEY, JSON.stringify({
+      searchQuery, statusFilter, departmentFilter, orderDateFilter,
+      orderCustomFrom, orderCustomTo, overdueOnly, sortConfig, page
+    }));
+  }, [searchQuery, statusFilter, departmentFilter, orderDateFilter, orderCustomFrom, orderCustomTo, overdueOnly, sortConfig, page]);
 
   const normalizedUserDept = normalizeDepartment(loggedInUser.department);
   const isOfficeUser = normalizedUserDept === 'Office';
@@ -4809,9 +5532,11 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
     qty: number | '';
     etd: string;
     drawing: string;
+    drawingImageUrl: string;
+    drawingFile: string;
     departments: string[];
   }
-  
+
   function createBlankLineItem(): OrderLineItem {
     return {
       key: crypto.randomUUID?.() || Math.random().toString(36).substr(2, 9),
@@ -4819,6 +5544,8 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
       qty: 1,
       etd: '',
       drawing: '',
+      drawingImageUrl: '',
+      drawingFile: '',
       departments: [],
     };
   }
@@ -4910,6 +5637,9 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
           customer: params.customer,
           job_details: childItem.name,
           drawing: childItem.drawing_no || '',
+          drawing_image_url: childItem.drawing_image_url || '',
+          drawing_file: childItem.drawing_file || '',
+          entry_date: new Date().toISOString().slice(0, 10),
           qty: suborderQty,
           etd: params.etd,
           status: 'Not Started',
@@ -5009,6 +5739,9 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
           qty: Number(lineItem.qty) || 1,
           etd: lineItem.etd,
           drawing: lineItem.drawing,
+          drawing_image_url: lineItem.drawingImageUrl || '',
+          drawing_file: lineItem.drawingFile || '',
+          entry_date: new Date().toISOString().slice(0, 10),
           status: 'Not Started',
           order_type: 'parent',
           parent_work_order_id: null,
@@ -5091,13 +5824,38 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
   };
 
   const filteredOrders = useMemo(() => {
-    const statusFiltered = statusFilter === 'All' ? data.filter(wo => wo.status !== 'Dispatched') : data.filter(wo => wo.status === statusFilter);
+    const ORDER_ONLY_STATUSES = new Set(['Ready for despatch', 'Dispatched']);
+    const statusFiltered = statusFilter === 'All' ? data.filter(wo => wo.status !== 'Dispatched') : data.filter(wo => {
+      if (wo.status === statusFilter) return true;
+      if (canFilterByDepartment && departmentFilter !== 'All' && !ORDER_ONLY_STATUSES.has(statusFilter) && wo.status !== 'Dispatched') {
+        const deptStatuses = wo.department_statuses || [];
+        return deptStatuses.some(ds =>
+          normalizeDepartment(ds.department) === normalizeDepartment(departmentFilter) &&
+          ds.status === statusFilter && !ds.qc_status
+        );
+      }
+      return false;
+    });
 
     const departmentFiltered = canFilterByDepartment && departmentFilter !== 'All'
-      ? statusFiltered.filter(wo => (wo.assigned_departments || []).some(dept => normalizeDepartment(dept) === normalizeDepartment(departmentFilter)))
+      ? statusFiltered.filter(wo => {
+          const normDept = normalizeDepartment(departmentFilter);
+          if (statusFilter !== 'All' && !ORDER_ONLY_STATUSES.has(statusFilter)) {
+            const deptStatuses = wo.department_statuses || [];
+            return deptStatuses.some(ds =>
+              normalizeDepartment(ds.department) === normDept &&
+              ds.status === statusFilter && !ds.qc_status
+            );
+          }
+          return (wo.assigned_departments || []).some(dept =>
+            normalizeDepartment(dept) === normDept
+          );
+        })
       : statusFiltered;
 
-    const dateFiltered = departmentFiltered.filter(wo => filterByDate(wo.etd, orderDateFilter, orderCustomFrom, orderCustomTo));
+    const overdueFiltered = overdueOnly ? departmentFiltered.filter(wo => isOrderOverdue(wo)) : departmentFiltered;
+
+    const dateFiltered = overdueFiltered.filter(wo => filterByDate(wo.entry_date, orderDateFilter, orderCustomFrom, orderCustomTo));
 
     if (!deferredSearchQuery) return dateFiltered;
     const lowerCaseQuery = deferredSearchQuery.toLowerCase();
@@ -5105,17 +5863,77 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
       wo.id.toString().includes(lowerCaseQuery) ||
       wo.customer.toLowerCase().includes(lowerCaseQuery) ||
       wo.job_details.toLowerCase().includes(lowerCaseQuery) ||
-      (wo.drawing || '').toLowerCase().includes(lowerCaseQuery)
+      (wo.drawing || '').toLowerCase().includes(lowerCaseQuery) ||
+      (wo.etd || '').toLowerCase().includes(lowerCaseQuery)
     );
-  }, [data, deferredSearchQuery, statusFilter, departmentFilter, canFilterByDepartment, orderDateFilter, orderCustomFrom, orderCustomTo]);
+  }, [data, deferredSearchQuery, statusFilter, departmentFilter, canFilterByDepartment, orderDateFilter, orderCustomFrom, orderCustomTo, overdueOnly]);
+
+  const sortedOrders = useMemo(() => {
+    if (!sortConfig) return filteredOrders;
+    const { key, dir } = sortConfig;
+    const sortDir = dir === 'asc' ? 1 : -1;
+    return [...filteredOrders].sort((a, b) => {
+      let aVal: any;
+      let bVal: any;
+      if (key === 'id') {
+        aVal = a.id;
+        bVal = b.id;
+      } else if (key === 'created_at') {
+        aVal = a.created_at || (a as any).created || '';
+        bVal = b.created_at || (b as any).created || '';
+      } else if (key === 'customer') {
+        aVal = (a.customer || '').toLowerCase();
+        bVal = (b.customer || '').toLowerCase();
+      } else if (key === 'job_details') {
+        aVal = (a.job_details || '').toLowerCase();
+        bVal = (b.job_details || '').toLowerCase();
+      } else if (key === 'drawing') {
+        aVal = (a.drawing || a.itemInfo?.drawing_no || '').toLowerCase();
+        bVal = (b.drawing || b.itemInfo?.drawing_no || '').toLowerCase();
+      } else if (key === 'qty') {
+        aVal = Number(a.qty) || 0;
+        bVal = Number(b.qty) || 0;
+      } else if (key === 'etd') {
+        aVal = a.etd || '';
+        bVal = b.etd || '';
+      } else if (key === 'status') {
+        aVal = a.status || '';
+        bVal = b.status || '';
+      } else if (key === 'departments') {
+        aVal = (a.assigned_departments || []).join(',').toLowerCase();
+        bVal = (b.assigned_departments || []).join(',').toLowerCase();
+      } else {
+        return 0;
+      }
+      if (aVal < bVal) return -1 * sortDir;
+      if (aVal > bVal) return 1 * sortDir;
+      return 0;
+    });
+  }, [filteredOrders, sortConfig]);
+
+  const handleSort = (key: string) => {
+    setSortConfig(prev => {
+      if (prev?.key === key) {
+        if (prev.dir === 'desc') return null;
+        return { key, dir: 'desc' };
+      }
+      return { key, dir: 'asc' };
+    });
+  };
+
+  const SortIcon = ({ col }: { col: string }) => (
+    sortConfig?.key === col
+      ? <span className="ml-1 text-indigo-500">{sortConfig.dir === 'asc' ? '↑' : '↓'}</span>
+      : <span className="ml-1 opacity-25">↕</span>
+  );
 
   useEffect(() => {
     setPage(1);
-  }, [searchQuery, statusFilter, departmentFilter, data.length]);
+  }, [searchQuery, statusFilter, data.length]);
 
   const { pageRows: paginatedOrders, totalPages, safePage, totalRows, startIndex } = useMemo(
-    () => getPageSlice(filteredOrders, page, LIST_PAGE_SIZE),
-    [filteredOrders, page]
+    () => getPageSlice(sortedOrders, page, LIST_PAGE_SIZE),
+    [sortedOrders, page]
   );
 
   const updateCardStatus = async (wo: WorkOrder & { itemInfo?: Item }, status: string) => {
@@ -5224,7 +6042,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
         <details className="md:hidden rounded-2xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
           <summary className="list-none cursor-pointer flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-500">
             <span>Filters &amp; Search</span>
-            <span className="text-blue-600">{statusFilter !== 'All' || departmentFilter !== 'All' ? 'Active' : 'Open'}</span>
+            <span className="text-blue-600">{statusFilter !== 'All' || departmentFilter !== 'All' || overdueOnly ? 'Active' : 'Open'}</span>
           </summary>
           <div className="mt-2 grid gap-2">
             <div className="relative">
@@ -5245,11 +6063,33 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                 ))}
               </select>
             )}
-            {isOfficeUser && (
+            {(isOfficeUser || loggedInUser?.can_place_order) && (
               <button onClick={() => setIsModalOpen(true)} className="w-full bg-blue-600 text-white px-4 py-2 rounded-xl font-bold flex items-center justify-center gap-2 text-sm">
                 <Plus size={16} /> New Order
               </button>
             )}
+            <button
+              onClick={() => { setPlanMode(v => !v); if (planMode) setPlanSelectedIds(new Set()); }}
+              className={`w-full px-4 py-2 rounded-xl font-bold flex items-center justify-center gap-2 text-sm ${planMode ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 border border-gray-200'}`}
+            >
+              <FileText size={16} /> {planMode ? 'Exit Plan Mode' : 'Production Plan'}
+            </button>
+            {planMode && planSelectedIds.size > 0 && (
+              <button
+                onClick={() => { onCreatePlan?.(Array.from(planSelectedIds)); setPlanMode(false); }}
+                className="w-full bg-green-600 text-white px-4 py-2 rounded-xl font-bold flex items-center justify-center gap-2 text-sm"
+              >
+                <Calculator size={16} /> Generate Plan ({planSelectedIds.size})
+              </button>
+            )}
+            <button
+              onClick={() => setOverdueOnly(v => !v)}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${
+                overdueOnly ? 'bg-red-600 text-white border-red-600' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'
+              }`}
+            >
+              Overdue Only {overdueOnly && '✓'}
+            </button>
           </div>
         </details>
 
@@ -5259,6 +6099,14 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
             {statusOptions.map(s => (
               <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${statusFilter === s ? (statusTabColors[s] || 'bg-slate-900 text-white') : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'}`}>{STATUS_LABELS[s] || s}</button>
             ))}
+            <button
+              onClick={() => setOverdueOnly(v => !v)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                overdueOnly ? 'bg-red-600 text-white border-red-600' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'
+              }`}
+            >
+              Overdue Only {overdueOnly && '✓'}
+            </button>
           </div>
 
           <div className="relative flex-1 min-w-0 max-w-xs">
@@ -5295,13 +6143,39 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
             <button onClick={() => setViewMode('card')} className={`p-1.5 rounded-lg transition-all ${viewMode === 'card' ? 'bg-indigo-50 text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-600 hover:bg-gray-50'}`} title="Card View"><LayoutGrid size={16} /></button>
           </div>
 
-          {isOfficeUser && (
+          {(isOfficeUser || loggedInUser?.can_place_order) && (
             <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-blue-500/20 hover:bg-blue-500 transition-all">
               <Plus size={14} /> New Order
             </button>
           )}
+          <button
+            onClick={() => { setPlanMode(v => !v); if (planMode) setPlanSelectedIds(new Set()); }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${planMode ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
+          >
+            <FileText size={14} className="inline mr-1" /> Production Plan
+          </button>
         </div>
       </div>
+
+      {planMode && (
+        <div className="flex items-center gap-2 px-1 py-2 bg-green-50 border border-green-200 rounded-lg">
+          <span className="text-xs font-bold text-green-700">{planSelectedIds.size} order(s) selected</span>
+          <div className="flex-1" />
+          <button
+            onClick={() => { setPlanMode(false); setPlanSelectedIds(new Set()); }}
+            className="px-3 py-1 rounded-lg text-xs font-bold border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            disabled={planSelectedIds.size === 0}
+            onClick={() => { onCreatePlan?.(Array.from(planSelectedIds)); }}
+            className="px-3 py-1 rounded-lg text-xs font-bold bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Calculator size={14} className="inline mr-1" /> Generate Plan ({planSelectedIds.size})
+          </button>
+        </div>
+      )}
 
       <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setCustomer(''); setLineItems([createBlankLineItem()]); setItemSearchQueries({}); setOpenDropdownKey(null); }} title="Create Work Orders">
         <form onSubmit={handleSave} className="space-y-4">
@@ -5340,7 +6214,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                         {customerFilteredItems.filter(i => i.name.toLowerCase().includes((itemSearchQueries[item.key] ?? '').toLowerCase())).map(i => (
                           <button key={i.id} type="button"
                             onClick={() => {
-                              const newItems = lineItems.map((li, liIdx) => liIdx === idx ? { ...li, itemName: i.name, drawing: i.drawing_no || '', departments: (collectDirectWorkDepartments(i).length > 0 ? collectDirectWorkDepartments(i) : collectItemBomDepartments(items, i)) } : li);
+                              const newItems = lineItems.map((li, liIdx) => liIdx === idx ? { ...li, itemName: i.name, drawing: i.drawing_no || '', drawingImageUrl: i.drawing_image_url || '', drawingFile: i.drawing_file || '', departments: (collectDirectWorkDepartments(i).length > 0 ? collectDirectWorkDepartments(i) : collectItemBomDepartments(items, i)) } : li);
                               setLineItems(newItems);
                               setItemSearchQueries(q => ({...q, [item.key]: i.name}));
                               setOpenDropdownKey(null);
@@ -5395,7 +6269,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                         {customerFilteredItems.filter(i => i.name.toLowerCase().includes((itemSearchQueries[item.key] ?? '').toLowerCase())).map(i => (
                           <button key={i.id} type="button"
                             onClick={() => {
-                              const newItems = lineItems.map((li, liIdx) => liIdx === idx ? { ...li, itemName: i.name, drawing: i.drawing_no || '', departments: (collectDirectWorkDepartments(i).length > 0 ? collectDirectWorkDepartments(i) : collectItemBomDepartments(items, i)) } : li);
+                              const newItems = lineItems.map((li, liIdx) => liIdx === idx ? { ...li, itemName: i.name, drawing: i.drawing_no || '', drawingImageUrl: i.drawing_image_url || '', drawingFile: i.drawing_file || '', departments: (collectDirectWorkDepartments(i).length > 0 ? collectDirectWorkDepartments(i) : collectItemBomDepartments(items, i)) } : li);
                               setLineItems(newItems);
                               setItemSearchQueries(q => ({...q, [item.key]: i.name}));
                               setOpenDropdownKey(null);
@@ -5485,45 +6359,108 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
       </Modal>
 
       {viewMode === 'table' ? (
-        <Card className="hidden md:block p-0 overflow-x-auto shadow-md border border-gray-100">
-                <table className="w-full min-w-[1550px] text-left text-sm">
+        <Card className="hidden md:block p-0 shadow-md border border-gray-100">
+          <div className="overflow-x-auto overflow-y-auto max-h-[85vh]">
+            <table className="w-full min-w-[1660px] text-left text-sm border-separate border-spacing-0">
                     <thead className="bg-gray-50 text-xs font-black uppercase text-gray-500 border-b border-gray-200">
                         <tr>
-                            <th className="px-4 py-2 whitespace-nowrap">Order #</th>
-                            <th className="px-4 py-2 whitespace-nowrap">Customer</th>
-                            <th className="px-4 py-2 whitespace-nowrap">Job Details</th>
-                            <th className="px-4 py-2 whitespace-nowrap">Drawing</th>
-                            <th className="px-4 py-2 whitespace-nowrap">Qty</th>
-                            <th className="px-4 py-2 whitespace-nowrap">ETD</th>
-                            <th className="px-4 py-2 whitespace-nowrap">Status</th>
-                            <th className="px-4 py-2 whitespace-nowrap">Depts</th>
-                            <th className="px-4 py-2 text-right whitespace-nowrap">Action</th>
+                            {planMode && (
+                              <th className="px-2 py-1.5 w-10 sticky left-0 top-0 bg-gray-50 z-20">
+                                <input
+                                  type="checkbox"
+                                  className="w-4 h-4 rounded"
+                                  checked={paginatedOrders.length > 0 && paginatedOrders.every(wo => planSelectedIds.has(wo.id))}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setPlanSelectedIds(new Set(paginatedOrders.map(wo => wo.id)));
+                                    } else {
+                                      setPlanSelectedIds(new Set());
+                                    }
+                                  }}
+                                />
+                              </th>
+                            )}
+                            <th className={`px-4 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors ${planMode ? 'sticky left-10 top-0 bg-gray-50 z-10' : 'sticky left-0 top-0 bg-gray-50 z-20'}`}>
+                                <span className="inline-flex items-center">Sr. No.</span>
+                            </th>
+                            <th className="px-4 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('id')}>
+                                <span className="inline-flex items-center">Order #<SortIcon col="id" /></span>
+                            </th>
+                            <th className="px-4 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('created_at')}>
+                                <span className="inline-flex items-center">Entry Date<SortIcon col="created_at" /></span>
+                            </th>
+                            <th className="px-4 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('customer')}>
+                                <span className="inline-flex items-center">Customer<SortIcon col="customer" /></span>
+                            </th>
+                            <th className="px-4 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('job_details')}>
+                                <span className="inline-flex items-center">Job Details<SortIcon col="job_details" /></span>
+                            </th>
+                            <th className="px-4 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('drawing')}>
+                                <span className="inline-flex items-center">Drawing<SortIcon col="drawing" /></span>
+                            </th>
+                            <th className="px-4 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('qty')}>
+                                <span className="inline-flex items-center">Qty<SortIcon col="qty" /></span>
+                            </th>
+                            <th className="px-4 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('etd')}>
+                                <span className="inline-flex items-center">ETD<SortIcon col="etd" /></span>
+                            </th>
+                            <th className="px-4 py-1.5 whitespace-nowrap sticky top-0 bg-gray-50 z-10">
+                                <span className="inline-flex items-center">Status</span>
+                            </th>
+                            <th className="px-4 py-1.5 whitespace-nowrap sticky top-0 bg-gray-50 z-10">
+                                <span className="inline-flex items-center">Depts</span>
+                            </th>
+                            <th className="px-4 py-1.5 text-right whitespace-nowrap sticky top-0 bg-gray-50 z-10">Action</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                        {paginatedOrders.map(wo => (
+                        {paginatedOrders.map((wo, idx) => {
+                          const srNo = idx + 1;
+                          return (
                             <tr 
                                 key={wo.id} 
                                 onClick={() => onView(wo.id)} 
                                 className={`hover:bg-blue-50/50 cursor-pointer transition-colors group ${isOrderOverdue(wo) ? 'bg-red-100/60' : ''}`}
                             >
-                                <td className="px-4 py-2 font-black text-indigo-600 text-sm whitespace-nowrap">
+                                {planMode && (
+                                  <td className={`px-2 py-1.5 sticky left-0 z-20 ${isOrderOverdue(wo) ? 'bg-red-100/60' : 'bg-white'}`} onClick={e => e.stopPropagation()}>
+                                    <input
+                                      type="checkbox"
+                                      className="w-4 h-4 rounded"
+                                      checked={planSelectedIds.has(wo.id)}
+                                      onChange={() => {
+                                        setPlanSelectedIds(prev => {
+                                          const next = new Set(prev);
+                                          if (next.has(wo.id)) next.delete(wo.id); else next.add(wo.id);
+                                          return next;
+                                        });
+                                      }}
+                                    />
+                                  </td>
+                                )}
+                                <td className={`px-4 py-1.5 font-black text-gray-400 text-xs whitespace-nowrap ${planMode ? 'sticky left-10 z-10' : 'sticky left-0 z-10'} ${isOrderOverdue(wo) ? 'bg-red-100/60' : 'bg-white'}`}>
+                                    {srNo}
+                                </td>
+                                <td className={`px-4 py-1.5 font-black text-indigo-600 text-sm whitespace-nowrap`}>
                                   <div className="text-sm">#{wo.id}</div>
                                   {wo.order_type === 'suborder' && <Badge color="purple" className="!text-xs">Suborder Of #{wo.parent_work_order_id || '-'}</Badge>}
                                 </td>
-                                <td className="px-4 py-2 font-bold text-gray-700 text-sm whitespace-nowrap">{wo.customer}</td>
-                                <td className="px-4 py-2 font-semibold text-gray-800 text-sm whitespace-nowrap">
+                                <td className="px-4 py-1.5 text-xs font-bold text-gray-600 whitespace-nowrap">
+                                  {formatEntryDate(wo.entry_date || wo.created_at || (wo as any).created)}
+                                </td>
+                                <td className="px-4 py-1.5 font-bold text-gray-700 text-sm whitespace-nowrap">{wo.customer}</td>
+                                <td className="px-4 py-1.5 font-semibold text-gray-800 text-sm whitespace-nowrap">
                                   <div>{wo.job_details}</div>
                                 </td>
-                                <td className="px-4 py-2 whitespace-nowrap">
+                                <td className="px-4 py-1.5 whitespace-nowrap">
                                     <div className="flex items-center gap-2">
                                         <span className="font-mono text-sm text-gray-500 font-bold">{wo.drawing || wo.itemInfo?.drawing_no || 'TBD'}</span>
-                                        {wo.itemInfo?.drawing_image_url && (
-                                                <button 
-                                                    onClick={(e) => { 
-                                                        e.stopPropagation(); 
-                                                        setSelectedImageUrl(wo.itemInfo!.drawing_image_url!); 
-                                                        setIsImageModalOpen(true); 
+                                        {(wo.drawing_image_url || wo.itemInfo?.drawing_image_url) && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setSelectedImageUrl(wo.drawing_image_url || wo.itemInfo!.drawing_image_url!);
+                                                        setIsImageModalOpen(true);
                                                     }}
                                                     className="text-blue-400 hover:text-blue-600 transition-colors"
                                                     title="View Drawing PDF"
@@ -5533,20 +6470,34 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                                         )}
                                     </div>
                                 </td>
-                                <td className="px-4 py-2 font-bold text-sm whitespace-nowrap">{wo.qty}</td>
-                                <td className="px-4 py-2 text-sm font-bold text-orange-600 whitespace-nowrap">{wo.etd || 'TBD'}</td>
-                                <td className="px-4 py-2 whitespace-nowrap">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <StatusBadge status={wo.status} />
-                                    {getQCApprovalProgress(wo) === 'partial' && <Badge color="orange">Partially Approved</Badge>}
+                                <td className="px-4 py-1.5 font-bold text-sm whitespace-nowrap">{wo.qty}</td>
+                                <td className="px-4 py-1.5 text-sm font-bold text-orange-600 whitespace-nowrap">{wo.etd || 'TBD'}</td>
+                                <td className="px-4 py-1.5 whitespace-nowrap">
+                                  <div className="flex items-center gap-1 flex-wrap">
+                                    {(wo.assigned_departments || []).map(dept => {
+                                      const ds = (wo.department_statuses || []).find(s => normalizeDepartment(s.department) === normalizeDepartment(dept));
+                                      const qc = ds?.qc_status;
+                                      let badgeClass = 'bg-gray-100 text-gray-600';
+                                      let label = ds?.status ? STATUS_LABELS[ds.status] || ds.status : '—';
+                                      if (qc === 'QC Approved') { badgeClass = 'bg-green-100 text-green-700'; label = 'QC Approved'; }
+                                      else if (qc === 'QC Denied') { badgeClass = 'bg-red-100 text-red-700'; label = 'Denied'; }
+                                      else if (ds?.status === 'Work Started') { badgeClass = 'bg-blue-100 text-blue-700'; }
+                                      else if (ds?.status === 'Ready for QC') { badgeClass = 'bg-yellow-100 text-yellow-700'; }
+                                      const deptLabel = dept.replace(/_/g, ' ');
+                                      return (
+                                        <span key={dept} className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${badgeClass}`}>
+                                          {deptLabel}: {label}
+                                        </span>
+                                      );
+                                    })}
                                   </div>
                                 </td>
-                                <td className="px-4 py-2 whitespace-nowrap">
+                                <td className="px-4 py-1.5 whitespace-nowrap">
                                     <div className="flex flex-nowrap gap-1">
                                         {(wo.assigned_departments || []).map(d => <Badge key={d} color="indigo" className="!text-xs">{d.replace(/_/g, ' ')}</Badge>)}
                                     </div>
                                 </td>
-                                <td className="px-4 py-2 text-right whitespace-nowrap">
+                                <td className="px-4 py-1.5 text-right whitespace-nowrap">
                                     <button 
                                         onClick={(e) => { e.stopPropagation(); onView(wo.id); }}
                                         className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
@@ -5556,14 +6507,18 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                                     </button>
                                 </td>
                             </tr>
-                        ))}
+                          );
+                        })}
                     </tbody>
                 </table>
             {filteredOrders.length === 0 && <div className="p-12 text-center text-gray-500 italic font-semibold">No matching work orders found.</div>}
+          </div>
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5 md:gap-3">
-            {paginatedOrders.map(wo => (
+            {paginatedOrders.map((wo, idx) => {
+              const srNo = idx + 1;
+              return (
             <div 
                 key={wo.id} 
                 className={`group ${isOrderOverdue(wo) ? 'bg-red-100' : 'bg-white'} rounded-2xl md:rounded-xl border border-gray-100 p-3 md:p-3 space-y-1.5 md:space-y-2 shadow-sm hover:shadow-md hover:border-blue-100 transition-all active:scale-[0.99]`}
@@ -5571,25 +6526,32 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <div className="flex items-center gap-1 flex-wrap">
-                      <span className="text-xs font-black text-indigo-600">#{wo.id}</span>
+                      <span className="text-xs font-black text-indigo-600">#{srNo}  #{wo.id}</span>
                       {wo.order_type === 'suborder' && <Badge color="purple" className="!text-xs">Suborder Of #{wo.parent_work_order_id || '-'}</Badge>}
+                      <span className="text-[10px] text-gray-500 font-semibold">Entry: {formatEntryDate(wo.entry_date || wo.created_at || (wo as any).created)}</span>
                     </div>
                     <h3 className="text-sm font-black text-slate-800 leading-tight mt-0.5 line-clamp-1 md:line-clamp-2">{wo.job_details}</h3>
                     <p className="hidden md:block text-xs font-bold text-gray-500 uppercase">{wo.customer}</p>
                   </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <StatusBadge status={wo.status} />
-                    {getQCApprovalProgress(wo) === 'partial' && <Badge color="orange">Partially Approved</Badge>}
-                  </div>
                 </div>
 
-                <div className="hidden md:flex flex-wrap gap-1">
-                  {(wo.assigned_departments || []).slice(0, 3).map(d => (
-                    <Badge key={d} color="indigo" className="!text-xs">{d.replace(/_/g, ' ')}</Badge>
-                  ))}
-                  {(wo.assigned_departments || []).length > 3 && (
-                    <Badge color="gray" className="!text-xs">+{(wo.assigned_departments || []).length - 3}</Badge>
-                  )}
+                <div className="flex flex-wrap gap-1">
+                  {(wo.assigned_departments || []).map(dept => {
+                    const ds = (wo.department_statuses || []).find(s => normalizeDepartment(s.department) === normalizeDepartment(dept));
+                    const qc = ds?.qc_status;
+                    let badgeClass = 'bg-gray-100 text-gray-600';
+                    let label = ds?.status ? STATUS_LABELS[ds.status] || ds.status : '—';
+                    if (qc === 'QC Approved') { badgeClass = 'bg-green-100 text-green-700'; label = 'QC Approved'; }
+                    else if (qc === 'QC Denied') { badgeClass = 'bg-red-100 text-red-700'; label = 'Denied'; }
+                    else if (ds?.status === 'Work Started') { badgeClass = 'bg-blue-100 text-blue-700'; }
+                    else if (ds?.status === 'Ready for QC') { badgeClass = 'bg-yellow-100 text-yellow-700'; }
+                    const deptLabel = dept.replace(/_/g, ' ');
+                    return (
+                      <span key={dept} className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${badgeClass}`}>
+                        {deptLabel}: {label}
+                      </span>
+                    );
+                  })}
                 </div>
 
                 <div className="flex items-center justify-between text-xs font-bold text-gray-600">
@@ -5602,9 +6564,9 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                     <span className="text-xs font-black text-gray-500 uppercase md:inline hidden">DRW</span>
                     <span className="text-xs font-bold text-slate-500 truncate md:hidden">{wo.customer}</span>
                     <span className="hidden md:inline text-xs font-mono font-bold text-slate-500 truncate">{wo.drawing || wo.itemInfo?.drawing_no || 'TBD'}</span>
-                    {wo.itemInfo?.drawing_image_url && (
+                    {(wo.drawing_image_url || wo.itemInfo?.drawing_image_url) && (
                       <button
-                        onClick={() => { setSelectedImageUrl(wo.itemInfo!.drawing_image_url!); setIsImageModalOpen(true); }}
+                        onClick={() => { setSelectedImageUrl(wo.drawing_image_url || wo.itemInfo!.drawing_image_url!); setIsImageModalOpen(true); }}
                         className="w-6 h-6 rounded-md bg-blue-50 flex items-center justify-center text-blue-500"
                         title="View Drawing PDF"
                       >
@@ -5629,7 +6591,8 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                   busy={busyCardStatusId === wo.id}
                 />
             </div>
-            ))}
+            );
+          })}
             {filteredOrders.length === 0 && <div className="p-10 md:p-20 text-center text-gray-500 italic font-semibold">No matching work orders found.</div>}
         </div>
       )}
@@ -5804,6 +6767,56 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
   const QC_FLOW = ['Pending QC', 'QC Approved', 'QC Denied'];
   const DISPATCH_FLOW = ['Ready for despatch', 'Dispatched'];
 
+  const getStatusDisplayLabel = (status: string): string => {
+    if (status === 'Not Started') return 'Order Entry';
+    if (status === 'Work Started') return 'Work Started';
+    if (status === 'Ready for QC') return 'Work done';
+    if (status === 'Ready for despatch') return 'Ready for Dispatch';
+    if (status === 'Dispatched') return 'Dispatched';
+    return status;
+  };
+
+  const getOverallStatusLabel = (workOrder: WorkOrder): string => {
+    const status = workOrder.status;
+    if (status === 'Ready for QC') {
+      const deptStatuses = Array.isArray(workOrder.department_statuses) ? workOrder.department_statuses : [];
+      if (deptStatuses.length > 0) {
+        const allApproved = deptStatuses.every(ds => ds.qc_status === 'QC Approved');
+        const allDenied = deptStatuses.every(ds => ds.qc_status === 'QC Denied');
+        if (allApproved) return 'QC Approved';
+        if (allDenied) return 'QC Denied';
+      }
+      return 'Work done';
+    }
+    return getStatusDisplayLabel(status);
+  };
+
+  const isAllQcApproved = (workOrder: WorkOrder): boolean => {
+    const deptStatuses = Array.isArray(workOrder.department_statuses) ? workOrder.department_statuses : [];
+    if (deptStatuses.length === 0) return false;
+    return deptStatuses.every(ds => ds.qc_status === 'QC Approved');
+  };
+
+  const renderStatusBadge = () => {
+    const status = wo.status;
+    const displayLabel = getOverallStatusLabel(wo as WorkOrder);
+    const styles: Record<string, { bg: string; text: string }> = {
+      'Not Started': { bg: 'bg-gray-100', text: 'text-gray-600' },
+      'Work Started': { bg: 'bg-blue-100', text: 'text-blue-600' },
+      'Work done': { bg: 'bg-yellow-100', text: 'text-yellow-600' },
+      'QC Approved': { bg: 'bg-emerald-100', text: 'text-emerald-600' },
+      'QC Denied': { bg: 'bg-red-100', text: 'text-red-600' },
+      'Ready for despatch': { bg: 'bg-purple-100', text: 'text-purple-600' },
+      'Dispatched': { bg: 'bg-indigo-100', text: 'text-indigo-600' },
+    };
+    const style = styles[displayLabel] || styles[status] || styles['Not Started'];
+    return (
+      <span className={`px-3 py-1 rounded-full text-xs font-bold ${style.bg} ${style.text}`}>
+        {displayLabel}
+      </span>
+    );
+  };
+
   return (
     <div className="space-y-3 sm:space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
       <div className="no-print">
@@ -5827,7 +6840,7 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                 {wo.parent_work_order_id && <p className="text-xs font-semibold text-purple-500 uppercase tracking-wider">Parent Item: {wo.parent_item_name || 'Parent Item'}</p>}
                 <p className="text-xs md:text-sm font-bold text-gray-500 uppercase tracking-tight">{wo.customer}</p>
               </div>
-              <StatusBadge status={wo.status} />
+              {renderStatusBadge()}
             </div>
           </Card>
 
@@ -5852,7 +6865,7 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                   <div className="flex items-center gap-1.5">
                     {STATUS_FLOW.map((step, idx) => {
                       const currentStepIdx = STATUS_FLOW.indexOf(wo.status);
-                      const state = idx < currentStepIdx ? 'completed' : idx === currentStepIdx ? 'current' : 'upcoming';
+                      const state = (idx < currentStepIdx || wo.status === 'Dispatched') ? 'completed' : idx === currentStepIdx ? 'current' : 'upcoming';
                       return (
                         <div key={step}
                           className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
@@ -5863,7 +6876,21 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                         />
                       );
                     })}
-                    <span className="ml-2 text-xs font-bold text-gray-500">{wo.status}</span>
+                    <span className="ml-2 text-xs font-bold text-gray-500">
+                      {getOverallStatusLabel(wo as WorkOrder)}
+                      {(wo as WorkOrder)?.status === 'Dispatched' && (() => {
+                        const dispatchEntry = ((wo as any)?.department_statuses || [])
+                          .find((ds: any) => ds.history?.find((h: any) => h.status === 'Dispatched'))
+                          ?.history?.find((h: any) => h.status === 'Dispatched');
+                        const name = dispatchEntry?.by;
+                        const time = dispatchEntry?.at;
+                        return name ? (
+                          <span className="ml-1 text-[10px] text-gray-400 font-semibold">
+                            · by {name} · {time ? new Date(time).toLocaleString('en-GB') : ''}
+                          </span>
+                        ) : null;
+                      })()}
+                    </span>
                   </div>
                 </div>
 
@@ -5906,18 +6933,29 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                              normalizeDepartment(dept).replace(/_/g, ' ')}
                           </span>
                         </div>
-                        <StatusBadge status={(deptStatus?.status || 'Not Started') as WOStatus} />
                       </div>
 
                       {/* Vertical Steps */}
                       <div className="px-3 py-3">
                         {DEPT_FLOW.map((step, stepIdx) => {
                           const state = getDeptStepState(stepIdx);
+                          let displayLabel: string;
+                          if (step === 'Not Started') {
+                            displayLabel = 'Order Entry';
+                          } else if (step === 'Work Started') {
+                            displayLabel = state === 'completed' ? 'Work done' : 'Work in progress';
+                          } else if (step === 'Ready for QC') {
+                            displayLabel = deptStatus?.qc_status || 'Ready for QC';
+                          } else {
+                            displayLabel = step;
+                          }
+                          const isCurrentDenied = state === 'current' && deptStatus?.qc_status === 'QC Denied';
                           return (
                             <div key={step} className="flex items-start gap-3 pb-5 last:pb-0 relative">
                               {stepIdx < DEPT_FLOW.length - 1 && (
                                 <div className={`absolute left-[11px] top-5 w-0.5 -z-0 transition-all duration-500 ${
                                   stepIdx < currentStepIdx ? 'bg-emerald-400' :
+                                  isCurrentDenied ? 'bg-red-400/40' :
                                   stepIdx === currentStepIdx ? 'bg-emerald-400/40' :
                                   'bg-gray-200'
                                 }`} style={{ height: 'calc(100% + 4px)' }} />
@@ -5925,12 +6963,16 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                               <div className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center z-10 transition-all duration-300 ${
                                 state === 'completed'
                                   ? 'bg-emerald-100 text-emerald-600 animate-check-pop'
+                                  : isCurrentDenied
+                                  ? 'bg-red-100 text-red-600 ring-4 ring-red-50'
                                   : state === 'current'
                                   ? 'bg-blue-100 text-blue-600 ring-4 ring-blue-50'
                                   : 'bg-gray-100 text-gray-300'
                               }`}>
                                 {state === 'completed' ? (
                                   <Check size={13} strokeWidth={3} />
+                                ) : isCurrentDenied ? (
+                                  <X size={13} strokeWidth={3} />
                                 ) : state === 'current' ? (
                                   <div className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse-dot" />
                                 ) : (
@@ -5941,14 +6983,22 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <p className={`text-sm font-bold leading-tight whitespace-nowrap ${
                                     state === 'completed' ? 'text-emerald-700' :
+                                    isCurrentDenied ? 'text-red-700' :
                                     state === 'current' ? 'text-blue-700' :
                                     'text-gray-500'
-                                  }`}>{step}</p>
-                                  {(state === 'completed' || state === 'current') && deptStatus?.updated_by && (
-                                    <span className="text-[10px] text-gray-500 font-semibold truncate max-w-[130px]">
-                                      · by {deptStatus.updated_by} · {deptStatus.updated_at ? new Date(deptStatus.updated_at).toLocaleString('en-GB') : ''}
-                                    </span>
-                                  )}
+                                  }`}>{displayLabel}</p>
+                                  {(state === 'completed' || state === 'current') && (() => {
+                                    const historyEntry = step === 'Ready for QC' && deptStatus?.qc_status
+                                      ? (deptStatus as any)?.history?.find((h: any) => h.qc_status === deptStatus.qc_status)
+                                      : (deptStatus as any)?.history?.find((h: any) => h.status === step);
+                                    const name = historyEntry?.by || deptStatus?.updated_by;
+                                    const time = historyEntry?.at || deptStatus?.updated_at;
+                                    return name ? (
+                                      <span className="text-[10px] text-gray-500 font-semibold truncate max-w-[130px]">
+                                        · by {name} · {time ? new Date(time).toLocaleString('en-GB') : ''}
+                                      </span>
+                                    ) : null;
+                                  })()}
                                 </div>
                               </div>
                             </div>
@@ -5998,16 +7048,11 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                               );
                             })}
                           </div>
-                          {deptStatus?.qc_status && deptStatus.updated_by && (
-                            <p className="text-[10px] text-gray-500 font-semibold text-center mt-1.5">
-                              by {deptStatus.updated_by} · {deptStatus.updated_at ? new Date(deptStatus.updated_at).toLocaleString('en-GB') : ''}
-                            </p>
-                          )}
                         </div>
                       )}
 
-                      {/* Office per-department status buttons */}
-                      {isOffice && (
+                      {/* Per-department status buttons */}
+                      {canEditDeptCard(dept, wo as WorkOrder, loggedInUser) && (
                         <div className="border-t border-gray-50 px-3 py-2.5">
                           {(() => {
                             const currentDeptStatus = deptStatus?.status || 'Not Started';
@@ -6029,15 +7074,27 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                               </div>
                             );
 
+                            if (currentQcStatus === 'QC Denied') {
+                              if (pendingDeptAction?.dept === dept && pendingDeptAction.status === 'Work Started') {
+                                return renderConfirm(getStatusDisplayLabel('Work Started'), 'Work Started');
+                              }
+                              return (
+                                <button onClick={() => setPendingDeptAction({ dept, status: 'Work Started' })}
+                                  className="w-full py-1.5 px-3 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg text-xs font-bold transition-all border border-red-100">
+                                  Change status to {getStatusDisplayLabel('Work Started')}
+                                </button>
+                              );
+                            }
+
                             if (currentQcStatus) return null;
 
                             if (nextStepIndex < DEPT_FLOW.length) {
                               const nextStatus = DEPT_FLOW[nextStepIndex];
-                              if (pendingDeptAction?.dept === dept && pendingDeptAction.status === nextStatus) return renderConfirm(nextStatus, nextStatus);
+                              if (pendingDeptAction?.dept === dept && pendingDeptAction.status === nextStatus) return renderConfirm(getStatusDisplayLabel(nextStatus), nextStatus);
                               return (
                                 <button onClick={() => setPendingDeptAction({ dept, status: nextStatus })}
                                   className="w-full py-1.5 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold transition-all border border-indigo-100">
-                                  Change status to {nextStatus}
+                                  Change status to {getStatusDisplayLabel(nextStatus)}
                                 </button>
                               );
                             }
@@ -6068,68 +7125,95 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
                 )}
 
                 {/* Dispatch/Delivery Card — vertical */}
-                <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden animate-fade-slide-up"
-                  style={{ animationDelay: `${(assignedProductionDepts.length + 1) * 0.08}s` }}>
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-gray-50">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-500">
-                        <Truck size={16} />
+                {(isAllQcApproved(wo as WorkOrder) || wo.status === 'Ready for despatch' || wo.status === 'Dispatched') ? (
+                  <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden animate-fade-slide-up"
+                    style={{ animationDelay: `${(assignedProductionDepts.length + 1) * 0.08}s` }}>
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-50">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-500">
+                          <Truck size={16} />
+                        </div>
+                        <span className="text-sm font-bold text-gray-800">Dispatch</span>
                       </div>
-                      <span className="text-sm font-bold text-gray-800">Dispatch</span>
                     </div>
-                    <StatusBadge status={wo.status} />
-                  </div>
-                  <div className="px-4 py-3">
-                    {DISPATCH_FLOW.map((step, stepIdx) => {
-                      const currentDispatchIdx = DISPATCH_FLOW.indexOf(wo.status);
-                      const state = stepIdx < currentDispatchIdx ? 'completed' : stepIdx === currentDispatchIdx ? 'current' : 'upcoming';
-                      return (
-                        <div key={step} className="flex items-start gap-3 pb-5 last:pb-0 relative">
-                          {stepIdx < DISPATCH_FLOW.length - 1 && (
-                            <div className={`absolute left-[11px] top-5 w-0.5 -z-0 transition-all duration-500 ${
-                              stepIdx < currentDispatchIdx ? 'bg-emerald-400' :
-                              stepIdx === currentDispatchIdx ? 'bg-emerald-400/40' :
-                              'bg-gray-200'
-                            }`} style={{ height: 'calc(100% + 4px)' }} />
-                          )}
-                          <div className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center z-10 transition-all duration-300 ${
-                            state === 'completed'
-                              ? 'bg-emerald-100 text-emerald-600 animate-check-pop'
-                              : state === 'current'
-                              ? 'bg-blue-100 text-blue-600 ring-4 ring-blue-50'
-                              : 'bg-gray-100 text-gray-300'
-                          }`}>
-                            {state === 'completed' ? (
-                              <Check size={13} strokeWidth={3} />
-                            ) : state === 'current' ? (
-                              <div className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse-dot" />
-                            ) : (
-                              <div className="w-2.5 h-2.5 rounded-full bg-gray-300" />
+                    <div className="px-4 py-3">
+                      {DISPATCH_FLOW.map((step, stepIdx) => {
+                        const currentDispatchIdx = DISPATCH_FLOW.indexOf(wo.status);
+                        const state = (stepIdx < currentDispatchIdx || wo.status === 'Dispatched') ? 'completed' : stepIdx === currentDispatchIdx ? 'current' : 'upcoming';
+                        return (
+                          <div key={step} className="flex items-start gap-3 pb-5 last:pb-0 relative">
+                            {stepIdx < DISPATCH_FLOW.length - 1 && (
+                              <div className={`absolute left-[11px] top-5 w-0.5 -z-0 transition-all duration-500 ${
+                                stepIdx < currentDispatchIdx ? 'bg-emerald-400' :
+                                stepIdx === currentDispatchIdx ? 'bg-emerald-400/40' :
+                                'bg-gray-200'
+                              }`} style={{ height: 'calc(100% + 4px)' }} />
                             )}
-                          </div>
-                          <div className="pt-0.5 min-w-0">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <p className={`text-sm font-bold leading-tight whitespace-nowrap ${
-                                state === 'completed' ? 'text-emerald-700' :
-                                state === 'current' ? 'text-blue-700' :
-                                'text-gray-500'
-                              }`}>{step}</p>
-                              {(state === 'completed' || state === 'current') && (() => {
-                                const info = statusActorMap.get(step);
-                                if (!info) return null;
-                                return (
-                                  <span className="text-[10px] text-gray-500 font-semibold truncate max-w-[180px]">
-                                    · by {info.actor_name} · {new Date(info.event_time).toLocaleString('en-GB')}
-                                  </span>
-                                );
-                              })()}
+                            <div className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center z-10 transition-all duration-300 ${
+                              state === 'completed'
+                                ? 'bg-emerald-100 text-emerald-600 animate-check-pop'
+                                : state === 'current'
+                                ? 'bg-blue-100 text-blue-600 ring-4 ring-blue-50'
+                                : 'bg-gray-100 text-gray-300'
+                            }`}>
+                              {state === 'completed' ? (
+                                <Check size={13} strokeWidth={3} />
+                              ) : state === 'current' ? (
+                                <div className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse-dot" />
+                              ) : (
+                                <div className="w-2.5 h-2.5 rounded-full bg-gray-300" />
+                              )}
+                            </div>
+                            <div className="pt-0.5 min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className={`text-sm font-bold leading-tight whitespace-nowrap ${
+                                  state === 'completed' ? 'text-emerald-700' :
+                                  state === 'current' ? 'text-blue-700' :
+                                  'text-gray-500'
+                                }`}>{step}</p>
+                                {(state === 'completed' || state === 'current') && (() => {
+                                  const info = statusActorMap.get(step);
+                                  if (info) {
+                                    return (
+                                      <span className="text-[10px] text-gray-500 font-semibold truncate max-w-[180px]">
+                                        · by {info.actor_name} · {new Date(info.event_time).toLocaleString('en-GB')}
+                                      </span>
+                                    );
+                                  }
+                                  const dispatchEntry = ((wo as any)?.department_statuses || [])
+                                    .find((ds: any) => ds.history?.find((h: any) => h.status === step))
+                                    ?.history?.find((h: any) => h.status === step);
+                                  const name = dispatchEntry?.by;
+                                  const time = dispatchEntry?.at;
+                                  return name ? (
+                                    <span className="text-[10px] text-gray-500 font-semibold truncate max-w-[180px]">
+                                      · by {name} · {time ? new Date(time).toLocaleString('en-GB') : ''}
+                                    </span>
+                                  ) : null;
+                                })()}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="bg-gray-50 rounded-xl border border-dashed border-gray-200 p-4 animate-fade-slide-up"
+                    style={{ animationDelay: `${(assignedProductionDepts.length + 1) * 0.08}s` }}>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 animate-pulse">
+                        <Lock size={18} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-gray-600">Dispatch Locked</p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          Dispatch will be available after QC approval.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           </div>
@@ -6150,7 +7234,18 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Blueprint Ref</span>
-                <span className="text-[11px] font-mono font-semibold text-gray-700 px-2 py-1 bg-gray-50 rounded break-all max-w-[140px] text-right">{wo.drawing || '—'}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-mono font-semibold text-gray-700 px-2 py-1 bg-gray-50 rounded break-all max-w-[100px] text-right">{wo.drawing || (wo as any).itemInfo?.drawing_no || '—'}</span>
+                  {(wo.drawing_image_url || (wo as any).itemInfo?.drawing_image_url) && (
+                    <button
+                      onClick={() => window.open(wo.drawing_image_url || (wo as any).itemInfo?.drawing_image_url, '_blank')}
+                      className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
+                      title="Open drawing PDF"
+                    >
+                      <FileText size={14} />
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">QC/Ready Date</span>
@@ -6906,21 +8001,21 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
                     <button onClick={() => addComponentToItem(item.local_id, componentPicker[item.local_id] || '')} className="w-full md:w-auto px-3 py-2 bg-slate-900 text-white rounded-lg text-xs font-black">Add Component</button>
                   </div>
 
-                  <div className="hidden md:block overflow-x-auto border border-gray-100 rounded-lg">
-                    <table className="w-full min-w-[700px] text-sm">
+                  <div className="hidden md:block overflow-x-auto max-h-[85vh] overflow-y-auto border border-gray-100 rounded-lg">
+                    <table className="w-full min-w-[700px] text-sm border-separate">
                       <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black">
                         <tr>
-                          <th className="px-3 py-2 text-left">Component</th>
-                          <th className="px-3 py-2 text-left">Depts</th>
-                          <th className="px-3 py-2 text-left">Qty / Item</th>
-                          <th className="px-3 py-2 text-left">Total Qty</th>
-                          <th className="px-3 py-2 text-right">Action</th>
+                          <th className="px-3 py-2 text-left sticky left-0 top-0 bg-gray-50 z-20">Component</th>
+                          <th className="px-3 py-2 text-left sticky top-0 bg-gray-50 z-10">Depts</th>
+                          <th className="px-3 py-2 text-left sticky top-0 bg-gray-50 z-10">Qty / Item</th>
+                          <th className="px-3 py-2 text-left sticky top-0 bg-gray-50 z-10">Total Qty</th>
+                          <th className="px-3 py-2 text-right sticky top-0 bg-gray-50 z-10">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
                         {item.components.map(comp => (
                           <tr key={comp.component_name}>
-                            <td className="px-3 py-2 font-bold text-gray-700">{comp.component_name}</td>
+                            <td className="px-3 py-2 font-bold text-gray-700 sticky left-0 bg-white z-10">{comp.component_name}</td>
                             <td className="px-3 py-2">
                               <div className="flex gap-1 flex-wrap">{comp.departments.map(d => <Badge key={d} color="gray">{d}</Badge>)}</div>
                             </td>
@@ -6985,21 +8080,21 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
           <h3 className="font-black text-gray-800">{bomMode === 'unsaved' ? 'Items Without BOM Components' : 'Items With Saved BOM Components'}</h3>
           <span className="text-xs font-bold text-gray-500">{bomMode === 'unsaved' ? filteredUnsavedRows.length : filteredSavedRows.length} row(s)</span>
         </div>
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full min-w-[850px] text-sm">
+        <div className="hidden md:block overflow-x-auto max-h-[85vh] overflow-y-auto">
+          <table className="w-full min-w-[850px] text-sm border-separate">
             <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b">
               <tr>
-                <th className="px-4 py-2 text-left">Item Name</th>
-                <th className="px-4 py-2 text-left">Company</th>
-                <th className="px-4 py-2 text-left">Qty</th>
-                <th className="px-4 py-2 text-left">Updated</th>
-                <th className="px-4 py-2 text-right">Actions</th>
+                <th className="px-4 py-2 text-left sticky left-0 top-0 bg-gray-50 z-20">Item Name</th>
+                <th className="px-4 py-2 text-left sticky top-0 bg-gray-50 z-10">Company</th>
+                <th className="px-4 py-2 text-left sticky top-0 bg-gray-50 z-10">Qty</th>
+                <th className="px-4 py-2 text-left sticky top-0 bg-gray-50 z-10">Updated</th>
+                <th className="px-4 py-2 text-right sticky top-0 bg-gray-50 z-10">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {bomMode === 'saved' && filteredSavedRows.map(row => (
                 <tr key={`${row.company_name}-${row.item_id}`}>
-                  <td className="px-4 py-2 font-black text-indigo-700">{row.item_name}</td>
+                  <td className="px-4 py-2 font-black text-indigo-700 sticky left-0 bg-white z-10">{row.item_name}</td>
                   <td className="px-4 py-2 font-semibold text-gray-700">{row.company_name}</td>
                   <td className="px-4 py-2">{row.components_count} component(s)</td>
                   <td className="px-4 py-2 text-xs text-gray-500">Saved in Item Master</td>
@@ -7011,7 +8106,7 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
               ))}
               {bomMode === 'unsaved' && filteredUnsavedRows.map(row => (
                 <tr key={`${row.company_name}-${row.item_id}`}>
-                  <td className="px-4 py-2 font-black text-indigo-700">{row.item_name}</td>
+                  <td className="px-4 py-2 font-black text-indigo-700 sticky left-0 bg-white z-10">{row.item_name}</td>
                   <td className="px-4 py-2 font-semibold text-gray-700">{row.company_name}</td>
                   <td className="px-4 py-2">{row.default_qty}</td>
                   <td className="px-4 py-2 text-xs text-gray-500">-</td>
@@ -7427,19 +8522,19 @@ const ProductionPlanList: React.FC<{ onError: () => void; onGenerate: (ids: numb
       </div>
 
       <Card className="p-0 overflow-hidden shadow-lg border-2 border-indigo-50">
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-left text-sm">
+        <div className="hidden md:block overflow-x-auto max-h-[85vh] overflow-y-auto">
+          <table className="w-full text-left text-sm border-separate">
             <thead className="bg-[#0f172a] text-white text-[10px] font-black uppercase tracking-widest">
               <tr>
-                  <th className="px-6 py-5 w-10">
+                  <th className="px-6 py-5 w-10 sticky top-0 bg-[#0f172a] z-10">
                       <button onClick={toggleSelectAll} className="text-white hover:text-indigo-200">
                           {paginatedPlanOrders.length > 0 && paginatedPlanOrders.every(wo => selectedIds.includes(wo.id)) ? <CheckSquare size={18}/> : <Square size={18}/>} 
                       </button>
                   </th>
-                  <th className="px-6 py-5 whitespace-nowrap">Order ID</th>
-                  <th className="px-6 py-5 whitespace-nowrap">Client</th>
-                  <th className="px-6 py-5 whitespace-nowrap">Target Item</th>
-                  <th className="px-6 py-5 text-right whitespace-nowrap">Action</th>
+                  <th className="px-6 py-5 whitespace-nowrap sticky left-0 top-0 bg-[#0f172a] z-20">Order ID</th>
+                  <th className="px-6 py-5 whitespace-nowrap sticky top-0 bg-[#0f172a] z-10">Client</th>
+                  <th className="px-6 py-5 whitespace-nowrap sticky top-0 bg-[#0f172a] z-10">Target Item</th>
+                  <th className="px-6 py-5 text-right whitespace-nowrap sticky top-0 bg-[#0f172a] z-10">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -7450,7 +8545,7 @@ const ProductionPlanList: React.FC<{ onError: () => void; onGenerate: (ids: numb
                           {selectedIds.includes(wo.id) ? <CheckSquare size={18} className="text-indigo-600"/> : <Square size={18}/>}
                       </button>
                   </td>
-                  <td className="px-6 py-4 font-black text-indigo-600">#{wo.id}</td>
+                  <td className="px-6 py-4 font-black text-indigo-600 sticky left-0 bg-white z-10">#{wo.id}</td>
                   <td className="px-6 py-4 font-bold text-gray-800">{wo.customer}</td>
                   <td className="px-6 py-4">
                     <div className="text-xs font-bold text-gray-700">{wo.job_details}</div>
@@ -7483,10 +8578,13 @@ const ProductionPlanList: React.FC<{ onError: () => void; onGenerate: (ids: numb
           )}
 
           {paginatedPlanOrders.map(wo => (
-            <div key={wo.id} className={`rounded-xl border p-3 ${selectedIds.includes(wo.id) ? 'border-indigo-300 bg-indigo-50/50' : 'border-gray-200 bg-white'}`}>
+              <div key={wo.id} className={`rounded-xl border p-3 ${selectedIds.includes(wo.id) ? 'border-indigo-300 bg-indigo-50/50' : 'border-gray-200 bg-white'}`}>
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-[10px] font-black text-indigo-600">ORDER #{wo.id}</div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <div className="text-[10px] font-black text-indigo-600">ORDER #{wo.id}</div>
+                    <div className="text-[10px] font-semibold text-gray-400">Entry: {formatEntryDate(wo.entry_date || wo.created_at || (wo as any).created)}</div>
+                  </div>
                   <div className="font-black text-gray-800 mt-0.5 leading-tight text-xs">{wo.job_details}</div>
                   <div className="text-[11px] text-gray-500 font-semibold mt-0.5">{wo.customer}</div>
                 </div>
@@ -7697,6 +8795,8 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
   const [alertsDateFilter, setAlertsDateFilter] = useState('all');
   const [alertsCustomFrom, setAlertsCustomFrom] = useState('');
   const [alertsCustomTo, setAlertsCustomTo] = useState('');
+  const [errorsOnly, setErrorsOnly] = useState(false);
+  const [sortConfig, setSortConfig] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
   const activityOffsetRef = useRef(0);
   const notificationOffsetRef = useRef(0);
   const ACTIVITY_PAGE = 100;
@@ -7815,10 +8915,86 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
         const evDepts = getEventDepartments(ev);
         if (!evDepts.some(d => d.toLowerCase() === departmentFilter.toLowerCase())) return false;
       }
+      if (errorsOnly) {
+        const failed = Number(ev.failed || 0);
+        const isError = ev.severity === 'error';
+        if (failed <= 0 && !isError) return false;
+      }
       if (!filterByDate(ev.event_time, alertsDateFilter, alertsCustomFrom, alertsCustomTo)) return false;
       return true;
     });
-  }, [events, searchQuery, userFilter, departmentFilter, alertsDateFilter, alertsCustomFrom, alertsCustomTo]);
+  }, [events, searchQuery, userFilter, departmentFilter, alertsDateFilter, alertsCustomFrom, alertsCustomTo, errorsOnly]);
+
+  const sortedEvents = useMemo(() => {
+    if (!sortConfig) return filteredEvents;
+    const { key, dir } = sortConfig;
+    const sortDir = dir === 'asc' ? 1 : -1;
+    return [...filteredEvents].sort((a: any, b: any) => {
+      let aVal: any;
+      let bVal: any;
+      if (key === 'time') {
+        aVal = getEventTimestamp(a);
+        bVal = getEventTimestamp(b);
+      } else if (key === 'type') {
+        aVal = getEventType(a);
+        bVal = getEventType(b);
+      } else if (key === 'action') {
+        aVal = getEventAction(a);
+        bVal = getEventAction(b);
+      } else if (key === 'title') {
+        aVal = String(a.title || '').toLowerCase();
+        bVal = String(b.title || '').toLowerCase();
+      } else if (key === 'body') {
+        aVal = String(a.body || '').toLowerCase();
+        bVal = String(b.body || '').toLowerCase();
+      } else if (key === 'actor') {
+        aVal = getEventActor(a).toLowerCase();
+        bVal = getEventActor(b).toLowerCase();
+      } else if (key === 'departments') {
+        aVal = getEventDepartments(a).join(',').toLowerCase();
+        bVal = getEventDepartments(b).join(',').toLowerCase();
+      } else if (key === 'wo') {
+        aVal = a.work_order_id || 0;
+        bVal = b.work_order_id || 0;
+      } else if (key === 'customer') {
+        aVal = String(a.customer_name || '').toLowerCase();
+        bVal = String(b.customer_name || '').toLowerCase();
+      } else if (key === 'target') {
+        aVal = String(a.item_name || a.target_label || '').toLowerCase();
+        bVal = String(b.item_name || b.target_label || '').toLowerCase();
+      } else if (key === 'targets') {
+        aVal = Number(a.targets) || 0;
+        bVal = Number(b.targets) || 0;
+      } else if (key === 'sent') {
+        aVal = Number(a.sent) || 0;
+        bVal = Number(b.sent) || 0;
+      } else if (key === 'failed') {
+        aVal = Number(a.failed) || 0;
+        bVal = Number(b.failed) || 0;
+      } else {
+        return 0;
+      }
+      if (aVal < bVal) return -1 * sortDir;
+      if (aVal > bVal) return 1 * sortDir;
+      return 0;
+    });
+  }, [filteredEvents, sortConfig]);
+
+  const handleSort = (key: string) => {
+    setSortConfig(prev => {
+      if (prev?.key === key) {
+        if (prev.dir === 'desc') return null;
+        return { key, dir: 'desc' };
+      }
+      return { key, dir: 'asc' };
+    });
+  };
+
+  const SortIcon = ({ col }: { col: string }) => (
+    sortConfig?.key === col
+      ? <span className="ml-1 text-indigo-500">{sortConfig.dir === 'asc' ? '↑' : '↓'}</span>
+      : <span className="ml-1 opacity-25">↕</span>
+  );
 
   if (loading) return <LoadingState message="Loading activity log..." />;
 
@@ -7856,6 +9032,14 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
             <input type="date" value={alertsCustomTo} onChange={e => setAlertsCustomTo(e.target.value)} className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs bg-white" />
           </>
         )}
+        <button
+          onClick={() => setErrorsOnly(v => !v)}
+          className={`px-4 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+            errorsOnly ? 'bg-red-600 text-white border-red-600' : 'bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200'
+          }`}
+        >
+          Errors Only {errorsOnly && '✓'}
+        </button>
         <button onClick={fetchEvents} className="px-4 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-black hover:bg-blue-700 transition-colors">Refresh</button>
       </div>
 
@@ -7899,31 +9083,57 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
       </div>
 
       <Card className="hidden md:block p-0 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1180px] text-sm">
+        <div className="overflow-x-auto max-h-[85vh] overflow-y-auto">
+          <table className="w-full min-w-[1180px] text-sm border-separate">
             <thead className="bg-gray-50 text-[10px] uppercase tracking-widest text-gray-500 font-black border-b">
               <tr>
-                <th className="px-4 py-2 text-left">Time</th>
-                <th className="px-4 py-2 text-left">Type</th>
-                <th className="px-4 py-2 text-left">Action</th>
-                <th className="px-4 py-2 text-left">Title</th>
-                <th className="px-4 py-2 text-left">Message</th>
-                <th className="px-4 py-2 text-left">Done By</th>
-                <th className="px-4 py-2 text-left">Departments</th>
-                <th className="px-4 py-2 text-left">WO #</th>
-                <th className="px-4 py-2 text-left">Customer</th>
-                <th className="px-4 py-2 text-left">Item/Target</th>
-                <th className="px-4 py-2 text-left">Targets</th>
-                <th className="px-4 py-2 text-left">Sent</th>
-                <th className="px-4 py-2 text-left">Failed</th>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors sticky left-0 top-0 bg-gray-50 z-20" onClick={() => handleSort('time')}>
+                  <span className="inline-flex items-center">Time<SortIcon col="time" /></span>
+                </th>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('type')}>
+                  <span className="inline-flex items-center">Type<SortIcon col="type" /></span>
+                </th>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('action')}>
+                  <span className="inline-flex items-center">Action<SortIcon col="action" /></span>
+                </th>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('title')}>
+                  <span className="inline-flex items-center">Title<SortIcon col="title" /></span>
+                </th>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('body')}>
+                  <span className="inline-flex items-center">Message<SortIcon col="body" /></span>
+                </th>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('actor')}>
+                  <span className="inline-flex items-center">Done By<SortIcon col="actor" /></span>
+                </th>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('departments')}>
+                  <span className="inline-flex items-center">Departments<SortIcon col="departments" /></span>
+                </th>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('wo')}>
+                  <span className="inline-flex items-center">WO #<SortIcon col="wo" /></span>
+                </th>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('customer')}>
+                  <span className="inline-flex items-center">Customer<SortIcon col="customer" /></span>
+                </th>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('target')}>
+                  <span className="inline-flex items-center">Item/Target<SortIcon col="target" /></span>
+                </th>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('targets')}>
+                  <span className="inline-flex items-center">Targets<SortIcon col="targets" /></span>
+                </th>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('sent')}>
+                  <span className="inline-flex items-center">Sent<SortIcon col="sent" /></span>
+                </th>
+                <th className="px-4 py-2 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('failed')}>
+                  <span className="inline-flex items-center">Failed<SortIcon col="failed" /></span>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filteredEvents.map((ev: any) => {
+              {sortedEvents.map((ev: any) => {
                 const departments = getEventDepartments(ev);
                 return (
                   <tr key={`${ev._source}-${ev.id}`}>
-                    <td className="px-4 py-2 text-xs text-gray-500 whitespace-nowrap">{formatEventTime(ev)}</td>
+                    <td className="px-4 py-2 text-xs text-gray-500 whitespace-nowrap sticky left-0 bg-white z-10">{formatEventTime(ev)}</td>
                     <td className="px-4 py-2"><Badge color="gray">{getEventType(ev)}</Badge></td>
                     <td className="px-4 py-2 text-xs font-black text-slate-700 whitespace-nowrap">{getEventAction(ev)}</td>
                     <td className="px-4 py-2 font-black text-slate-800 whitespace-nowrap">{ev.title}</td>
@@ -7943,7 +9153,7 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
                   </tr>
                 );
               })}
-              {filteredEvents.length === 0 && (
+              {sortedEvents.length === 0 && (
                 <tr>
                   <td colSpan={13} className="px-4 py-10 text-center text-gray-500 italic font-semibold">No activity events found.</td>
                 </tr>
@@ -7971,66 +9181,87 @@ const NotificationAuditView: React.FC<{ onError: () => void }> = ({ onError }) =
 const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<any[]>([]);
-  const [dispatchLogs, setDispatchLogs] = useState<any[]>([]);
-  const [productionReports, setProductionReports] = useState<any[]>([]);
   const [items, setItems] = useState<Item[]>([]);
-  const [reportType, setReportType] = useState<'component-usage' | 'item-usage' | 'on-time' | 'delayed' | 'dept-wise' | 'company-performance'>('component-usage');
+  const [components, setComponents] = useState<ChildItem[]>([]);
+  const [dispatchLogs, setDispatchLogs] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<'component-usage' | 'item-usage' | 'delivery-report'>('component-usage');
+
+  // Date range (shared across tabs)
+  const [datePreset, setDatePreset] = useState<'today' | '7d' | '30d' | '90d' | 'all' | 'custom'>('all');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
-  const [companySearch, setCompanySearch] = useState('');
-  const [activePreset, setActivePreset] = useState<'today' | '7d' | '30d' | '90d' | 'all' | null>(null);
-  const [sortConfig, setSortConfig] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
-  const [expandedComponent, setExpandedComponent] = useState<string | null>(null);
-  const [exportMode, setExportMode] = useState<'compact' | 'detailed'>('compact');
-  const [showExportDropdown, setShowExportDropdown] = useState(false);
-  const [showDateDropdown, setShowDateDropdown] = useState(false);
+  const [dateField, setDateField] = useState<'entry_date' | 'dispatched_date'>('dispatched_date');
 
-  const toIsoDate = (date: Date) => date.toISOString().slice(0, 10);
+  // Component Usage tab
+  const [componentSearch, setComponentSearch] = useState('');
+  const [selectedComponentNames, setSelectedComponentNames] = useState<Set<string>>(new Set());
+  const [showComponentReport, setShowComponentReport] = useState(false);
+
+  // Item Usage tab
+  const [itemSearch, setItemSearch] = useState('');
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<number>>(new Set());
+  const [showItemReport, setShowItemReport] = useState(false);
+
+  // Export dropdown
+  const [showExportDropdown, setShowExportDropdown] = useState(false);
 
   useEffect(() => {
-    const fetchReportData = async () => {
+    const close = () => setShowExportDropdown(false);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, []);
+
+  useEffect(() => {
+    const fetchData = async () => {
       setLoading(true);
       try {
-        const [{ data: woRes, error: woErr }, { data: dispatchRes, error: dispatchErr }, { data: prodRes }, { data: itemsRes }] = await Promise.all([
+        const [woRes, itemsData, compData, dispatchRes] = await Promise.all([
           supabase.from('work_orders').select('*').order('id', { ascending: false }),
-          supabase.from('dispatch_logs').select('*').order('created_at', { ascending: false }),
-          supabase.from('production_reports').select('*'),
-          supabase.from('items').select('*'),
+          loadCachedCollection<Item>('items'),
+          loadCachedCollection<ChildItem>('child_items'),
+          supabase.from('dispatch_logs').select('work_order_id, dispatch_date').order('dispatch_date', { ascending: true }),
         ]);
-
-        if (woErr?.code === '42P01' || dispatchErr?.code === '42P01') {
-          onError();
-          return;
-        }
-
-        if (woRes) {
-          const normalized = woRes.map((wo: any) => ({
-            ...wo,
-            assigned_departments: parseAssignedDepartments(wo.assigned_departments),
-          }));
-          setOrders(normalized);
-        }
-
-        if (dispatchErr) {
-          console.warn('Dispatch logs fetch issue:', dispatchErr.message);
-        }
-        setDispatchLogs(dispatchRes || []);
-        setProductionReports(prodRes || []);
-        setItems(itemsRes || []);
-      } catch (e) {
-        onError();
-      }
+        if (woRes.error?.code === '42P01') { onError(); return; }
+        if (woRes.data) setOrders(woRes.data);
+        setItems(itemsData || []);
+        setComponents(compData || []);
+        setDispatchLogs(dispatchRes?.data || []);
+      } catch (e) { onError(); }
       setLoading(false);
     };
-
-    fetchReportData();
+    fetchData();
   }, [onError]);
 
-  const orderById = useMemo(() => {
-    const map = new Map<number, any>();
-    orders.forEach(order => map.set(Number(order.id), order));
-    return map;
-  }, [orders]);
+  const toIsoDate = (d: Date) => d.toISOString().slice(0, 10);
+
+  const applyDatePreset = (preset: 'today' | '7d' | '30d' | '90d' | 'all') => {
+    setDatePreset(preset);
+    if (preset === 'all') { setFromDate(''); setToDate(''); return; }
+    const now = new Date();
+    if (preset === 'today') { setFromDate(toIsoDate(now)); setToDate(toIsoDate(now)); return; }
+    const days = preset === '7d' ? 7 : preset === '30d' ? 30 : 90;
+    const from = new Date(now); from.setDate(now.getDate() - days);
+    setFromDate(toIsoDate(from)); setToDate(toIsoDate(now));
+  };
+
+  const inDateRange = (dateStr: string | null | undefined) => {
+    if (!dateStr) return datePreset === 'all';
+    if (datePreset === 'all') return true;
+    const d = new Date(dateStr.slice(0, 10) + 'T00:00:00');
+    if (datePreset === 'today') {
+      const t = new Date(); t.setHours(0, 0, 0, 0);
+      return d.getTime() === t.getTime();
+    }
+    if (datePreset === 'custom') {
+      if (fromDate) { const f = new Date(fromDate + 'T00:00:00'); if (d < f) return false; }
+      if (toDate) { const t = new Date(toDate + 'T23:59:59'); if (d > t) return false; }
+      return true;
+    }
+    const days = datePreset === '7d' ? 7 : datePreset === '30d' ? 30 : 90;
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const from = new Date(now); from.setDate(now.getDate() - days);
+    return d >= from && d <= now;
+  };
 
   const itemsById = useMemo(() => {
     const map = new Map<number, Item>();
@@ -8038,369 +9269,319 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
     return map;
   }, [items]);
 
-  const parseDate = (value: string | null | undefined, fallbackMidday = false): Date | null => {
-    if (!value) return null;
-    const date = new Date(fallbackMidday ? `${value}T12:00:00` : value);
-    return Number.isNaN(date.getTime()) ? null : date;
-  };
+  const dispatchDateByOrderId = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const log of dispatchLogs) {
+      const woId = Number(log.work_order_id);
+      const d = log.dispatch_date;
+      if (!woId || !d) continue;
+      const existing = map.get(woId);
+      if (!existing || d < existing) map.set(woId, d);
+    }
+    return map;
+  }, [dispatchLogs]);
 
-  const inRange = (date: Date | null) => {
-    const from = fromDate ? parseDate(`${fromDate}T00:00:00`) : null;
-    const to = toDate ? parseDate(`${toDate}T23:59:59`) : null;
-    if (!from && !to) return true;
-    if (!date) return false;
-    if (from && date < from) return false;
-    if (to && date > to) return false;
-    return true;
-  };
+  const filteredComponents = useMemo(() => {
+    const q = componentSearch.trim().toLowerCase();
+    return components.filter(c => {
+      const name = String(c.name || '');
+      if (!name) return false;
+      if (q && !name.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [components, componentSearch]);
 
-  const delayDays = (dispatchDate: Date, etd: Date) => Math.max(0, Math.ceil((dispatchDate.getTime() - etd.getTime()) / 86400000));
+  const filteredItems = useMemo(() => {
+    const q = itemSearch.trim().toLowerCase();
+    return items.filter(it => {
+      const name = String(it.name || '');
+      if (!name) return false;
+      if (q && !name.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [items, itemSearch]);
 
-  const componentUsageRows = useMemo(() => {
-    const q = companySearch.trim().toLowerCase();
-    const result: { component: string; parentItem: string; qtyUsed: number; company: string; orderId: number }[] = [];
-    for (const order of orders) {
-      if (order.status !== 'Dispatched') continue;
-      const d = order.etd ? parseDate(order.etd, true) : null;
-      if (d && !inRange(d)) continue;
-      const c = String(order.customer || 'Unknown');
-      if (q && !c.toLowerCase().includes(q)) continue;
-      const item = itemsById.get(Number(order.source_item_id || order.itemId));
+  const componentReportRows = useMemo(() => {
+    if (!showComponentReport) return [];
+    const grouped = new Map<string, { componentName: string; itemName: string; qty: number }>();
+    for (const wo of orders) {
+      if (wo.status !== 'Ready for despatch' && wo.status !== 'Dispatched') continue;
+      const dateVal = dateField === 'entry_date' ? (wo.entry_date || wo.created_at) : dispatchDateByOrderId.get(Number(wo.id));
+      if (!dateVal) continue;
+      if (!inDateRange(dateVal)) continue;
+      const item = itemsById.get(Number(wo.source_item_id || wo.itemId));
       if (!item?.children) continue;
       for (const child of item.children) {
-        const qty = (child.qtyPerMaster || 0) * Number(order.qty);
-        result.push({ component: child.name, parentItem: item.name, qtyUsed: qty, company: c, orderId: Number(order.id) });
+        if (!selectedComponentNames.has(child.name)) continue;
+        const qty = (Number(child.qtyPerMaster) || 0) * Number(wo.qty);
+        const key = `${child.name}||${item.name}`;
+        const existing = grouped.get(key);
+        if (existing) existing.qty += qty;
+        else grouped.set(key, { componentName: child.name, itemName: item.name, qty });
       }
     }
-    return result;
-  }, [orders, itemsById, fromDate, toDate, companySearch]);
+    return Array.from(grouped.values()).sort((a, b) =>
+      a.componentName.localeCompare(b.componentName) || a.itemName.localeCompare(b.itemName)
+    );
+  }, [showComponentReport, orders, itemsById, selectedComponentNames, datePreset, fromDate, toDate, dateField, dispatchDateByOrderId]);
 
-  const componentUsageCompact = useMemo(() => {
-    const map = new Map<string, { component: string; totalQty: number; parentItems: Set<string>; companies: Set<string>; orderCount: number }>();
-    for (const row of componentUsageRows) {
-      const existing = map.get(row.component);
-      if (existing) {
-        existing.totalQty += row.qtyUsed;
-        existing.parentItems.add(row.parentItem);
-        existing.companies.add(row.company);
-        existing.orderCount++;
-      } else {
-        map.set(row.component, {
-          component: row.component,
-          totalQty: row.qtyUsed,
-          parentItems: new Set([row.parentItem]),
-          companies: new Set([row.company]),
-          orderCount: 1,
-        });
-      }
+  const itemReportRows = useMemo(() => {
+    if (!showItemReport) return [];
+    const grouped = new Map<string, { itemName: string; qty: number }>();
+    for (const wo of orders) {
+      if (wo.status !== 'Ready for despatch' && wo.status !== 'Dispatched') continue;
+      const dateVal = dateField === 'entry_date' ? (wo.entry_date || wo.created_at) : dispatchDateByOrderId.get(Number(wo.id));
+      if (!dateVal) continue;
+      if (!inDateRange(dateVal)) continue;
+      const item = itemsById.get(Number(wo.source_item_id || wo.itemId));
+      if (!item) continue;
+      if (!selectedItemIds.has(Number(item.id))) continue;
+      const name = item.name;
+      const existing = grouped.get(name);
+      if (existing) existing.qty += Number(wo.qty);
+      else grouped.set(name, { itemName: name, qty: Number(wo.qty) });
     }
-    return Array.from(map.values()).map(r => ({ ...r, parentItemsList: Array.from(r.parentItems).join(', '), companyCount: r.companies.size }));
-  }, [componentUsageRows]);
+    return Array.from(grouped.values()).sort((a, b) => b.qty - a.qty);
+  }, [showItemReport, orders, itemsById, selectedItemIds, datePreset, fromDate, toDate, dateField, dispatchDateByOrderId]);
 
-  const itemUsageRows = useMemo(() => {
-    const q = companySearch.trim().toLowerCase();
-    const grouped = new Map<string, { item: string; orders: number; totalQty: number; companies: Set<string> }>();
-    for (const order of orders) {
-      if (order.status !== 'Dispatched') continue;
-      const d = order.etd ? parseDate(order.etd, true) : null;
-      if (d && !inRange(d)) continue;
-      const c = String(order.customer || 'Unknown');
-      if (q && !c.toLowerCase().includes(q)) continue;
-      const name = String(order.job_details || 'Unknown');
-      const row = grouped.get(name) || { item: name, orders: 0, totalQty: 0, companies: new Set<string>() };
-      row.orders += 1;
-      row.totalQty += Number(order.qty) || 0;
-      row.companies.add(c);
-      grouped.set(name, row);
-    }
-    return Array.from(grouped.values()).map(r => ({ ...r, companyCount: r.companies.size })).sort((a, b) => b.orders - a.orders);
-  }, [orders, fromDate, toDate, companySearch]);
+  const componentTotalQty = componentReportRows.reduce((s, r) => s + r.qty, 0);
+  const itemTotalQty = itemReportRows.reduce((s, r) => s + r.qty, 0);
 
-  const onTimeRows = useMemo(() => {
-    const q = companySearch.trim().toLowerCase();
-    return dispatchLogs.map((log: any) => {
-      const order = orderById.get(Number(log.work_order_id));
-      if (!order) return null;
-      const d = parseDate(log.created_at);
-      const etd = parseDate(order.etd, true);
-      if (!d || !etd || d > etd) return null;
-      if (!inRange(d)) return null;
-      const c = String(order.customer || 'Unknown');
-      if (q && !c.toLowerCase().includes(q)) return null;
-      return { ...log, order, when: d };
-    }).filter(Boolean);
-  }, [dispatchLogs, orderById, fromDate, toDate, companySearch]);
-
-  const delayedRows = useMemo(() => {
-    const q = companySearch.trim().toLowerCase();
-    return dispatchLogs.map((log: any) => {
-      const order = orderById.get(Number(log.work_order_id));
-      if (!order) return null;
-      const d = parseDate(log.created_at);
-      const etd = parseDate(order.etd, true);
-      if (!d || !etd || d <= etd) return null;
-      if (!inRange(d)) return null;
-      const c = String(order.customer || 'Unknown');
-      if (q && !c.toLowerCase().includes(q)) return null;
-      return { ...log, order, when: d, daysDelay: delayDays(d, etd) };
-    }).filter(Boolean);
-  }, [dispatchLogs, orderById, fromDate, toDate, companySearch]);
-
-  const deptWiseRows = useMemo(() => {
-    const grouped = new Map<string, { dept: string; reports: number; shiftHrs: number; otHrs: number; totalHrs: number; qtyProduced: number }>();
-    for (const pr of productionReports) {
-      const d = parseDate(pr.date);
-      if (!inRange(d)) continue;
-      const name = String(pr.department || 'Unknown');
-      const row = grouped.get(name) || { dept: name, reports: 0, shiftHrs: 0, otHrs: 0, totalHrs: 0, qtyProduced: 0 };
-      row.reports += 1;
-      row.shiftHrs += Number(pr.total_shift_hours) || 0;
-      row.otHrs += Number(pr.total_ot_hours) || 0;
-      row.totalHrs += Number(pr.grand_total_hours) || 0;
-      row.qtyProduced += Number(pr.qty_produced) || 0;
-      if (pr.items) for (const item of pr.items) row.qtyProduced += Number(item.qty_produced) || 0;
-      grouped.set(name, row);
-    }
-    return Array.from(grouped.values()).sort((a, b) => b.reports - a.reports);
-  }, [productionReports, fromDate, toDate]);
-
-  const companyPerfRows = useMemo(() => {
-    const q = companySearch.trim().toLowerCase();
-    const grouped = new Map<string, { company: string; totalWOs: number; totalQty: number; onTime: number; delayed: number }>();
-    for (const order of orders) {
-      if (order.status !== 'Dispatched') continue;
-      const d = order.etd ? parseDate(order.etd, true) : null;
-      if (d && !inRange(d)) continue;
-      const c = String(order.customer || 'Unknown');
-      if (q && !c.toLowerCase().includes(q)) continue;
-      const row = grouped.get(c) || { company: c, totalWOs: 0, totalQty: 0, onTime: 0, delayed: 0 };
-      row.totalWOs += 1;
-      row.totalQty += Number(order.qty) || 0;
-      const orderDispatches = dispatchLogs.filter((dl: any) => Number(dl.work_order_id) === Number(order.id));
-      if (orderDispatches.length > 0) {
-        const etd = parseDate(order.etd, true);
-        if (etd) {
-          const allOnTime = orderDispatches.every((dl: any) => { const dd = parseDate(dl.created_at); return dd && dd <= etd; });
-          if (allOnTime) row.onTime += 1; else row.delayed += 1;
-        }
-      }
-      grouped.set(c, row);
-    }
-    return Array.from(grouped.values()).sort((a, b) => b.totalWOs - a.totalWOs);
-  }, [orders, dispatchLogs, fromDate, toDate, companySearch]);
-
-  const reportRows = useMemo(() => {
-    switch (reportType) {
-      case 'component-usage': return componentUsageCompact;
-      case 'item-usage': return itemUsageRows;
-      case 'on-time': return onTimeRows;
-      case 'delayed': return delayedRows;
-      case 'dept-wise': return deptWiseRows;
-      case 'company-performance': return companyPerfRows;
-    }
-  }, [reportType, componentUsageCompact, itemUsageRows, onTimeRows, delayedRows, deptWiseRows, companyPerfRows]);
-
-  const componentDetailRows = useMemo(() => {
-    if (!expandedComponent) return [];
-    return componentUsageRows.filter(r => r.component === expandedComponent);
-  }, [componentUsageRows, expandedComponent]);
-
-  const reportRowsCount = reportRows.length;
-
-  const reportTotals = useMemo(() => {
-    const rows = reportRows as any[];
-    return {
-      count: rows.length,
-      qty: rows.reduce((s: number, r: any) => s + (Number(r.qtyUsed ?? r.totalQty ?? r.dispatch_qty ?? r.qty) || 0), 0),
-      onTime: rows.reduce((s: number, r: any) => s + (Number(r.onTime ?? 0) || 0), 0),
-      delayed: rows.reduce((s: number, r: any) => s + (Number(r.delayed ?? 0) || 0), 0),
-    };
-  }, [reportRows]);
-
-  const handleSort = (key: string) => {
-    setSortConfig(sc => sc?.key === key ? { key, dir: sc.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' });
-  };
-
-  const applySortGeneric = <T extends Record<string, any>>(rows: T[]): T[] => {
-    if (!sortConfig) return rows;
-    const { key, dir } = sortConfig;
-    return [...rows].sort((a, b) => {
-      const av = a[key], bv = b[key];
-      const cmp = typeof av === 'number' && typeof bv === 'number'
-        ? av - bv
-        : String(av ?? '').localeCompare(String(bv ?? ''));
-      return dir === 'asc' ? cmp : -cmp;
+  const toggleComponent = (name: string) => {
+    setSelectedComponentNames(prev => {
+      const n = new Set(prev);
+      if (n.has(name)) n.delete(name); else n.add(name);
+      return n;
     });
+    setShowComponentReport(false);
   };
 
-  const sortedRows = useMemo(() => applySortGeneric(reportRows.map((r: any) => ({
-    ...r,
-    _date: r.when ? r.when.getTime() : 0,
-    _customer: r.order?.customer || r.company || '',
-    _item: r.order?.job_details || '',
-  }))), [reportRows, sortConfig]);
+  const toggleItem = (id: number) => {
+    setSelectedItemIds(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+    setShowItemReport(false);
+  };
 
-  const exportPdfReport = () => {
-    const isCompact = reportType === 'component-usage' && exportMode === 'compact';
-    const rows: any[] = isCompact
-      ? applySortGeneric(componentUsageCompact.map(r => ({ ...r, _parentItems: r.parentItemsList })))
-      : sortedRows;
-    if (rows.length === 0) { alert('No rows available for export.'); return; }
+  const toggleAllComponents = () => {
+    const allSel = filteredComponents.length > 0 && filteredComponents.every(c => selectedComponentNames.has(c.name));
+    setSelectedComponentNames(prev => {
+      const n = new Set(prev);
+      if (allSel) filteredComponents.forEach(c => n.delete(c.name));
+      else filteredComponents.forEach(c => n.add(c.name));
+      return n;
+    });
+    setShowComponentReport(false);
+  };
 
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    const pageW = doc.internal.pageSize.getWidth();
-    const pageH = doc.internal.pageSize.getHeight();
-    const marginX = 12;
-    const contentW = pageW - marginX * 2;
+  const toggleAllItems = () => {
+    const allSel = filteredItems.length > 0 && filteredItems.every(it => selectedItemIds.has(Number(it.id)));
+    setSelectedItemIds(prev => {
+      const n = new Set(prev);
+      if (allSel) filteredItems.forEach(it => n.delete(Number(it.id)));
+      else filteredItems.forEach(it => n.add(Number(it.id)));
+      return n;
+    });
+    setShowItemReport(false);
+  };
 
-    const tabLabel = tabMeta.find(t => t.key === reportType)?.label || reportType;
-    const modeLabel = isCompact ? ' (Compact)' : ' (Detailed)';
-    const dateLabel = fromDate || toDate
-      ? `${fromDate || '…'} to ${toDate || '…'}`
-      : 'All dates';
-    const now = new Date().toLocaleString('en-GB');
+  const dateRangeLabel = () => {
+    if (datePreset === 'all') return 'All dates';
+    if (datePreset === 'today') return new Date().toLocaleDateString('en-GB');
+    if (datePreset === 'custom') return `${new Date(fromDate).toLocaleDateString('en-GB')} — ${new Date(toDate).toLocaleDateString('en-GB')}`;
+    if (datePreset === '7d' || datePreset === '30d' || datePreset === '90d') {
+      const now = new Date();
+      const from = new Date(now); from.setDate(now.getDate() - (datePreset === '7d' ? 7 : datePreset === '30d' ? 30 : 90));
+      return `${from.toLocaleDateString('en-GB')} — ${now.toLocaleDateString('en-GB')}`;
+    }
+    return `${new Date(fromDate).toLocaleDateString('en-GB')} — ${new Date(toDate).toLocaleDateString('en-GB')}`;
+  };
 
-    // Gray background fill
-    doc.setFillColor(245, 245, 245);
-    doc.rect(0, 0, pageW, pageH, 'F');
+  const dateRangeFilename = () => {
+    if (datePreset === 'all') return 'all-dates';
+    if (fromDate && toDate) {
+      const f = new Date(fromDate).toLocaleDateString('en-GB').replace(/\//g, '-');
+      const t = new Date(toDate).toLocaleDateString('en-GB').replace(/\//g, '-');
+      return `${f}--${t}`;
+    }
+    return new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
+  };
 
-    // White card
-    const cardTop = 14;
-    const cardH = pageH - cardTop - 14;
-    doc.setFillColor(255, 255, 255);
-    doc.setDrawColor(220, 220, 220);
-    doc.roundedRect(marginX - 2, cardTop, contentW + 4, cardH, 4, 4, 'FD');
+  const exportComponentUsagePdf = () => {
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pw = doc.internal.pageSize.getWidth();
+    const ph = doc.internal.pageSize.getHeight();
+    const ml = 14;
+    const slate = [30, 41, 59] as [number, number, number];
+    const muted = [100, 100, 100] as [number, number, number];
+    const border = [200, 200, 200] as [number, number, number];
 
-    // Header bar inside card
-    const headerY = cardTop + 8;
+    let y = 22;
+    const sectionTitle = (title: string) => {
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(slate[0], slate[1], slate[2]);
+      doc.text(title, ml, y);
+      doc.setDrawColor(border[0], border[1], border[2]);
+      doc.setLineWidth(0.3);
+      doc.line(ml, y + 1.5, pw - ml, y + 1.5);
+      y += 7;
+    };
+
+    // Header
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(20, 30, 50);
-    doc.text('Excell Packaging', marginX, headerY);
-    doc.setFontSize(10);
+    doc.setTextColor(slate[0], slate[1], slate[2]);
+    doc.text('Excell Packaging', pw / 2, y, { align: 'center' });
+    y += 8;
+
+    sectionTitle('Component Usage Report');
+    doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(100, 100, 100);
-    doc.text(tabLabel + modeLabel, pageW / 2, headerY, { align: 'center' });
-    doc.setFontSize(7);
-    doc.text(now, pageW - marginX, headerY, { align: 'right' });
+    doc.setTextColor(muted[0], muted[1], muted[2]);
+    doc.text(`Date Range (${dateFieldLabel}): ${dateRangeLabel()}`, ml, y); y += 5;
 
-    // Separator line
-    const sepY = headerY + 4;
-    doc.setDrawColor(220, 220, 220);
-    doc.line(marginX, sepY, pageW - marginX, sepY);
-
-    // Info line
-    doc.setFontSize(7);
-    doc.setTextColor(140, 140, 140);
-    doc.text(`Date range: ${dateLabel}`, marginX, sepY + 5);
-
-    const mapRow = (r: any) => {
-      if (isCompact) {
-        return [String(r.component || ''), String(r.totalQty ?? 0), String(r.parentItemsList || ''), String(r.companyCount ?? 0), String(r.orderCount ?? 0)];
-      }
-      switch (reportType) {
-        case 'component-usage':
-          return [String(r.component || ''), String(r.parentItem || ''), String(r.qtyUsed ?? 0), String(r.company || ''), `#${r.orderId || ''}`];
-        case 'item-usage':
-          return [String(r.item || ''), String(r.orders ?? 0), String(r.totalQty ?? 0), String(r.companyCount ?? 0)];
-        case 'on-time':
-          return [r.when ? new Date(r.when).toLocaleDateString('en-GB') : '-', `#${r.work_order_id || ''}`, r.order?.customer || '-', r.order?.job_details || '-', String(r.dispatch_qty ?? 0), r.invoice_no || '-'];
-        case 'delayed':
-          return [r.when ? new Date(r.when).toLocaleDateString('en-GB') : '-', `#${r.work_order_id || ''}`, r.order?.customer || '-', r.order?.job_details || '-', `${r.daysDelay || 0} days`, String(r.dispatch_qty ?? 0)];
-        case 'dept-wise':
-          return [String(r.dept || ''), String(r.reports ?? 0), String(r.shiftHrs ?? 0), String(r.otHrs ?? 0), String(r.totalHrs ?? 0), String(r.qtyProduced ?? 0)];
-        case 'company-performance':
-          const pct = r.totalWOs > 0 ? Math.round(r.onTime / r.totalWOs * 100) + '%' : '0%';
-          return [String(r.company || ''), String(r.totalWOs ?? 0), String(r.totalQty ?? 0), String(r.onTime ?? 0), String(r.delayed ?? 0), pct];
-      }
-    };
-
-    const columns: Record<string, string[]> = {
-      'component-usage': isCompact
-        ? ['Component', 'Total Qty', 'Parent Items', 'Companies', 'Orders']
-        : ['Component', 'Parent Item', 'Qty Used', 'Company', 'Order #'],
-      'item-usage': ['Item Name', 'Orders', 'Total Qty', 'Companies'],
-      'on-time': ['Date', 'WO #', 'Company', 'Item', 'Qty', 'Invoice'],
-      'delayed': ['Date', 'WO #', 'Company', 'Item', 'Days Late', 'Qty'],
-      'dept-wise': ['Department', 'Reports', 'Shift Hrs', 'OT Hrs', 'Total Hrs', 'Qty Produced'],
-      'company-performance': ['Company', 'Total WOs', 'Total Qty', 'On-Time', 'Delayed', 'On-Time %'],
-    };
-
-    const cols = columns[reportType] || [];
-    // Determine which columns are numeric (right-aligned)
-    const numericIndices = cols.map((c, i) =>
-      ['Total Qty', 'Qty', 'Orders', 'Companies', 'Reports', 'Shift Hrs', 'OT Hrs', 'Total Hrs', 'Qty Produced', 'Total WOs', 'On-Time', 'Delayed', 'On-Time %', 'Days Late', 'Qty Used', 'Order #']
-        .some(k => c.includes(k)) ? i : -1
-    ).filter(i => i >= 0);
-
-    const colStyles: Record<number, any> = {};
-    numericIndices.forEach(i => { colStyles[i] = { halign: 'right', fontStyle: 'bold' }; });
+    // Table
+    const tableData = componentReportRows.map(r => [r.componentName, r.itemName, String(r.qty)]);
+    const total = String(componentTotalQty);
+    tableData.push(['', 'Total Quantity', total]);
 
     autoTable(doc, {
-      head: [cols],
-      body: rows.map(mapRow),
-      startY: sepY + 9,
-      margin: { left: marginX, right: marginX },
-      tableWidth: 'auto',
-      styles: { fontSize: 7, cellPadding: 2.5, lineColor: [230, 230, 230], lineWidth: 0.3, font: 'helvetica', textColor: [60, 60, 60] },
-      headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7, halign: 'center' },
-      bodyStyles: { textColor: [60, 60, 60] },
-      alternateRowStyles: { fillColor: [248, 249, 252] },
-      columnStyles: colStyles,
-      didDrawPage: (data: any) => {
-        // Footer line
-        const fy = doc.internal.pageSize.getHeight() - 10;
-        doc.setDrawColor(220, 220, 220);
-        doc.line(marginX, fy - 2, pageW - marginX, fy - 2);
-        doc.setFontSize(6);
-        doc.setTextColor(160, 160, 160);
-        doc.text(`Page ${data.pageNumber}`, pageW - marginX, fy, { align: 'right' });
-        doc.text('Excell Packaging ERP', marginX, fy);
+      startY: y + 4,
+      head: [['Component Name', 'Item Name', 'Quantity']],
+      body: tableData,
+      headStyles: { fillColor: slate, textColor: 255, fontStyle: 'bold', fontSize: 8 },
+      bodyStyles: { fontSize: 8 },
+      columnStyles: { 0: { cellWidth: 'auto' }, 1: { cellWidth: 'auto' }, 2: { halign: 'right', cellWidth: 30 } },
+      footStyles: { fontStyle: 'bold', fontSize: 8 },
+      didParseCell: (data: any) => {
+        if (data.section === 'body' && data.row.index === tableData.length - 1) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [248, 250, 252];
+        }
       },
+      margin: { left: ml, right: ml },
     });
 
-    doc.save(`${reportType}-report.pdf`);
+    // Footer
+    const finalY = (doc as any).lastAutoTable?.finalY || y + 20;
+    doc.setDrawColor(border[0], border[1], border[2]);
+    doc.setLineWidth(0.3);
+    doc.line(ml, ph - 12, pw - ml, ph - 12);
+    doc.setFontSize(6.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(160);
+    doc.text('Excell Packaging', ml, ph - 7);
+    doc.text(`Generated: ${new Date().toLocaleString('en-GB')}`, ml, ph - 7, { align: 'right' });
+
+    doc.save(`component-usage-report-${dateRangeFilename()}.pdf`);
   };
 
-  const applyQuickRange = (range: 'today' | '7d' | '30d' | '90d' | 'all') => {
-    setActivePreset(range);
-    const now = new Date();
+  const exportItemUsagePdf = () => {
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pw = doc.internal.pageSize.getWidth();
+    const ph = doc.internal.pageSize.getHeight();
+    const ml = 14;
+    const slate = [30, 41, 59] as [number, number, number];
+    const muted = [100, 100, 100] as [number, number, number];
+    const border = [200, 200, 200] as [number, number, number];
 
-    if (range === 'all') {
-      setFromDate('');
-      setToDate('');
-      return;
-    }
+    let y = 22;
+    const sectionTitle = (title: string) => {
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(slate[0], slate[1], slate[2]);
+      doc.text(title, ml, y);
+      doc.setDrawColor(border[0], border[1], border[2]);
+      doc.setLineWidth(0.3);
+      doc.line(ml, y + 1.5, pw - ml, y + 1.5);
+      y += 7;
+    };
 
-    if (range === 'today') {
-      const today = toIsoDate(now);
-      setFromDate(today);
-      setToDate(today);
-      return;
-    }
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(slate[0], slate[1], slate[2]);
+    doc.text('Excell Packaging', pw / 2, y, { align: 'center' });
+    y += 8;
 
-    const days = range === '7d' ? 7 : range === '30d' ? 30 : 90;
-    const from = new Date(now);
-    from.setDate(now.getDate() - days);
-    setFromDate(toIsoDate(from));
-    setToDate(toIsoDate(now));
+    sectionTitle('Item Usage Report');
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(muted[0], muted[1], muted[2]);
+    doc.text(`Date Range (${dateFieldLabel}): ${dateRangeLabel()}`, ml, y); y += 5;
+
+    const tableData = itemReportRows.map(r => [r.itemName, String(r.qty)]);
+    const total = String(itemTotalQty);
+    tableData.push(['Total Quantity', total]);
+
+    autoTable(doc, {
+      startY: y + 4,
+      head: [['Item Name', 'Quantity']],
+      body: tableData,
+      headStyles: { fillColor: slate, textColor: 255, fontStyle: 'bold', fontSize: 8 },
+      bodyStyles: { fontSize: 8 },
+      columnStyles: { 0: { cellWidth: 'auto' }, 1: { halign: 'right', cellWidth: 30 } },
+      footStyles: { fontStyle: 'bold', fontSize: 8 },
+      didParseCell: (data: any) => {
+        if (data.section === 'body' && data.row.index === tableData.length - 1) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [248, 250, 252];
+        }
+      },
+      margin: { left: ml, right: ml },
+    });
+
+    const finalY = (doc as any).lastAutoTable?.finalY || y + 20;
+    doc.setDrawColor(border[0], border[1], border[2]);
+    doc.setLineWidth(0.3);
+    doc.line(ml, ph - 12, pw - ml, ph - 12);
+    doc.setFontSize(6.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(160);
+    doc.text('Excell Packaging', ml, ph - 7);
+    doc.text(`Generated: ${new Date().toLocaleString('en-GB')}`, pw - ml, ph - 7, { align: 'right' });
+
+    doc.save(`item-usage-report-${dateRangeFilename()}.pdf`);
   };
 
-  useEffect(() => {
-    const close = () => { setShowExportDropdown(false); setShowDateDropdown(false); };
-    document.addEventListener('click', close);
-    return () => document.removeEventListener('click', close);
-  }, []);
+  const exportCsv = (rows: string[][], headers: string[], filename: string) => {
+    const escapeCsv = (val: string) => `"${String(val || '').replace(/"/g, '""')}"`;
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(r => r.map(v => escapeCsv(v)).join(',')),
+    ].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `${filename}-${dateRangeFilename()}.csv`;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const exportComponentUsageCsv = () => {
+    const headers = ['Component Name', 'Item Name', 'Quantity'];
+    const rows = componentReportRows.map(r => [r.componentName, r.itemName, String(r.qty)]);
+    rows.push(['', 'Total Quantity', String(componentTotalQty)]);
+    exportCsv(rows, headers, 'component-usage-report');
+  };
+
+  const exportItemUsageCsv = () => {
+    const headers = ['Item Name', 'Quantity'];
+    const rows = itemReportRows.map(r => [r.itemName, String(r.qty)]);
+    rows.push(['Total Quantity', String(itemTotalQty)]);
+    exportCsv(rows, headers, 'item-usage-report');
+  };
 
   if (loading) return <LoadingState message="Loading reports..." />;
 
-  const thClass = "px-4 py-3 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors whitespace-nowrap";
-
-  const SortIcon = ({ col }: { col: string }) => (
-    sortConfig?.key === col
-      ? <span className="ml-1 text-indigo-500">{sortConfig.dir === 'asc' ? '↑' : '↓'}</span>
-      : <span className="ml-1 opacity-25">↕</span>
-  );
+  const tabMeta: { key: typeof activeTab; label: string }[] = [
+    { key: 'component-usage', label: 'Component Usage' },
+    { key: 'item-usage', label: 'Item Usage' },
+    { key: 'delivery-report', label: 'Delivery Report' },
+  ];
 
   const presetButtons: { key: 'today' | '7d' | '30d' | '90d' | 'all'; label: string }[] = [
     { key: 'today', label: 'Today' },
@@ -8410,485 +9591,264 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
     { key: 'all', label: 'All' },
   ];
 
-  const tabMeta: { key: typeof reportType; label: string }[] = [
-    { key: 'component-usage', label: 'Component Usage' },
-    { key: 'item-usage', label: 'Item Usage' },
-    { key: 'on-time', label: 'On-Time Delivery' },
-    { key: 'delayed', label: 'Delayed Delivery' },
-    { key: 'dept-wise', label: 'Department Wise' },
-    { key: 'company-performance', label: 'Company Performance' },
-  ];
+  const allComponentsSelected = filteredComponents.length > 0 && filteredComponents.every(c => selectedComponentNames.has(c.name));
+  const allItemsSelected = filteredItems.length > 0 && filteredItems.every(it => selectedItemIds.has(Number(it.id)));
 
-  const showCompanySearch = ['component-usage', 'item-usage', 'on-time', 'delayed', 'company-performance'].includes(reportType);
+  const dateFieldLabel = dateField === 'entry_date' ? 'Entry Date' : 'Dispatched Date';
+
+  const DateRangeControls = () => (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <CalendarDays size={14} className="text-gray-500" />
+        {presetButtons.map(btn => (
+          <button key={btn.key} onClick={() => applyDatePreset(btn.key)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${datePreset === btn.key ? 'bg-indigo-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+            {btn.label}
+          </button>
+        ))}
+        <button onClick={() => setDatePreset('custom')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${datePreset === 'custom' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+          Custom
+        </button>
+      </div>
+      {datePreset === 'custom' && (
+        <div className="flex items-center gap-2">
+          <input type="date" value={fromDate} onChange={e => { setFromDate(e.target.value); setDatePreset('custom'); }}
+            className="px-2 py-1.5 bg-gray-50 border border-gray-200 rounded text-xs" />
+          <span className="text-xs text-gray-500">to</span>
+          <input type="date" value={toDate} onChange={e => { setToDate(e.target.value); setDatePreset('custom'); }}
+            className="px-2 py-1.5 bg-gray-50 border border-gray-200 rounded text-xs" />
+        </div>
+      )}
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-semibold text-gray-500">Filter by:</span>
+        <button onClick={() => setDateField('entry_date')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${dateField === 'entry_date' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+          Entry Date
+        </button>
+        <button onClick={() => setDateField('dispatched_date')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${dateField === 'dispatched_date' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+          Dispatched Date
+        </button>
+      </div>
+    </>
+  );
 
   return (
     <div className="space-y-4">
-      <div className="sticky top-16 md:top-0 z-20 bg-white/95 backdrop-blur px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-3">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
         <h2 className="text-xl font-black text-gray-800 tracking-tight">Reports</h2>
-        <div className="flex items-center gap-2">
-          {/* Date range pill */}
-          <div className="relative" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setShowDateDropdown(!showDateDropdown)} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:border-gray-300 transition-colors whitespace-nowrap">
-              <CalendarDays size={13} />
-              {activePreset
-                ? presetButtons.find(p => p.key === activePreset)?.label || 'Custom'
-                : (fromDate || toDate ? `${fromDate || '…'}–${toDate || '…'}` : 'All Dates')}
-            </button>
-            {showDateDropdown && (
-              <div className="absolute right-0 top-full mt-1.5 w-44 bg-white rounded-xl shadow-lg border border-gray-200 py-1 z-50">
-                {presetButtons.map(btn => (
-                  <button key={btn.key} onClick={() => { applyQuickRange(btn.key); setShowDateDropdown(false); }} className={`w-full text-left px-4 py-2 text-xs font-semibold transition-colors ${activePreset === btn.key ? 'text-indigo-600 bg-indigo-50' : 'text-gray-600 hover:bg-gray-50'}`}>
-                    {btn.label}
-                  </button>
-                ))}
-                <div className="border-t border-gray-100 my-1" />
-                <div className="px-4 py-2 space-y-1.5">
-                  <input type="date" value={fromDate} onChange={e => { setFromDate(e.target.value); setActivePreset(null); }} className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded text-xs" />
-                  <input type="date" value={toDate} onChange={e => { setToDate(e.target.value); setActivePreset(null); }} className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded text-xs" />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Company search */}
-          {showCompanySearch && (
-            <input
-              placeholder="Search company..."
-              value={companySearch}
-              onChange={e => setCompanySearch(e.target.value)}
-              className="hidden md:block w-40 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600 placeholder-gray-400 focus:outline-none focus:border-indigo-300 transition-colors"
-            />
-          )}
-
-          {/* Export dropdown */}
-          <div className="relative" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setShowExportDropdown(!showExportDropdown)} className="p-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors">
-              <FileText size={14} />
-            </button>
-            {showExportDropdown && (
-              <div className="absolute right-0 top-full mt-1.5 w-52 bg-white rounded-xl shadow-lg border border-gray-200 py-1 z-50">
-                {reportType === 'component-usage' && (
-                  <>
-                    <button onClick={() => { setExportMode('compact'); setTimeout(() => { exportPdfReport(); }, 0); setShowExportDropdown(false); }} className="w-full text-left px-4 py-2.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors">Export PDF – Compact</button>
-                    <button onClick={() => { setExportMode('detailed'); setTimeout(() => { exportPdfReport(); }, 0); setShowExportDropdown(false); }} className="w-full text-left px-4 py-2.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors">Export PDF – Detailed</button>
-                  </>
-                )}
-                {reportType !== 'component-usage' && (
-                  <button onClick={() => { setTimeout(() => { exportPdfReport(); }, 10); setShowExportDropdown(false); }} className="w-full text-left px-4 py-2.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors">Export PDF</button>
-                )}
-                <div className="border-t border-gray-100 my-1" />
-                <button onClick={() => { setShowExportDropdown(false); }} className="w-full text-left px-4 py-2.5 text-xs font-semibold text-gray-500 hover:bg-gray-50 transition-colors">Export CSV</button>
-              </div>
-            )}
-          </div>
-        </div>
       </div>
 
-      <Card className="space-y-3">
-        {/* Quick presets + mobile company search */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex flex-wrap gap-1">
-            {presetButtons.map(btn => (
-              <button
-                key={btn.key}
-                onClick={() => applyQuickRange(btn.key)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
-                  activePreset === btn.key
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {btn.label}
-              </button>
-            ))}
-          </div>
-          {showCompanySearch && (
-            <input
-              placeholder="Search company..."
-              value={companySearch}
-              onChange={e => setCompanySearch(e.target.value)}
-              className="md:hidden flex-1 min-w-[120px] px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs text-gray-600 placeholder-gray-400 focus:outline-none focus:border-indigo-300"
-            />
-          )}
-        </div>
-
-        {/* Report type tabs */}
+      {/* Tabs */}
+      <div className="px-4">
         <div className="flex flex-wrap bg-gray-100 rounded-xl p-1 gap-1">
           {tabMeta.map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => { setReportType(tab.key); setSortConfig(null); }}
-              className={`px-3 py-2 rounded-lg text-xs font-black transition-all whitespace-nowrap ${
-                reportType === tab.key
-                  ? 'bg-white text-indigo-600 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
+            <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+              className={`px-4 py-2 rounded-lg text-xs font-black transition-all whitespace-nowrap ${activeTab === tab.key ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
               {tab.label}
             </button>
           ))}
         </div>
-      </Card>
-
-      {/* Stats cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-        <Card className="p-3">
-          <div className="text-[10px] uppercase font-black text-gray-500">Records</div>
-          <div className="text-xl font-black text-gray-800 mt-1 tabular-nums">{reportRowsCount}</div>
-        </Card>
-        {reportType === 'component-usage' && (
-          <Card className="p-3">
-            <div className="text-[10px] uppercase font-black text-gray-500">Total Qty Used</div>
-            <div className="text-xl font-black text-indigo-700 mt-1 tabular-nums">{componentUsageRows.reduce((s, r) => s + r.qtyUsed, 0)}</div>
-          </Card>
-        )}
-        {reportType === 'item-usage' && (
-          <Card className="p-3">
-            <div className="text-[10px] uppercase font-black text-gray-500">Total Qty</div>
-            <div className="text-xl font-black text-indigo-700 mt-1 tabular-nums">{itemUsageRows.reduce((s, r) => s + r.totalQty, 0)}</div>
-          </Card>
-        )}
-        {reportType === 'on-time' && (
-          <Card className="p-3">
-            <div className="text-[10px] uppercase font-black text-gray-500">Total Qty Dispatched</div>
-            <div className="text-xl font-black text-green-700 mt-1 tabular-nums">{onTimeRows.reduce((s: number, r: any) => s + (Number(r.dispatch_qty) || 0), 0)}</div>
-          </Card>
-        )}
-        {reportType === 'delayed' && (
-          <>
-            <Card className="p-3">
-              <div className="text-[10px] uppercase font-black text-gray-500">Total Qty Dispatched</div>
-              <div className="text-xl font-black text-orange-700 mt-1 tabular-nums">{delayedRows.reduce((s: number, r: any) => s + (Number(r.dispatch_qty) || 0), 0)}</div>
-            </Card>
-            <Card className="p-3">
-              <div className="text-[10px] uppercase font-black text-gray-500">Avg Delay (Days)</div>
-              <div className="text-xl font-black text-red-700 mt-1 tabular-nums">
-                {delayedRows.length > 0 ? (delayedRows.reduce((s: number, r: any) => s + (r.daysDelay || 0), 0) / delayedRows.length).toFixed(1) : 0}
-              </div>
-            </Card>
-          </>
-        )}
-        {reportType === 'dept-wise' && (
-          <>
-            <Card className="p-3">
-              <div className="text-[10px] uppercase font-black text-gray-500">Departments</div>
-              <div className="text-xl font-black text-gray-800 mt-1 tabular-nums">{deptWiseRows.length}</div>
-            </Card>
-            <Card className="p-3">
-              <div className="text-[10px] uppercase font-black text-gray-500">Total Hrs</div>
-              <div className="text-xl font-black text-indigo-700 mt-1 tabular-nums">{deptWiseRows.reduce((s, r) => s + r.totalHrs, 0)}</div>
-            </Card>
-          </>
-        )}
-        {reportType === 'company-performance' && (
-          <>
-            <Card className="p-3">
-              <div className="text-[10px] uppercase font-black text-gray-500">Total Qty</div>
-              <div className="text-xl font-black text-indigo-700 mt-1 tabular-nums">{companyPerfRows.reduce((s, r) => s + r.totalQty, 0)}</div>
-            </Card>
-            <Card className="p-3">
-              <div className="text-[10px] uppercase font-black text-gray-500">On-Time %</div>
-              <div className="text-xl font-black text-green-700 mt-1 tabular-nums">
-                {companyPerfRows.reduce((s, r) => s + r.totalWOs, 0) > 0
-                  ? Math.round(companyPerfRows.reduce((s, r) => s + r.onTime, 0) / companyPerfRows.reduce((s, r) => s + r.totalWOs, 0) * 100) + '%'
-                  : '0%'}
-              </div>
-            </Card>
-          </>
-        )}
       </div>
 
-      {/* Component Usage table */}
-      {reportType === 'component-usage' && (
-        <Card className="p-0 overflow-hidden shadow-sm border border-gray-200/60 rounded-xl">
-          <div className="hidden md:block overflow-x-auto">
-            <table className="w-full min-w-[750px] text-sm">
-              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
-                <tr>
-                  <th className="px-4 py-3 w-8"></th>
-                  <th className={thClass} onClick={() => handleSort('component')}>Component <SortIcon col="component" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('totalQty')}>Total Qty <SortIcon col="totalQty" /></th>
-                  <th className={thClass} onClick={() => handleSort('parentItemsList')}>Parent Items <SortIcon col="parentItemsList" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('companyCount')}>Companies <SortIcon col="companyCount" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('orderCount')}>Orders <SortIcon col="orderCount" /></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {sortedRows.map((row: any, i: number) => {
-                  const isExpanded = expandedComponent === row.component;
-                  const detailRows = componentUsageRows.filter(r => r.component === row.component);
-                  return (
-                    <Fragment key={row.component}>
-                      <tr className={`hover:bg-indigo-50/40 transition-colors cursor-pointer ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`} onClick={() => setExpandedComponent(isExpanded ? null : row.component)}>
-                        <td className="px-4 py-3 text-gray-500 text-xs">{isExpanded ? '▼' : '▶'}</td>
-                        <td className="px-4 py-3 font-semibold text-gray-800">{row.component}</td>
-                        <td className="px-4 py-3 font-black text-gray-800 text-right tabular-nums">{row.totalQty}</td>
-                        <td className="px-4 py-3 text-gray-600 max-w-[200px] truncate" title={row.parentItemsList}>{row.parentItemsList}</td>
-                        <td className="px-4 py-3 font-semibold text-gray-800 text-right tabular-nums">{row.companyCount}</td>
-                        <td className="px-4 py-3 font-semibold text-indigo-600 text-right tabular-nums">{row.orderCount}</td>
-                      </tr>
-                      {isExpanded && (
-                        <tr key={`detail-${row.component}`}>
-                          <td colSpan={6} className="p-0 bg-indigo-50/20">
-                            <table className="w-full text-xs">
-                              <thead>
-                                <tr className="text-[10px] uppercase text-gray-500 font-black border-b border-indigo-200">
-                                  <th className="px-4 py-2 text-left pl-8">Parent Item</th>
-                                  <th className="px-4 py-2 text-right">Qty Used</th>
-                                  <th className="px-4 py-2 text-left">Company</th>
-                                  <th className="px-4 py-2 text-right">Order #</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-gray-200/50">
-                                {applySortGeneric(detailRows.map((r: any) => ({ ...r }))).map((detail: any, di: number) => (
-                                  <tr key={di} className={`hover:bg-indigo-50/20 ${di % 2 === 1 ? 'bg-gray-50/30' : ''}`}>
-                                    <td className="px-4 py-2 font-semibold text-gray-700 pl-8">{detail.parentItem}</td>
-                                    <td className="px-4 py-2 font-bold text-gray-800 text-right tabular-nums">{detail.qtyUsed}</td>
-                                    <td className="px-4 py-2 text-gray-600">{detail.company}</td>
-                                    <td className="px-4 py-2 font-semibold text-indigo-600 text-right tabular-nums">#{detail.orderId}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
+      {/* Component Usage Tab */}
+      {activeTab === 'component-usage' && (
+        <Card className="space-y-4">
+          <div className="flex justify-center">
+            <div className="w-full max-w-2xl"><DateRangeControls /></div>
           </div>
-          <div className="md:hidden p-2 space-y-2">
-            {sortedRows.map((row: any, i: number) => (
-              <div key={row.component} className={`rounded-lg border border-gray-200 p-2.5 ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
-                <div className="flex items-center justify-between cursor-pointer" onClick={() => setExpandedComponent(expandedComponent === row.component ? null : row.component)}>
-                  <div className="font-black text-sm text-gray-800">{row.component}</div>
-                  <span className="text-gray-500 text-xs">{expandedComponent === row.component ? '▼' : '▶'}</span>
+          <div className="flex justify-center">
+            <div className="w-full max-w-4xl flex flex-col md:flex-row gap-4">
+              {/* Left: Selection panel */}
+              <div className="md:w-1/3 space-y-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                  <input type="text" placeholder="Search components..." value={componentSearch} onChange={e => setComponentSearch(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
                 </div>
-                <div className="text-xs text-gray-600 mt-0.5">Total Qty: <span className="font-bold text-gray-800 tabular-nums">{row.totalQty}</span></div>
-                <div className="text-xs text-gray-500 mt-0.5">{row.orderCount} orders · {row.companyCount} companies</div>
-                {expandedComponent === row.component && (
-                  <div className="mt-2 pt-2 border-t border-gray-100 space-y-1.5">
-                    {componentUsageRows.filter(r => r.component === row.component).map((detail: any, di: number) => (
-                      <div key={di} className="rounded-md bg-indigo-50/30 p-2 text-xs">
-                        <div className="font-bold text-gray-800">{detail.parentItem}</div>
-                        <div className="text-gray-600 mt-0.5 tabular-nums">Qty: {detail.qtyUsed} · {detail.company} · WO #{detail.orderId}</div>
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={allComponentsSelected} onChange={toggleAllComponents} className="w-4 h-4 rounded" />
+                    <span className="text-sm font-bold text-gray-700">Select All</span>
+                  </label>
+                  <span className="text-xs font-semibold text-gray-500">{selectedComponentNames.size} selected</span>
+                </div>
+                <div className="max-h-72 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+                  {filteredComponents.map(c => (
+                    <label key={c.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 cursor-pointer">
+                      <input type="checkbox" checked={selectedComponentNames.has(c.name)} onChange={() => toggleComponent(c.name)} className="w-4 h-4 rounded" />
+                      <span className="text-sm font-medium text-gray-700">{c.name}</span>
+                    </label>
+                  ))}
+                  {filteredComponents.length === 0 && <div className="px-3 py-4 text-center text-sm text-gray-400">No components found</div>}
+                </div>
+                <button onClick={() => setShowComponentReport(true)} disabled={selectedComponentNames.size === 0}
+                  className={`w-full py-2.5 rounded-xl text-sm font-black transition-all ${selectedComponentNames.size > 0 ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
+                  Generate Report ({selectedComponentNames.size})
+                </button>
+              </div>
+              {/* Right: Report */}
+              <div className="md:flex-1 min-w-0">
+                {showComponentReport ? (
+                  <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                    {componentReportRows.length > 0 ? (
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
+                          <tr>
+                            <th className="px-4 py-3 text-left whitespace-nowrap">Component Name</th>
+                            <th className="px-4 py-3 text-left whitespace-nowrap">Item Name</th>
+                            <th className="px-4 py-3 text-right w-32">Quantity</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {componentReportRows.map((row, i) => (
+                            <tr key={i} className={i % 2 === 1 ? 'bg-gray-50/40' : ''}>
+                              <td className="px-4 py-2.5 font-semibold text-gray-800 whitespace-nowrap">{row.componentName}</td>
+                              <td className="px-4 py-2.5 text-gray-600 whitespace-nowrap">{row.itemName}</td>
+                              <td className="px-4 py-2.5 font-black text-indigo-700 text-right tabular-nums w-32">{row.qty}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot className="bg-indigo-50 border-t-2 border-indigo-300">
+                          <tr>
+                            <td colSpan={2} className="px-4 py-3 font-black text-gray-800 text-right">Total Quantity</td>
+                            <td className="px-4 py-3 font-black text-indigo-700 text-right tabular-nums text-base w-32">{componentTotalQty}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    ) : (
+                      <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No component usage data for the selected range.</div>
+                    )}
+                    {componentReportRows.length > 0 && (
+                      <div className="px-4 py-3 flex items-center gap-2 border-t border-gray-200">
+                        <button onClick={exportComponentUsagePdf} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-black hover:bg-indigo-700 transition-colors">PDF</button>
+                        <button onClick={exportComponentUsageCsv} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-black hover:bg-emerald-700 transition-colors">CSV</button>
                       </div>
-                    ))}
+                    )}
+                  </div>
+                ) : (
+                  <div className="h-full min-h-[300px] flex flex-col items-center justify-center text-center border border-dashed border-gray-200 rounded-lg">
+                    <FileText size={32} className="text-gray-300" />
+                    <p className="text-sm text-gray-400 font-semibold mt-3">Select components and click Generate Report</p>
                   </div>
                 )}
               </div>
-            ))}
+            </div>
           </div>
-          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No component usage data for the selected range.</div>}
         </Card>
       )}
 
-      {/* Item Usage table */}
-      {reportType === 'item-usage' && (
-        <Card className="p-0 overflow-hidden shadow-sm border border-gray-200/60 rounded-xl">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[600px] text-sm">
-              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
-                <tr>
-                  <th className={thClass} onClick={() => handleSort('item')}>Item Name <SortIcon col="item" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('orders')}>Orders <SortIcon col="orders" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('totalQty')}>Total Qty <SortIcon col="totalQty" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('companyCount')}>Companies <SortIcon col="companyCount" /></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {sortedRows.map((row: any, i: number) => (
-                  <tr key={row.item} className={`hover:bg-indigo-50/40 transition-colors ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
-                    <td className="px-4 py-3 font-black text-gray-800">{row.item}</td>
-                    <td className="px-4 py-3 font-semibold text-gray-700 text-right tabular-nums">{row.orders}</td>
-                    <td className="px-4 py-3 font-semibold text-indigo-700 text-right tabular-nums">{row.totalQty}</td>
-                    <td className="px-4 py-3 text-gray-600 text-right tabular-nums">{row.companyCount}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {/* Item Usage Tab */}
+      {activeTab === 'item-usage' && (
+        <Card className="space-y-4">
+          <div className="flex justify-center">
+            <div className="w-full max-w-2xl"><DateRangeControls /></div>
           </div>
-          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No item usage data for the selected range.</div>}
-        </Card>
-      )}
-
-      {/* On-Time Delivery table */}
-      {reportType === 'on-time' && (
-        <Card className="p-0 overflow-hidden shadow-sm border border-gray-200/60 rounded-xl">
-          <div className="hidden md:block overflow-x-auto">
-            <table className="w-full min-w-[800px] text-sm">
-              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-green-300">
-                <tr>
-                  <th className={thClass} onClick={() => handleSort('_date')}>Date <SortIcon col="_date" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('work_order_id')}>WO <SortIcon col="work_order_id" /></th>
-                  <th className={thClass} onClick={() => handleSort('_customer')}>Company <SortIcon col="_customer" /></th>
-                  <th className={thClass} onClick={() => handleSort('_item')}>Item <SortIcon col="_item" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('dispatch_qty')}>Qty <SortIcon col="dispatch_qty" /></th>
-                  <th className={thClass} onClick={() => handleSort('invoice_no')}>Invoice <SortIcon col="invoice_no" /></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {sortedRows.map((row: any, i: number) => (
-                  <tr key={row.id} className={`hover:bg-green-50/40 transition-colors border-l-2 border-l-green-400 ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
-                    <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{row.when ? new Date(row.when).toLocaleString('en-GB') : '-'}</td>
-                    <td className="px-4 py-3 font-black text-indigo-600 text-right tabular-nums">#{row.work_order_id}</td>
-                    <td className="px-4 py-3 font-semibold text-gray-700">{row.order?.customer || '-'}</td>
-                    <td className="px-4 py-3 text-gray-600">{row.order?.job_details || '-'}</td>
-                    <td className="px-4 py-3 font-black text-green-700 text-right tabular-nums">{row.dispatch_qty}</td>
-                    <td className="px-4 py-3 text-gray-600">{row.invoice_no || '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="md:hidden p-2 space-y-2">
-            {sortedRows.map((row: any, i: number) => (
-              <div key={row.id} className={`rounded-lg border border-green-200 p-2.5 border-l-4 border-l-green-400 ${i % 2 === 1 ? 'bg-gray-50/30' : ''}`}>
-                <div className="flex items-center justify-between gap-2">
-                  <div className="font-black text-indigo-700 text-sm">WO #{row.work_order_id}</div>
-                  <div className="text-[11px] font-semibold text-green-700 tabular-nums">Qty: {row.dispatch_qty} ✓</div>
+          <div className="flex justify-center">
+            <div className="w-full max-w-4xl flex flex-col md:flex-row gap-4">
+              {/* Left: Selection panel */}
+              <div className="md:w-1/3 space-y-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                  <input type="text" placeholder="Search items..." value={itemSearch} onChange={e => setItemSearch(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
                 </div>
-                <div className="text-xs text-gray-700 font-semibold mt-1">{row.order?.customer || '-'} • {row.order?.job_details || '-'}</div>
-                <div className="text-[11px] text-gray-500 mt-1">Invoice: {row.invoice_no || '-'}</div>
-              </div>
-            ))}
-          </div>
-          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No on-time deliveries for the selected range.</div>}
-        </Card>
-      )}
-
-      {/* Delayed Delivery table */}
-      {reportType === 'delayed' && (
-        <Card className="p-0 overflow-hidden shadow-sm border border-gray-200/60 rounded-xl">
-          <div className="hidden md:block overflow-x-auto">
-            <table className="w-full min-w-[900px] text-sm">
-              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-red-300">
-                <tr>
-                  <th className={thClass} onClick={() => handleSort('_date')}>Date <SortIcon col="_date" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('work_order_id')}>WO <SortIcon col="work_order_id" /></th>
-                  <th className={thClass} onClick={() => handleSort('_customer')}>Company <SortIcon col="_customer" /></th>
-                  <th className={thClass} onClick={() => handleSort('_item')}>Item <SortIcon col="_item" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('daysDelay')}>Days Late <SortIcon col="daysDelay" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('dispatch_qty')}>Qty <SortIcon col="dispatch_qty" /></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {sortedRows.map((row: any, i: number) => (
-                  <tr key={row.id} className={`hover:bg-red-50/40 transition-colors border-l-2 border-l-red-400 ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
-                    <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{row.when ? new Date(row.when).toLocaleString('en-GB') : '-'}</td>
-                    <td className="px-4 py-3 font-black text-indigo-600 text-right tabular-nums">#{row.work_order_id}</td>
-                    <td className="px-4 py-3 font-semibold text-gray-700">{row.order?.customer || '-'}</td>
-                    <td className="px-4 py-3 text-gray-600">{row.order?.job_details || '-'}</td>
-                    <td className="px-4 py-3 text-right tabular-nums"><span className={`px-2 py-0.5 rounded-lg font-black text-xs inline-block ${row.daysDelay <= 1 ? 'bg-amber-100 text-amber-700' : row.daysDelay <= 3 ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}`}>{row.daysDelay}d</span></td>
-                    <td className="px-4 py-3 font-black text-gray-800 text-right tabular-nums">{row.dispatch_qty}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="md:hidden p-2 space-y-2">
-            {sortedRows.map((row: any, i: number) => (
-              <div key={row.id} className={`rounded-lg border border-red-200 p-2.5 border-l-4 border-l-red-400 ${i % 2 === 1 ? 'bg-gray-50/30' : ''}`}>
-                <div className="flex items-center justify-between gap-2">
-                  <div className="font-black text-indigo-700 text-sm">WO #{row.work_order_id}</div>
-                  <span className={`px-1.5 py-0.5 rounded font-black text-xs ${row.daysDelay <= 1 ? 'bg-amber-100 text-amber-700' : row.daysDelay <= 3 ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}`}>{row.daysDelay}d late</span>
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={allItemsSelected} onChange={toggleAllItems} className="w-4 h-4 rounded" />
+                    <span className="text-sm font-bold text-gray-700">Select All</span>
+                  </label>
+                  <span className="text-xs font-semibold text-gray-500">{selectedItemIds.size} selected</span>
                 </div>
-                <div className="text-xs text-gray-700 font-semibold mt-1">{row.order?.customer || '-'} • {row.order?.job_details || '-'}</div>
-                <div className="text-[11px] text-gray-500 mt-1 tabular-nums">Qty: {row.dispatch_qty}</div>
+                <div className="max-h-72 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+                  {filteredItems.map(it => (
+                    <label key={it.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 cursor-pointer">
+                      <input type="checkbox" checked={selectedItemIds.has(Number(it.id))} onChange={() => toggleItem(Number(it.id))} className="w-4 h-4 rounded" />
+                      <span className="text-sm font-medium text-gray-700">{it.name}</span>
+                    </label>
+                  ))}
+                  {filteredItems.length === 0 && <div className="px-3 py-4 text-center text-sm text-gray-400">No items found</div>}
+                </div>
+                <button onClick={() => setShowItemReport(true)} disabled={selectedItemIds.size === 0}
+                  className={`w-full py-2.5 rounded-xl text-sm font-black transition-all ${selectedItemIds.size > 0 ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
+                  Generate Report ({selectedItemIds.size})
+                </button>
               </div>
-            ))}
+              {/* Right: Report */}
+              <div className="md:flex-1 min-w-0">
+                {showItemReport ? (
+                  <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                    {itemReportRows.length > 0 ? (
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
+                          <tr>
+                            <th className="px-4 py-3 text-left whitespace-nowrap">Item Name</th>
+                            <th className="px-4 py-3 text-right w-32">Quantity</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {itemReportRows.map((row, i) => (
+                            <tr key={i} className={i % 2 === 1 ? 'bg-gray-50/40' : ''}>
+                              <td className="px-4 py-2.5 font-semibold text-gray-800 whitespace-nowrap">{row.itemName}</td>
+                              <td className="px-4 py-2.5 font-black text-indigo-700 text-right tabular-nums w-32">{row.qty}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot className="bg-indigo-50 border-t-2 border-indigo-300">
+                          <tr>
+                            <td className="px-4 py-3 font-black text-gray-800 text-right">Total Quantity</td>
+                            <td className="px-4 py-3 font-black text-indigo-700 text-right tabular-nums text-base w-32">{itemTotalQty}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    ) : (
+                      <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No item usage data for the selected range.</div>
+                    )}
+                    {itemReportRows.length > 0 && (
+                      <div className="px-4 py-3 flex items-center gap-2 border-t border-gray-200">
+                        <button onClick={exportItemUsagePdf} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-black hover:bg-indigo-700 transition-colors">PDF</button>
+                        <button onClick={exportItemUsageCsv} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-black hover:bg-emerald-700 transition-colors">CSV</button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="h-full min-h-[300px] flex flex-col items-center justify-center text-center border border-dashed border-gray-200 rounded-lg">
+                    <FileText size={32} className="text-gray-300" />
+                    <p className="text-sm text-gray-400 font-semibold mt-3">Select items and click Generate Report</p>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No delayed deliveries for the selected range.</div>}
         </Card>
       )}
 
-      {/* Department-Wise table */}
-      {reportType === 'dept-wise' && (
-        <Card className="p-0 overflow-hidden shadow-sm border border-gray-200/60 rounded-xl">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[700px] text-sm">
-              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
-                <tr>
-                  <th className={thClass} onClick={() => handleSort('dept')}>Department <SortIcon col="dept" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('reports')}>Reports <SortIcon col="reports" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('shiftHrs')}>Shift Hrs <SortIcon col="shiftHrs" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('otHrs')}>OT Hrs <SortIcon col="otHrs" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('totalHrs')}>Total Hrs <SortIcon col="totalHrs" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('qtyProduced')}>Qty Produced <SortIcon col="qtyProduced" /></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {sortedRows.map((row: any, i: number) => (
-                  <tr key={row.dept} className={`hover:bg-indigo-50/40 transition-colors ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
-                    <td className="px-4 py-3 font-black text-gray-800">{row.dept}</td>
-                    <td className="px-4 py-3 font-semibold text-gray-700 text-right tabular-nums">{row.reports}</td>
-                    <td className="px-4 py-3 text-gray-600 text-right tabular-nums">{row.shiftHrs}</td>
-                    <td className="px-4 py-3 text-gray-600 text-right tabular-nums">{row.otHrs}</td>
-                    <td className="px-4 py-3 font-semibold text-indigo-700 text-right tabular-nums">{row.totalHrs}</td>
-                    <td className="px-4 py-3 font-black text-gray-800 text-right tabular-nums">{row.qtyProduced}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No department-wise data for the selected range.</div>}
-        </Card>
-      )}
-
-      {/* Company Performance table */}
-      {reportType === 'company-performance' && (
-        <Card className="p-0 overflow-hidden shadow-sm border border-gray-200/60 rounded-xl">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[700px] text-sm">
-              <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
-                <tr>
-                  <th className={thClass} onClick={() => handleSort('company')}>Company <SortIcon col="company" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('totalWOs')}>Total WOs <SortIcon col="totalWOs" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('totalQty')}>Total Qty <SortIcon col="totalQty" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('onTime')}>On-Time <SortIcon col="onTime" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('delayed')}>Delayed <SortIcon col="delayed" /></th>
-                  <th className="px-4 py-3 text-right whitespace-nowrap">On-Time %</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {sortedRows.map((row: any, i: number) => {
-                  const pct = row.totalWOs > 0 ? Math.round(row.onTime / row.totalWOs * 100) : 0;
-                  const barColor = pct >= 80 ? 'bg-green-400' : pct >= 50 ? 'bg-amber-400' : 'bg-red-400';
-                  return (
-                    <tr key={row.company} className={`hover:bg-indigo-50/40 transition-colors ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
-                      <td className="px-4 py-3 font-black text-gray-800">{row.company}</td>
-                      <td className="px-4 py-3 font-semibold text-gray-700 text-right tabular-nums">{row.totalWOs}</td>
-                      <td className="px-4 py-3 font-semibold text-indigo-700 text-right tabular-nums">{row.totalQty}</td>
-                      <td className="px-4 py-3 font-semibold text-green-700 text-right tabular-nums">{row.onTime}</td>
-                      <td className="px-4 py-3 font-semibold text-red-700 text-right tabular-nums">{row.delayed}</td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                            <div className={`h-full ${barColor} rounded-full`} style={{ width: `${pct}%` }}></div>
-                          </div>
-                          <span className="font-black text-gray-800 text-xs tabular-nums">{pct}%</span>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No company performance data for the selected range.</div>}
+      {/* Delivery Report Tab - Placeholder */}
+      {activeTab === 'delivery-report' && (
+        <Card className="py-20 flex flex-col items-center justify-center text-center">
+          <Truck size={40} className="text-gray-300" />
+          <p className="text-gray-500 font-bold mt-4">Delivery Report</p>
+          <p className="text-sm text-gray-400 mt-1">Coming soon</p>
         </Card>
       )}
     </div>
   );
 };
-
 // --- Production Entry ---
+
+const formatEntryDate = (dateValue: string | undefined | null): string => {
+  if (!dateValue) return '—';
+  const d = new Date(dateValue);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-GB'); // dd/mm/yyyy
+};
 
 const filterByDate = (dateStr: string | undefined, filter: string, customFrom: string, customTo: string): boolean => {
   if (filter === 'all' || !dateStr) return true;
-  const reportDate = new Date(dateStr + 'T00:00:00');
+  const dateOnly = dateStr.slice(0, 10);
+  const reportDate = new Date(dateOnly + 'T00:00:00');
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   if (filter === 'today') return reportDate.getTime() === today.getTime();
@@ -9963,12 +10923,12 @@ export default function App() {
     const host = window.location.hostname.toLowerCase();
     if (host === 'portal.excellpackaging.in' || host.startsWith('portal.')) return 'client-login';
     if (window.location.hash.startsWith('#/verify')) return 'verify';
+    const savedView = sessionStorage.getItem('excell_erp_view') as AppView | null;
+    if (savedView) return savedView;
     return 'dashboard';
   };
   const [view, setView] = useState<AppView>(initialView);
   const [canGoBack, setCanGoBack] = useState(false);
-  const [showMaintenance, setShowMaintenance] = useState(false);
-  const [migrating, setMigrating] = useState(false);
   const [openNavGroup, setOpenNavGroup] = useState<string | null>(null);
   const [loggedInUser, setLoggedInUser] = useState<User | null>(null);
   const [clientUser, setClientUser] = useState<any>(null);
@@ -9995,6 +10955,216 @@ export default function App() {
       setReadIds(new Set<number>(stored ? JSON.parse(stored) : []));
     } catch { setReadIds(new Set()); }
   }, [loggedInUser]);
+
+  // Persist current view across page reloads
+  useEffect(() => {
+    sessionStorage.setItem('excell_erp_view', view);
+  }, [view]);
+
+  // One-time backfill: snapshot item data to existing work orders
+  const [backfillRunning, setBackfillRunning] = useState(false);
+
+  const runOneTimeBackfill = async () => {
+    const BACKFILL_KEY = 'work_order_backfill_v1_done';
+    if (typeof window === 'undefined') return;
+    if (localStorage.getItem(BACKFILL_KEY) === 'true') return;
+    if (backfillRunning) return;
+
+    setBackfillRunning(true);
+    let updatedItemCount = 0;
+    let errorCount = 0;
+
+    try {
+      const { data: items } = await supabase.from('items').select('*');
+      if (!items) {
+        setBackfillRunning(false);
+        return;
+      }
+
+      for (const item of items) {
+        const updates: Record<string, any> = {};
+        if (item.name) updates.job_details = item.name;
+        if (item.drawing_no !== undefined) updates.drawing = item.drawing_no;
+
+        let effectiveImageUrl = item.drawing_image_url || '';
+        if (!effectiveImageUrl && item.drawing_file) {
+          const fileName = Array.isArray(item.drawing_file) ? item.drawing_file[0] : item.drawing_file;
+          if (fileName && typeof fileName === 'string') {
+            try {
+              effectiveImageUrl = pb.files.getURL({ id: item.id, collectionId: '', collectionName: 'items' } as any, fileName);
+            } catch (e) {
+              console.warn(`Could not generate URL for item ${item.id} file ${fileName}:`, e);
+            }
+          }
+        }
+        if (effectiveImageUrl) updates.drawing_image_url = effectiveImageUrl;
+        if (item.drawing_file !== undefined) updates.drawing_file = item.drawing_file;
+
+        if (Object.keys(updates).length === 0) continue;
+
+        const { error } = await supabase
+          .from('work_orders')
+          .update(updates)
+          .eq('source_item_id', item.id);
+
+        if (error) {
+          console.error(`Backfill failed for item ${item.id}:`, error);
+          errorCount++;
+        } else {
+          updatedItemCount++;
+        }
+      }
+
+      console.log(`[Backfill v1] Updated ${updatedItemCount} items' work orders. ${errorCount} errors.`);
+      localStorage.setItem(BACKFILL_KEY, 'true');
+      invalidateCollectionCache('work_orders');
+
+      try {
+        void logActivity({
+          eventType: 'item',
+          action: 'backfill',
+          title: 'Work Orders Backfilled from Items (v1)',
+          body: `Auto-backfilled ${updatedItemCount} items to work orders (drawing_no, job_details, drawing_image_url, drawing_file).`,
+          actor: getStoredLoggedInUser(),
+          severity: 'info',
+        });
+      } catch (_) {
+        // logActivity may not be available in this scope
+      }
+    } catch (e) {
+      console.error('Backfill error:', e);
+    }
+
+    setBackfillRunning(false);
+  };
+
+  useEffect(() => {
+    const BACKFILL_KEY = 'work_order_backfill_v1_done';
+    if (typeof window === 'undefined') return;
+    if (localStorage.getItem(BACKFILL_KEY) === 'true') return;
+    runOneTimeBackfill();
+  }, []);
+
+  const [entryDateBackfillRunning, setEntryDateBackfillRunning] = useState(false);
+
+  const runEntryDateBackfill = async () => {
+    const BACKFILL_KEY = 'work_order_entry_date_backfill_v1_done';
+    if (typeof window === 'undefined') return;
+    if (localStorage.getItem(BACKFILL_KEY) === 'true') return;
+    if (entryDateBackfillRunning) return;
+
+    setEntryDateBackfillRunning(true);
+    let updatedCount = 0;
+    let skippedCount = 0;
+    let errorCount = 0;
+    let fieldMissingCount = 0;
+    let fromDeptStatuses = 0;
+    let fromCreated = 0;
+
+    try {
+      const { data: orders } = await supabase.from('work_orders').select('*');
+      if (!orders) {
+        setEntryDateBackfillRunning(false);
+        return;
+      }
+
+      for (const order of orders) {
+        // Skip if entry_date already set
+        if (order.entry_date) {
+          skippedCount++;
+          continue;
+        }
+
+        let entryDate: string | null = null;
+        let source = '';
+
+        // Priority 1: earliest department_statuses.updated_at
+        const deptStatuses = Array.isArray(order.department_statuses) ? order.department_statuses : [];
+        const earliestDept = deptStatuses
+          .filter((ds: any) => ds.updated_at)
+          .map((ds: any) => String(ds.updated_at))
+          .sort()[0]; // ISO strings sort lexicographically
+
+        if (earliestDept) {
+          entryDate = earliestDept.split('T')[0];
+          source = 'department_statuses';
+          fromDeptStatuses++;
+        }
+
+        // Priority 2: fallback to PocketBase auto-field "created"
+        if (!entryDate) {
+          const createdRaw = (order as any).created;
+          if (createdRaw) {
+            entryDate = String(createdRaw).split('T')[0];
+            source = 'created';
+            fromCreated++;
+          }
+        }
+
+        if (!entryDate) {
+          skippedCount++;
+          continue;
+        }
+
+        const { data: updateResult, error } = await supabase
+          .from('work_orders')
+          .update({ entry_date: entryDate })
+          .eq('id', order.id);
+
+        if (error) {
+          console.error(`Failed to backfill entry_date for order ${order.id}:`, error);
+          errorCount++;
+        } else if (updateResult && Array.isArray(updateResult) && updateResult.length > 0) {
+          const persisted = updateResult[0]?.entry_date;
+          if (persisted) {
+            updatedCount++;
+          } else {
+            console.warn(`Order ${order.id}: update succeeded but entry_date not persisted. Field may not exist in PocketBase collection schema.`);
+            fieldMissingCount++;
+            errorCount++;
+          }
+        } else if (updateResult && !Array.isArray(updateResult) && (updateResult as any).entry_date) {
+          updatedCount++;
+        } else {
+          console.warn(`Order ${order.id}: update returned no data. Field may not exist in PocketBase collection schema.`);
+          fieldMissingCount++;
+          errorCount++;
+        }
+      }
+
+      if (fieldMissingCount > 0) {
+        console.error(`[Entry Date Backfill] CRITICAL: ${fieldMissingCount} updates failed because 'entry_date' field does not exist in the PocketBase 'work_orders' collection schema. Add this field in PocketBase Admin (type: date) and clear localStorage to re-run.`);
+      }
+
+      console.log(`[Entry Date Backfill] Updated ${updatedCount} orders, skipped ${skippedCount}, ${errorCount} errors (${fieldMissingCount} field-missing). Sources: ${fromDeptStatuses} from department_statuses, ${fromCreated} from created.`);
+      localStorage.setItem(BACKFILL_KEY, 'true');
+      invalidateCollectionCache('work_orders');
+
+      try {
+        void logActivity({
+          eventType: 'work_order',
+          action: 'backfill',
+          title: 'Work Order Entry Dates Backfilled (v2)',
+          body: `Auto-backfilled ${updatedCount} work orders with entry dates: ${fromDeptStatuses} from department_statuses.updated_at, ${fromCreated} from created field. ${skippedCount} skipped. ${errorCount} errors${fieldMissingCount > 0 ? ` (${fieldMissingCount} failed: field missing in PocketBase schema)` : ''}.`,
+          actor: getStoredLoggedInUser(),
+          severity: fieldMissingCount > 0 ? 'error' : 'info',
+        });
+      } catch (_) {
+        // logActivity may not be available in this scope
+      }
+    } catch (e) {
+      console.error('Entry date backfill error:', e);
+    }
+
+    setEntryDateBackfillRunning(false);
+  };
+
+  useEffect(() => {
+    const ENTRY_DATE_BACKFILL_KEY = 'work_order_entry_date_backfill_v1_done';
+    if (typeof window === 'undefined') return;
+    if (localStorage.getItem(ENTRY_DATE_BACKFILL_KEY) === 'true') return;
+    runEntryDateBackfill();
+  }, []);
 
   // Save read IDs to localStorage
   useEffect(() => {
@@ -10342,45 +11512,6 @@ export default function App() {
   const handleLiveScreenLogin = (user: any) => { setLiveScreenUser(user); navigateTo('live-screen'); };
   const handleLiveScreenLogout = () => { setLiveScreenUser(null); navigateTo('live-screen-login'); };
 
-  const handleMigrateDeliveredToDispatched = async () => {
-    if (!confirm('Migrate all "Delivered" records to "Dispatched"? This is safe to run multiple times.')) return;
-    setMigrating(true);
-    try {
-      const wo = await pb.collection('work_orders').getFullList({
-        filter: 'status="Delivered"',
-        requestKey: null
-      });
-      for (const r of wo) {
-        await pb.collection('work_orders').update(r.id, { status: 'Dispatched' }, { requestKey: null });
-      }
-
-      const evNew = await pb.collection('activity_events').getFullList({
-        filter: 'new_value="Delivered"',
-        requestKey: null
-      });
-      for (const r of evNew) {
-        await pb.collection('activity_events').update(r.id, { new_value: 'Dispatched' }, { requestKey: null });
-      }
-
-      const evOld = await pb.collection('activity_events').getFullList({
-        filter: 'old_value="Delivered"',
-        requestKey: null
-      });
-      for (const r of evOld) {
-        await pb.collection('activity_events').update(r.id, { old_value: 'Dispatched' }, { requestKey: null });
-      }
-
-      alert(`Migration complete!\n\n` +
-        `• ${wo.length} work_orders updated\n` +
-        `• ${evNew.length} activity events (new_value) updated\n` +
-        `• ${evOld.length} activity events (old_value) updated`);
-    } catch (err: any) {
-      alert('Migration failed: ' + (err?.message || String(err)));
-    } finally {
-      setMigrating(false);
-    }
-  };
-
   const handleNavClick = (viewId: AppView) => {
     navigateTo(viewId);
     setIsMobileMenuOpen(false);
@@ -10547,13 +11678,25 @@ export default function App() {
         items: [
           { id: 'dashboard' as AppView, label: 'Dashboard', icon: LayoutDashboard },
           { id: 'worker-dashboard' as AppView, label: 'My Jobs', icon: Hammer },
-          { id: 'dispatch-dashboard' as AppView, label: 'Dispatch', icon: Truck },
           { id: 'work-orders' as AppView, label: 'Orders', icon: ClipboardList },
+          { id: 'client-orders' as AppView, label: 'Client Orders', icon: ShoppingCart },
+        ],
+      },
+      {
+        key: 'dispatch-other',
+        label: 'Dispatch and Other',
+        items: [
+          { id: 'dispatch-dashboard' as AppView, label: 'Dispatch', icon: Truck },
           { id: 'daily-tasks' as AppView, label: 'Daily Tasks', icon: ListTodo },
           { id: 'my-tasks' as AppView, label: 'My Tasks', icon: CheckSquare },
-          { id: 'live-screen' as AppView, label: 'Live Screen', icon: Monitor },
           { id: 'notification-audit' as AppView, label: 'Alerts Log', icon: AlertCircle },
-          { id: 'client-orders' as AppView, label: 'Client Orders', icon: ShoppingCart },
+        ],
+      },
+      {
+        key: 'live-screen-nav',
+        label: 'Live Screen',
+        items: [
+          { id: 'live-screen' as AppView, label: 'Live Screen', icon: Monitor },
         ],
       },
       {
@@ -10565,6 +11708,7 @@ export default function App() {
           { id: 'customers' as AppView, label: 'Clients', icon: UserCircle },
           { id: 'items' as AppView, label: 'Items', icon: Package },
           { id: 'child-items' as AppView, label: 'Components', icon: Layers },
+          { id: 'vehicles' as AppView, label: 'Vehicles', icon: Truck },
         ],
       },
        {
@@ -10573,6 +11717,12 @@ export default function App() {
          items: [
            { id: 'production-plan' as AppView, label: 'Prod Plan', icon: FileText, highlight: true },
            { id: 'custom-bom-plan' as AppView, label: 'Custom BOM', icon: ListPlus, highlight: true },
+         ],
+       },
+       {
+         key: 'reports',
+         label: 'Reports',
+         items: [
            { id: 'production-reports' as AppView, label: 'Production Entry', icon: ClipboardList, highlight: true },
            { id: 'reports' as AppView, label: 'Reports', icon: GanttChartSquare, highlight: true },
          ],
@@ -10619,6 +11769,12 @@ export default function App() {
   const [globalSearchResults, setGlobalSearchResults] = useState<GlobalSearchResult[]>([]);
   const [globalSearchLoading, setGlobalSearchLoading] = useState(false);
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
+  const [refreshCounter, setRefreshCounter] = useState(0);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  const handleAppRefresh = useCallback(() => {
+    setRefreshCounter(c => c + 1);
+  }, []);
 
   const searchableViews = useMemo(() => (
     navGroups.flatMap(group => group.items.map(item => ({ ...item, group: group.label })))
@@ -10881,7 +12037,8 @@ export default function App() {
       case 'customers': return <CustomerManagement onError={onError} editingId={(window as any)._id} />;
       case 'items': return <ItemList onError={onError} editingId={(window as any)._id} />;
       case 'child-items': return <ChildItemListView onError={onError} editingId={(window as any)._id} />;
-      case 'work-orders': return <WorkOrderList onError={onError} onView={id => navigateTo('wo-details', { payload: { id } })} onViewPlan={id => navigateTo('plan-generator', { payload: { ids: [id], backView: 'work-orders' } })} loggedInUser={loggedInUser} />;
+      case 'vehicles': return <VehicleList onError={onError} />;
+      case 'work-orders': return <WorkOrderList onError={onError} onView={id => navigateTo('wo-details', { payload: { id } })} onViewPlan={id => navigateTo('plan-generator', { payload: { ids: [id], backView: 'work-orders' } })} onCreatePlan={ids => navigateTo('plan-generator', { payload: { ids, backView: 'work-orders' } })} loggedInUser={loggedInUser} />;
       case 'wo-details': return <WODetails id={(window as any)._id} onBack={() => {
          const normDept = normalizeDepartment(loggedInUser.department);
          if (normDept === 'Office') {
@@ -11177,7 +12334,7 @@ export default function App() {
                   <ExternalLink size={20} /> Install App
                 </button>
               )}
-              <button onClick={handleLogout} className="w-full flex items-center gap-4 px-4 py-3 rounded-xl font-bold text-red-500 hover:bg-red-50 text-sm group transition-colors">
+              <button onClick={() => setShowLogoutConfirm(true)} className="w-full flex items-center gap-4 px-4 py-3 rounded-xl font-bold text-red-500 hover:bg-red-50 text-sm group transition-colors">
                 <LogOut size={20} /> Sign Out
               </button>
             </div>
@@ -11205,8 +12362,24 @@ export default function App() {
               )}
 
               {navGroups.map(group => {
-                const isGroupOpen = openNavGroup === group.key;
+                const isSingleItem = group.items.length === 1;
                 const hasActiveInGroup = group.items.some(i => i.id === view);
+
+                if (isSingleItem) {
+                  const item = group.items[0];
+                  const isActive = view === item.id;
+                  return (
+                    <button
+                      key={group.key}
+                      onClick={() => handleNavClick(item.id)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${isActive ? 'bg-white/15 text-white' : 'text-blue-100/80 hover:bg-white/10 hover:text-white'}`}
+                    >
+                      {group.label}
+                    </button>
+                  );
+                }
+
+                const isGroupOpen = openNavGroup === group.key;
                 return (
                   <div key={group.key} className="relative" onClick={e => e.stopPropagation()}>
                     <button
@@ -11326,15 +12499,116 @@ export default function App() {
                   </div>
                 )}
               </div>
-              <button onClick={refreshNotificationHealth} className="rounded-full bg-white/15 p-2 hover:bg-white/25 transition-colors" aria-label="Refresh notification status">
+              <div className="relative">
+                <button
+                  onClick={() => { setIsNotificationMenuOpen(prev => !prev); }}
+                  className="relative rounded-full bg-white/15 px-3 py-1.5 text-xs font-bold text-white hover:bg-white/25 transition-colors flex items-center gap-1.5"
+                  title="Notifications"
+                >
+                  <Bell size={14} />
+                  {(() => {
+                    const unread = notificationEventsPreview.filter((e: any) => !readIds.has(e.id)).length;
+                    return unread > 0 ? (
+                      <span className="absolute -top-1 -right-1 h-4 min-w-[16px] px-1 flex items-center justify-center rounded-full bg-red-500 text-[10px] font-black text-white">{unread}</span>
+                    ) : null;
+                  })()}
+                </button>
+                {isNotificationMenuOpen && (
+                  <div className="absolute right-0 top-full mt-1.5 z-50 w-[380px] overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-800 shadow-2xl shadow-blue-950/20 erp-scale-in">
+                    <div className="bg-[#0176d3] px-4 py-4 text-white">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="relative rounded-2xl bg-white/15 p-2">
+                            <Bell size={20} />
+                            <span className={`absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-[#0176d3] ${notificationDotClass}`} />
+                          </div>
+                          <div>
+                            <div className="text-sm font-black">Notifications</div>
+                            <div className="text-xs font-semibold text-blue-100">{notificationStatusText}</div>
+                          </div>
+                        </div>
+                        <button onClick={() => setIsNotificationMenuOpen(false)} className="rounded-full p-1.5 text-white/80 transition-colors hover:bg-white/15 hover:text-white" aria-label="Close notifications">
+                          <X size={18} />
+                        </button>
+                      </div>
+                      <div className="mt-2 flex items-center gap-2">
+                        <span className="text-[11px] font-semibold text-blue-100/80">{notificationEventsPreview.filter(e => !readIds.has(e.id)).length} unread</span>
+                        {notificationEventsPreview.some(e => !readIds.has(e.id)) && (
+                          <button onClick={() => setReadIds(new Set(notificationEventsPreview.map(e => e.id)))} className="rounded-lg bg-white/15 px-2 py-1 text-[10px] font-black text-white hover:bg-white/25 transition-colors">Mark all read</button>
+                        )}
+                      </div>
+                      {notificationHealth.lastError && (
+                        <div className="mt-2 rounded-xl bg-white/12 px-3 py-2 text-[11px] font-semibold text-blue-50">{notificationHealth.lastError}</div>
+                      )}
+                    </div>
+
+                    <div className="max-h-[360px] overflow-y-auto p-3">
+                      {notificationEventsLoading && (
+                        <div className="space-y-2 p-2">
+                          <div className="erp-skeleton h-12 rounded-2xl" />
+                          <div className="erp-skeleton h-12 rounded-2xl" />
+                          <div className="erp-skeleton h-12 rounded-2xl" />
+                        </div>
+                      )}
+                      {!notificationEventsLoading && notificationEventsPreview.length === 0 && (
+                        <div className="px-4 py-10 text-center text-sm font-semibold text-slate-400">No notification events yet.</div>
+                      )}
+                      {!notificationEventsLoading && notificationEventsPreview.map((event) => {
+                        const failed = Number(event.failed || 0);
+                        const sent = Number(event.sent || 0);
+                        const tone = failed > 0 ? 'bg-red-500' : sent > 0 ? 'bg-emerald-500' : 'bg-amber-400';
+                        const isRead = readIds.has(event.id);
+                        return (
+                          <div key={event.id} className={`mb-2 rounded-2xl border p-3 last:mb-0 transition-opacity ${isRead ? 'border-slate-200 bg-white opacity-50' : 'border-slate-100 bg-slate-50/80'}`}>
+                            <div className="flex items-start gap-3">
+                              <span className={`mt-1 h-2.5 w-2.5 flex-shrink-0 rounded-full ${tone}`} />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="truncate text-sm font-black text-slate-900">{event.title || 'Notification'}</div>
+                                  <div className="whitespace-nowrap text-[10px] font-bold text-slate-400">{formatNotificationEventTime(event)}</div>
+                                </div>
+                                <div className="mt-1 line-clamp-2 whitespace-pre-line text-xs font-semibold text-slate-600">{event.body || '-'}</div>
+                                <div className="mt-2 flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-wider">
+                                  <button
+                                    onClick={() => setReadIds(prev => { const next = new Set(prev); isRead ? next.delete(event.id) : next.add(event.id); return next; })}
+                                    className="text-blue-500 hover:text-blue-700 hover:underline transition-colors"
+                                  >
+                                    {isRead ? 'Unread' : 'Read'}
+                                  </button>
+                                  <span className="text-slate-400">WO #{event.work_order_id || '-'}</span>
+                                  <span className="text-slate-400">{sent} sent / {failed} failed</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 border-t border-slate-100 bg-slate-50 p-3">
+                      {!notificationsReady ? (
+                        <button
+                          onClick={() => void handleEnableNotifications()}
+                          disabled={notificationBusy || notificationHealth.permission === 'denied'}
+                          className="col-span-3 rounded-xl bg-blue-600 px-3 py-2.5 text-xs font-black text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {notificationBusy ? 'Enabling...' : 'Enable Notifications'}
+                        </button>
+                      ) : null}
+                      <button onClick={() => { navigateTo('notification-audit'); setIsNotificationMenuOpen(false); }} className="col-span-2 rounded-xl bg-white px-3 py-2.5 text-xs font-black text-slate-700 shadow-sm transition-colors hover:bg-blue-50 hover:text-blue-700">
+                        Open Alerts Log
+                      </button>
+                      <button onClick={() => { void refreshNotificationHealth(); void fetchNotificationEventsPreview(); }} className="rounded-xl bg-white px-3 py-2.5 text-xs font-black text-slate-700 shadow-sm transition-colors hover:bg-blue-50 hover:text-blue-700">
+                        Refresh
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <button onClick={handleAppRefresh} className="rounded-full bg-white/15 p-2 hover:bg-white/25 transition-colors" aria-label="Refresh app data" title="Refresh data">
                 <RefreshCw size={17} />
               </button>
-              {loggedInUser && normalizeDepartment(loggedInUser.department) === 'Office' && (
-                <button onClick={() => setShowMaintenance(true)} className="rounded-full bg-white/15 p-2 hover:bg-white/25 transition-colors" aria-label="Maintenance tools" title="Maintenance tools">
-                  <Wrench size={17} />
-                </button>
-              )}
-              <button onClick={handleLogout} className="rounded-full bg-white/15 p-2 hover:bg-white/25 transition-colors" aria-label="Sign out" title="Sign out">
+              <button onClick={() => setShowLogoutConfirm(true)} className="rounded-full bg-white/15 p-2 hover:bg-white/25 transition-colors" aria-label="Sign out" title="Sign out">
                 <LogOut size={17} />
               </button>
             </div>
@@ -11347,11 +12621,11 @@ export default function App() {
                <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-900/40"><Package size={16}/></div>
                <span className="font-black tracking-widest text-lg text-white">EXCELL</span>
              </div>
-             <button onClick={refreshNotificationHealth} className="p-2 text-white hover:bg-white/15 rounded-xl transition-colors" aria-label="Refresh notification status">
-               <RefreshCw size={20} />
-             </button>
+              <button onClick={handleAppRefresh} className="p-2 text-white hover:bg-white/15 rounded-xl transition-colors" aria-label="Refresh app data" title="Refresh data">
+                <RefreshCw size={20} />
+              </button>
           </header>
-          <div className={`p-3 pb-24 sm:p-3 md:p-4 lg:pb-4 mx-auto w-full flex-1 ${view === 'work-orders' ? 'max-w-none' : 'max-w-[1700px]'}`}>
+          <div className={`p-3 pb-24 sm:p-3 md:p-4 lg:pb-4 mx-auto w-full flex-1 ${view === 'work-orders' || view === 'dispatch-dashboard' || view === 'notification-audit' || view === 'users' || view === 'customers' || view === 'items' || view === 'child-items' || view === 'vehicles' || view === 'production-plan' || view === 'custom-bom-plan' || view === 'production-reports' || view === 'reports' ? 'max-w-none' : 'max-w-[1700px]'}`}>
            {showExitHint && (
              <div className="mb-2 rounded-lg bg-slate-900 text-white px-3 py-2 text-xs font-bold no-print inline-block">
                Press back again to exit
@@ -11384,113 +12658,11 @@ export default function App() {
                </div>
              </div>
            )}
-            <div key={view} className="erp-fade-only">
+            <div key={`${view}-${refreshCounter}`} className="erp-fade-only">
               {renderContent()}
             </div>
-          </div>
-          <div className="hidden lg:block no-print">
-            {isNotificationMenuOpen && (
-              <div className="erp-scale-in fixed bottom-24 right-6 z-50 w-[380px] overflow-hidden rounded-3xl border border-slate-200 bg-white text-slate-800 shadow-2xl shadow-blue-950/20">
-                <div className="bg-[#0176d3] px-4 py-4 text-white">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="relative rounded-2xl bg-white/15 p-2">
-                        <Bell size={20} />
-                        <span className={`absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-[#0176d3] ${notificationDotClass}`} />
-                      </div>
-                      <div>
-                        <div className="text-sm font-black">Notifications</div>
-                        <div className="text-xs font-semibold text-blue-100">{notificationStatusText}</div>
-                      </div>
-                    </div>
-                    <button onClick={() => setIsNotificationMenuOpen(false)} className="rounded-full p-1.5 text-white/80 transition-colors hover:bg-white/15 hover:text-white" aria-label="Close notifications">
-                      <X size={18} />
-                    </button>
-                  </div>
-                  <div className="mt-2 flex items-center gap-2">
-                    <span className="text-[11px] font-semibold text-blue-100/80">{notificationEventsPreview.filter(e => !readIds.has(e.id)).length} unread</span>
-                    {notificationEventsPreview.some(e => !readIds.has(e.id)) && (
-                      <button onClick={() => setReadIds(new Set(notificationEventsPreview.map(e => e.id)))} className="rounded-lg bg-white/15 px-2 py-1 text-[10px] font-black text-white hover:bg-white/25 transition-colors">Mark all read</button>
-                    )}
-                  </div>
-                  {notificationHealth.lastError && (
-                    <div className="mt-2 rounded-xl bg-white/12 px-3 py-2 text-[11px] font-semibold text-blue-50">{notificationHealth.lastError}</div>
-                  )}
-                </div>
-
-                <div className="max-h-[360px] overflow-y-auto p-3">
-                  {notificationEventsLoading && (
-                    <div className="space-y-2 p-2">
-                      <div className="erp-skeleton h-12 rounded-2xl" />
-                      <div className="erp-skeleton h-12 rounded-2xl" />
-                      <div className="erp-skeleton h-12 rounded-2xl" />
-                    </div>
-                  )}
-                  {!notificationEventsLoading && notificationEventsPreview.length === 0 && (
-                    <div className="px-4 py-10 text-center text-sm font-semibold text-slate-400">No notification events yet.</div>
-                  )}
-                  {!notificationEventsLoading && notificationEventsPreview.map((event) => {
-                    const failed = Number(event.failed || 0);
-                    const sent = Number(event.sent || 0);
-                    const tone = failed > 0 ? 'bg-red-500' : sent > 0 ? 'bg-emerald-500' : 'bg-amber-400';
-                    const isRead = readIds.has(event.id);
-                    return (
-                      <div key={event.id} className={`mb-2 rounded-2xl border p-3 last:mb-0 transition-opacity ${isRead ? 'border-slate-200 bg-white opacity-50' : 'border-slate-100 bg-slate-50/80'}`}>
-                        <div className="flex items-start gap-3">
-                          <span className={`mt-1 h-2.5 w-2.5 flex-shrink-0 rounded-full ${tone}`} />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="truncate text-sm font-black text-slate-900">{event.title || 'Notification'}</div>
-                              <div className="whitespace-nowrap text-[10px] font-bold text-slate-400">{formatNotificationEventTime(event)}</div>
-                            </div>
-                            <div className="mt-1 line-clamp-2 whitespace-pre-line text-xs font-semibold text-slate-600">{event.body || '-'}</div>
-                            <div className="mt-2 flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-wider">
-                              <button
-                                onClick={() => setReadIds(prev => { const next = new Set(prev); isRead ? next.delete(event.id) : next.add(event.id); return next; })}
-                                className="text-blue-500 hover:text-blue-700 hover:underline transition-colors"
-                              >
-                                {isRead ? 'Unread' : 'Read'}
-                              </button>
-                              <span className="text-slate-400">WO #{event.work_order_id || '-'}</span>
-                              <span className="text-slate-400">{sent} sent / {failed} failed</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 border-t border-slate-100 bg-slate-50 p-3">
-                  {!notificationsReady ? (
-                    <button
-                      onClick={() => void handleEnableNotifications()}
-                      disabled={notificationBusy || notificationHealth.permission === 'denied'}
-                      className="col-span-3 rounded-xl bg-blue-600 px-3 py-2.5 text-xs font-black text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {notificationBusy ? 'Enabling...' : 'Enable Notifications'}
-                    </button>
-                  ) : null}
-                  <button onClick={() => { navigateTo('notification-audit'); setIsNotificationMenuOpen(false); }} className="col-span-2 rounded-xl bg-white px-3 py-2.5 text-xs font-black text-slate-700 shadow-sm transition-colors hover:bg-blue-50 hover:text-blue-700">
-                    Open Alerts Log
-                  </button>
-                  <button onClick={() => { void refreshNotificationHealth(); void fetchNotificationEventsPreview(); }} className="rounded-xl bg-white px-3 py-2.5 text-xs font-black text-slate-700 shadow-sm transition-colors hover:bg-blue-50 hover:text-blue-700">
-                    Refresh
-                  </button>
-                </div>
-              </div>
-            )}
-            <button
-              onClick={() => setIsNotificationMenuOpen(prev => !prev)}
-              className="fixed bottom-6 right-6 z-50 flex h-16 w-16 items-center justify-center rounded-full bg-[#0176d3] text-white shadow-2xl shadow-blue-300/80 transition-all hover:bg-[#0b5cab] hover:shadow-blue-400/80"
-              aria-label="Open notifications"
-              title="Notifications"
-            >
-              <Bell size={25} />
-              <span className={`absolute right-3 top-3 h-3.5 w-3.5 rounded-full border-2 border-[#0176d3] ${notificationDotClass}`} />
-            </button>
-          </div>
-          <nav className="lg:hidden fixed bottom-3 left-3 right-3 z-40 no-print border border-white/70 bg-white/82 backdrop-blur-2xl rounded-3xl px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-2xl shadow-slate-300/50">
+           </div>
+           <nav className="lg:hidden fixed bottom-3 left-3 right-3 z-40 no-print border border-white/70 bg-white/82 backdrop-blur-2xl rounded-3xl px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-2xl shadow-slate-300/50">
             <div className="grid grid-cols-5 gap-1">
               {navGroups.flatMap(group => group.items).slice(0, 5).map(item => (
                 <button
@@ -11523,37 +12695,36 @@ export default function App() {
             ))}
           </div>
 
-          {/* Maintenance Tools Modal */}
-          {showMaintenance && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setShowMaintenance(false)}>
-              <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
-                    <Wrench size={18} className="text-orange-500" />
-                    Maintenance Tools
-                  </h3>
-                  <button onClick={() => setShowMaintenance(false)} className="text-gray-500 hover:text-gray-700 transition-colors">
-                    <X size={18} />
-                  </button>
+        </main>
+
+        {showLogoutConfirm && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-[2px]" onClick={() => setShowLogoutConfirm(false)}>
+            <div className="bg-white rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] w-full max-w-sm mx-4 p-8 animate-fade-in" onClick={e => e.stopPropagation()}>
+              <div className="flex flex-col items-center text-center mb-6">
+                <div className="w-16 h-16 rounded-2xl bg-red-50 flex items-center justify-center mb-4">
+                  <LogOut size={28} className="text-red-500" />
                 </div>
-                <p className="text-xs text-gray-600 mb-4">One-time data migration tools. Safe to re-run.</p>
-                <div className="border-t border-gray-200 pt-4">
-                  <p className="text-xs font-black text-amber-700 mb-2 uppercase tracking-widest">⚠️ Migrate Old Data</p>
-                  <p className="text-xs text-gray-600 mb-3">
-                    Convert any old "Delivered" records to "Dispatched" in <code className="bg-gray-100 px-1 rounded">work_orders</code> and <code className="bg-gray-100 px-1 rounded">activity_events</code>.
-                  </p>
-                  <button
-                    onClick={handleMigrateDeliveredToDispatched}
-                    disabled={migrating}
-                    className="w-full py-2.5 bg-orange-600 text-white rounded-xl font-black hover:bg-orange-700 disabled:opacity-50 transition-all"
-                  >
-                    {migrating ? 'Migrating…' : 'Migrate Old "Delivered" → "Dispatched"'}
-                  </button>
+                <h3 className="text-xl font-black text-slate-900 mb-1">Sign out of ERP?</h3>
+                <p className="text-sm font-semibold text-slate-500">You'll need to sign back in to access your orders and tasks.</p>
+              </div>
+              {loggedInUser && (
+                <div className="bg-slate-50 rounded-xl px-4 py-3 mb-6 flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-black text-sm">
+                    {loggedInUser.username.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-slate-800 truncate">{loggedInUser.username}</p>
+                    <p className="text-xs font-semibold text-slate-400">{loggedInUser.department || 'ERP User'}</p>
+                  </div>
                 </div>
+              )}
+              <div className="flex gap-3">
+                <button onClick={() => setShowLogoutConfirm(false)} className="flex-1 py-3 rounded-xl text-sm font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors">Cancel</button>
+                <button onClick={() => { handleLogout(); setShowLogoutConfirm(false); }} className="flex-1 py-3 rounded-xl text-sm font-bold bg-red-500 text-white hover:bg-red-600 shadow-lg shadow-red-500/25 transition-all">Sign out</button>
               </div>
             </div>
-          )}
-       </main>
+          </div>
+        )}
     </div>
   );
 }

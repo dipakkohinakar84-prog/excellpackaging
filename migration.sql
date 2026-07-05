@@ -110,3 +110,23 @@ CREATE TABLE IF NOT EXISTS notification_events (
 
 CREATE INDEX IF NOT EXISTS idx_notification_events_created_at
   ON notification_events(created_at DESC);
+
+-- Vehicles master table
+CREATE TABLE IF NOT EXISTS vehicles (
+  id BIGSERIAL PRIMARY KEY,
+  vehicle_no TEXT NOT NULL UNIQUE,
+  driver_name TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_vehicles_vehicle_no
+  ON vehicles(vehicle_no);
+
+-- 8. Add 'drawing_image_url' and 'drawing_file' to work_orders (snapshot of item PDF at creation)
+ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS drawing_image_url TEXT;
+ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS drawing_file TEXT;
+
+-- 9. Add 'entry_date' to work_orders (backfilled from activity_events.event_time)
+ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS entry_date DATE;

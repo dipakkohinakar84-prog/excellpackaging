@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from './pocketbase';
 import { WorkOrder, Notice } from './types';
-import { RefreshCw, Maximize2, Minimize2, Pause, Play, ArrowLeft, Megaphone, Plus, X, Trash2, ListChecks, Clock, PlayCircle } from 'lucide-react';
+import { normalizeDepartment } from './utils';
+import { RefreshCw, Maximize2, Minimize2, Pause, Play, ArrowLeft, Megaphone, Plus, X, Trash2, ListChecks, Clock, PlayCircle, Truck, CheckCircle } from 'lucide-react';
 
 interface Props {
   loggedInUser?: { username: string; department: string } | null;
@@ -17,9 +18,11 @@ interface PageDef {
 }
 
 const PAGES: PageDef[] = [
+  { key: 'pending', label: 'In Queue', status: 'Not Started', icon: <Clock size={22} /> },
   { key: 'wip', label: 'Work In Progress', status: 'Work Started', icon: <PlayCircle size={22} /> },
   { key: 'qc', label: 'Ready For QC', status: 'Ready for QC', icon: <ListChecks size={22} /> },
-  { key: 'pending', label: 'Pending Orders', status: 'Not Started', icon: <Clock size={22} /> },
+  { key: 'ready-dispatch', label: 'Ready for Dispatch', status: 'Ready for despatch', icon: <Truck size={22} /> },
+  { key: 'dispatched-today', label: 'Todays Dispatched', status: 'Dispatched', icon: <CheckCircle size={22} /> },
 ];
 
 const DEPT_COLUMNS = [
@@ -53,15 +56,20 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
   const [newNoticeText, setNewNoticeText] = useState('');
   const [currentPage, setCurrentPage] = useState(0);
   const [tick, setTick] = useState(0);
+  const [dispatchLogs, setDispatchLogs] = useState<any[]>([]);
+  const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
   const rotateRef = useRef<ReturnType<typeof setInterval>>();
   const prevPageCountRef = useRef(0);
   const [badgePop, setBadgePop] = useState(false);
+  const scrollPausedRef = useRef(false);
+  const scrollRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   const activeNotices = useMemo(() => notices.filter(n => n.is_active), [notices]);
 
   const fetchData = useCallback(async () => {
-    const [woRes, noticeRes] = await Promise.all([
-      supabase.from('work_orders').select('*').limit(200),
+    const [woRes, dlRes, noticeRes] = await Promise.all([
+      supabase.from('work_orders').select('*').order('id', { ascending: false }),
+      supabase.from('dispatch_logs').select('*'),
       supabase.from('notices').select('*').order('created_at', { ascending: false }),
     ]);
     if (!woRes.error && woRes.data) {
@@ -73,30 +81,107 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
       });
       setOrders(sorted);
     }
+    if (!dlRes.error && dlRes.data) setDispatchLogs(dlRes.data as any[]);
     if (!noticeRes.error && noticeRes.data) setNotices((noticeRes.data as Notice[]).filter(n => n.is_active));
   }, []);
 
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  const todayDispatchIds = useMemo(() => new Set(
+    dispatchLogs
+      .filter((dl: any) => (dl.dispatch_date || '').slice(0, 10) === todayStr)
+      .map((dl: any) => Number(dl.work_order_id))
+  ), [dispatchLogs]);
+
+  const todayDispatchQtyMap = useMemo(() => {
+    const map = new Map<number, number>();
+    dispatchLogs.forEach((dl: any) => {
+      if ((dl.dispatch_date || '').slice(0, 10) === todayStr) {
+        const id = Number(dl.work_order_id);
+        map.set(id, (map.get(id) || 0) + Number(dl.dispatch_qty || 0));
+      }
+    });
+    return map;
+  }, [dispatchLogs, todayStr]);
+
+  const activePages = useMemo(() => {
+    return PAGES.filter(p => {
+      if (p.key === 'dispatched-today') {
+        return orders.some(o => o.status === 'Dispatched' && todayDispatchIds.has(o.id));
+      }
+      if (p.key === 'ready-dispatch') {
+        return orders.some(o => o.status === 'Ready for despatch' || (o.status === 'Dispatched' && (o.qty - (o.qty_dispatched || 0)) > 0));
+      }
+      const targetStatus = p.status;
+      return orders.some(o => {
+        const deptStatuses = o.department_statuses || [];
+        if (deptStatuses.length > 0) {
+          return deptStatuses.some(ds => ds.status === targetStatus && (targetStatus !== 'Ready for QC' || !ds.qc_status));
+        }
+        return p.key !== 'qc' && o.status === targetStatus;
+      });
+    });
+  }, [orders, todayDispatchIds]);
+
   const pageOrders = useMemo(() => {
-    const page = PAGES[currentPage];
-    return orders.filter(o => o.status === page.status);
-  }, [orders, currentPage]);
+    const page = activePages[currentPage];
+    if (!page) return [];
+    if (page.key === 'dispatched-today') {
+      return orders.filter(o => o.status === 'Dispatched' && todayDispatchIds.has(o.id));
+    }
+    if (page.key === 'ready-dispatch') {
+      return orders.filter(o => o.status === 'Ready for despatch' || (o.status === 'Dispatched' && (o.qty - (o.qty_dispatched || 0)) > 0));
+    }
+    const targetStatus = page.status;
+    return orders.filter(o => {
+      const deptStatuses = o.department_statuses || [];
+      if (deptStatuses.length > 0) {
+        return deptStatuses.some(ds => ds.status === targetStatus && (targetStatus !== 'Ready for QC' || !ds.qc_status));
+      }
+      return page.key !== 'qc' && o.status === targetStatus;
+    });
+  }, [orders, currentPage, activePages, todayDispatchIds]);
 
   const columnOrders = useMemo(() => {
     const grouped: Record<string, WorkOrder[]> = { Wood_Work: [], Corrugation: [] };
+    const page = activePages[currentPage];
+    if (!page) return grouped;
+    const isDeptPage = page.key === 'pending' || page.key === 'wip' || page.key === 'qc';
+    const targetStatus = page.status;
     pageOrders.forEach(wo => {
       const depts = wo.assigned_departments || [];
-      const match = DEPT_COLUMNS.find(col => depts.includes(col.key));
-      if (match) grouped[match.key].push(wo);
+      const deptStatuses = wo.department_statuses || [];
+      if (isDeptPage) {
+        if (deptStatuses.length > 0) {
+          DEPT_COLUMNS.forEach(col => {
+            const ds = deptStatuses.find(s => normalizeDepartment(s.department) === col.key);
+            if (ds?.status === targetStatus && (targetStatus !== 'Ready for QC' || !ds?.qc_status)) {
+              grouped[col.key].push(wo);
+            }
+          });
+        } else if (depts.length > 0) {
+          DEPT_COLUMNS.forEach(col => {
+            if (wo.status === targetStatus && page.key !== 'qc' && depts.some(d => normalizeDepartment(d) === col.key)) {
+              grouped[col.key].push(wo);
+            }
+          });
+        } else if (wo.status === targetStatus && page.key !== 'qc') {
+          grouped[DEPT_COLUMNS[0].key].push(wo);
+        }
+      } else {
+        const match = DEPT_COLUMNS.find(col => depts.some(d => normalizeDepartment(d) === col.key));
+        if (match) grouped[match.key].push(wo);
+      }
     });
     return grouped;
-  }, [pageOrders]);
+  }, [pageOrders, activePages, currentPage]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   useEffect(() => {
     const channel = supabase
       .channel('live-screen-wo-changes')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'work_orders' }, () => { fetchData(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'work_orders' }, () => { fetchData(); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [fetchData]);
@@ -115,11 +200,32 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
     if (rotateRef.current) clearInterval(rotateRef.current);
     if (playing) {
       rotateRef.current = setInterval(() => {
-        setCurrentPage(p => (p + 1) % PAGES.length);
+        setCurrentPage(p => (p + 1) % (activePages.length || 1));
       }, 12000);
     }
     return () => { if (rotateRef.current) clearInterval(rotateRef.current); };
-  }, [playing]);
+  }, [playing, activePages.length]);
+
+  useEffect(() => {
+    if (activePages.length > 0 && currentPage >= activePages.length) {
+      setCurrentPage(activePages.length - 1);
+    }
+  }, [currentPage, activePages.length]);
+
+  useEffect(() => {
+    if (!playing || !autoScrollEnabled) return;
+    const iv = setInterval(() => {
+      scrollRefs.current.forEach((el, i) => {
+        if (!el) return;
+        if (el.scrollTop >= el.scrollHeight - el.clientHeight - 1) {
+          return;
+        } else if (!scrollPausedRef.current) {
+          el.scrollTop += 1;
+        }
+      });
+    }, 30);
+    return () => clearInterval(iv);
+  }, [playing, autoScrollEnabled]);
 
   useEffect(() => {
     if (pageOrders.length !== prevPageCountRef.current) {
@@ -158,7 +264,7 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
     if (!error) fetchData();
   };
 
-  const page = PAGES[currentPage];
+  const page = activePages[currentPage] || null;
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'repeating-linear-gradient(0deg, rgba(255,255,255,0.015) 0, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 56px), repeating-linear-gradient(90deg, rgba(255,255,255,0.015) 0, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 56px), #15171a' }}>
@@ -171,15 +277,11 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
         .scrollbar-thin::-webkit-scrollbar-track{background:transparent}
         .scrollbar-thin::-webkit-scrollbar-thumb{background:#34393e;border-radius:4px}
         @keyframes fadeSlideIn{0%{opacity:0;transform:translateY(12px)}100%{opacity:1;transform:translateY(0)}}
-        @keyframes pulseSlow{0%,100%{opacity:1}50%{opacity:0.4}}
         @keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.25)}60%{transform:scale(0.9)}100%{transform:scale(1)}}
-        @keyframes dotPulse{0%{box-shadow:0 0 0 0 rgba(226,70,47,.55)}70%{box-shadow:0 0 0 10px rgba(226,70,47,0)}100%{box-shadow:0 0 0 0 rgba(226,70,47,0)}}
         @keyframes fillbar{from{width:0%}to{width:100%}}
         @keyframes cardSlideUp{0%{opacity:0;transform:translateY(16px) scale(0.97)}100%{opacity:1;transform:translateY(0) scale(1)}}
         .animate-fade-in{animation:fadeSlideIn .35s ease-out}
-        .animate-pulse-slow{animation:pulseSlow 3s ease-in-out infinite}
         .animate-pop{animation:pop .35s ease-out}
-        .animate-dot-pulse{animation:dotPulse 1.6s infinite}
         .animate-card-in{animation:cardSlideUp .4s ease-out both}
         .pager-dot{position:relative;height:6px;border-radius:3px;background:#23262b;border:1px solid #34393e;overflow:hidden;flex:1;max-width:80px}
         .pager-fill{position:absolute;left:0;top:0;bottom:0;border-radius:3px}
@@ -189,7 +291,7 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
 
       {/* Notice Marquee */}
       {activeNotices.length > 0 && (
-        <div className="shrink-0 mx-4 mt-3 mb-1 overflow-hidden rounded-xl bg-gradient-to-r from-amber-500/20 via-yellow-500/25 to-amber-500/20 border border-amber-500/30 h-9 flex items-center shadow-[0_0_15px_rgba(234,179,8,0.1)]" style={{ maskImage: 'linear-gradient(to right, transparent, black 3%, black 97%, transparent)', WebkitMaskImage: 'linear-gradient(to right, transparent, black 3%, black 97%, transparent)' }}>
+        <div className="shrink-0 mx-4 mt-3 mb-1 overflow-hidden rounded-xl bg-gradient-to-r from-amber-500/20 via-yellow-500/25 to-amber-500/20 border border-amber-500/30 h-9 flex items-center" style={{ maskImage: 'linear-gradient(to right, transparent, black 3%, black 97%, transparent)', WebkitMaskImage: 'linear-gradient(to right, transparent, black 3%, black 97%, transparent)' }}>
           <div className="marquee-track flex items-center h-full" style={{ '--marquee-duration': `${Math.max(15, activeNotices.length * 8)}s` } as React.CSSProperties}>
             {[...Array(4)].flatMap(() => activeNotices).map((notice, i) => (
               <span key={`${notice.id}-${i}`} className="inline-flex items-center gap-2 mx-6 text-amber-300/80 font-bold text-sm tracking-wide">
@@ -220,7 +322,7 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
             </span>
           </div>
           <div className="flex items-center gap-2" style={{fontFamily:'IBM Plex Mono,monospace',fontSize:'12px',fontWeight:600,color:'#e2462f',letterSpacing:'0.14em',textTransform:'uppercase'}}>
-            <div style={{width:'10px',height:'10px',borderRadius:'50%',background:'#e2462f',animation:'dotPulse 1.6s infinite'}} />
+            <div style={{width:'10px',height:'10px',borderRadius:'50%',background:'#e2462f'}} />
             Live
           </div>
         </div>
@@ -239,6 +341,14 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
           <button onClick={() => { fetchData(); setTick(t => t + 1); }} className="p-1.5 rounded-lg" style={{background:'rgba(255,255,255,0.04)',color:'#5e6469'}}>
             <RefreshCw size={13} />
           </button>
+          <button onClick={() => setAutoScrollEnabled(!autoScrollEnabled)} style={{
+            padding:'4px 8px',borderRadius:'6px',fontSize:'11px',fontWeight:700,
+            background:autoScrollEnabled?'rgba(73,177,107,0.15)':'rgba(226,70,47,0.12)',
+            color:autoScrollEnabled?'#49b16b':'#e2462f',
+            border:`1px solid ${autoScrollEnabled?'rgba(73,177,107,0.35)':'rgba(226,70,47,0.35)'}`
+          }} title="Toggle auto-scroll">
+            Auto {autoScrollEnabled ? 'ON' : 'OFF'}
+          </button>
           <div style={{fontFamily:'IBM Plex Mono,monospace',fontSize:'12px',color:'#5e6469',textAlign:'right',marginLeft:'8px'}}>
             <div style={{fontFamily:'inherit'}}>{dateStr}</div>
             <b style={{fontFamily:'inherit',display:'block',color:'#f3f4f6',fontSize:'22px',fontWeight:600,letterSpacing:'0.03em'}}>{timeStr}</b>
@@ -251,18 +361,19 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
       {/* Page Content */}
       <div className="flex-1 flex flex-col min-h-0 px-4 pt-1 pb-1" style={{fontFamily:'IBM Plex Sans,sans-serif'}}>
         {/* Page Header - Stage Panel */}
-        <div className="shrink-0 flex items-center gap-3 mb-3" style={{background:'#23262b',border:'1px solid #34393e',borderRadius:'8px',padding:'8px 16px',overflow:'hidden',position:'relative',justifyContent:'center'}}>
-          <div style={{position:'absolute',left:0,top:0,bottom:0,width:'10px',background:page.key === 'wip' ? 'repeating-linear-gradient(135deg, #ffb020 0 8px, #15171a 8px 16px)' : page.key === 'qc' ? 'repeating-linear-gradient(135deg, #49b16b 0 8px, #15171a 8px 16px)' : 'repeating-linear-gradient(135deg, #5e6469 0 8px, #15171a 8px 16px)'}} />
+        {page && (
+        <div className="shrink-0 flex items-center gap-3 mb-3" style={{background:page.key === 'wip' ? '#5b9cf6' : page.key === 'qc' ? '#eab308' : page.key === 'ready-dispatch' ? '#60c17a' : page.key === 'dispatched-today' ? '#a78bfa' : page.key === 'pending' ? '#f3f4f6' : '#23262b',border:page.key === 'wip' ? '1px solid #5b9cf6' : page.key === 'qc' ? '1px solid #eab308' : page.key === 'ready-dispatch' ? '1px solid #60c17a' : page.key === 'dispatched-today' ? '1px solid #a78bfa' : page.key === 'pending' ? '1px solid #e5e7eb' : '1px solid #34393e',borderRadius:'8px',padding:'8px 16px',overflow:'hidden',position:'relative',justifyContent:'center'}}>
+          <div style={{position:'absolute',left:0,top:0,bottom:0,width:'10px',background:page.key === 'wip' ? 'repeating-linear-gradient(135deg, #5b9cf6 0 8px, #15171a 8px 16px)' : page.key === 'qc' ? 'repeating-linear-gradient(135deg, #eab308 0 8px, #15171a 8px 16px)' : page.key === 'ready-dispatch' ? 'repeating-linear-gradient(135deg, #60c17a 0 8px, #15171a 8px 16px)' : page.key === 'dispatched-today' ? 'repeating-linear-gradient(135deg, #a78bfa 0 8px, #15171a 8px 16px)' : page.key === 'pending' ? 'repeating-linear-gradient(135deg, #9ca3af 0 8px, #f3f4f6 8px 16px)' : 'repeating-linear-gradient(135deg, #5e6469 0 8px, #15171a 8px 16px)'}} />
           <div style={{display:'flex',alignItems:'center',flexShrink:0}}>
-            <span style={{color:page.key === 'wip' ? '#ffb020' : page.key === 'qc' ? '#49b16b' : '#9aa0a6',fontSize:'18px'}}>{page.icon}</span>
+            <span style={{color:page.key === 'wip' ? '#5b9cf6' : page.key === 'qc' ? '#f3f4f6' : page.key === 'ready-dispatch' ? '#f3f4f6' : page.key === 'dispatched-today' ? '#f3f4f6' : page.key === 'pending' ? '#6b7280' : '#a78bfa',fontSize:'18px'}}>{page.icon}</span>
           </div>
-          <h1 style={{fontFamily:'Oswald,sans-serif',fontWeight:600,textTransform:'uppercase',fontSize:'26px',letterSpacing:'0.02em',color:'#f3f4f6'}}>{page.label}</h1>
+          <h1 style={{fontFamily:'Oswald,sans-serif',fontWeight:600,textTransform:'uppercase',fontSize:'26px',letterSpacing:'0.02em',color:page.key === 'wip' ? '#15171a' : page.key === 'qc' ? '#15171a' : page.key === 'ready-dispatch' ? '#15171a' : page.key === 'dispatched-today' ? '#15171a' : page.key === 'pending' ? '#15171a' : '#f3f4f6'}}>{page.label}</h1>
           <span className={`stage-badge ${badgePop ? 'animate-pop' : ''}`} style={{
             fontFamily:'IBM Plex Mono,monospace',
             fontWeight:600,
             fontSize:'14px',
-            background: page.key === 'wip' ? '#ffb020' : page.key === 'qc' ? '#49b16b' : '#5e6469',
-            color:'#15171a',
+            background: page.key === 'wip' ? '#1e40af' : page.key === 'qc' ? '#a16207' : page.key === 'ready-dispatch' ? '#15803d' : page.key === 'dispatched-today' ? '#7c3aed' : page.key === 'pending' ? '#6b7280' : '#a78bfa',
+            color: page.key === 'wip' ? '#ffffff' : page.key === 'qc' ? '#ffffff' : page.key === 'ready-dispatch' ? '#ffffff' : page.key === 'dispatched-today' ? '#ffffff' : page.key === 'pending' ? '#ffffff' : '#15171a',
             padding:'4px 12px',
             borderRadius:'6px',
             flexShrink:0
@@ -270,6 +381,7 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
             {pageOrders.length} {pageOrders.length === 1 ? 'ORDER' : 'ORDERS'}
           </span>
         </div>
+        )}
 
         {/* Order Columns */}
         <div key={currentPage} className="flex-1 flex flex-col min-h-0 animate-fade-in">
@@ -285,32 +397,22 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
           </div>
         ) : (
           (() => {
-            const accentColor = page.key === 'wip' ? '#ffb020' : page.key === 'qc' ? '#49b16b' : '#9aa0a6';
-            const textColor = page.key === 'wip' ? '#ffb020' : page.key === 'qc' ? '#49b16b' : '#f3f4f6';
-            const getUrgency = (wo: WorkOrder) => {
-              if (!wo.etd) return null;
-              const etd = new Date(wo.etd + 'T12:00:00');
-              if (Number.isNaN(etd.getTime())) return null;
-              const diff = etd.getTime() - Date.now();
-              const days = Math.ceil(diff / 86400000);
-              if (days < 0) return { label: `Overdue ${Math.abs(days)}d`, state: 'overdue', color: '#e2462f', border: '8px solid #e2462f' };
-              if (days <= 3) return { label: `${days}d left`, state: 'urgent', color: '#ffb020', border: '8px solid #ffb020' };
-              return { label: `${days}d left`, state: 'ok', color: '#49b16b', border: '8px solid #49b16b' };
-            };
+            const accentColor = page.key === 'wip' ? '#5b9cf6' : page.key === 'qc' ? '#eab308' : page.key === 'pending' ? '#9ca3af' : page.key === 'ready-dispatch' ? '#60c17a' : '#a78bfa';
+            const textColor = page.key === 'wip' ? '#e5e7eb' : page.key === 'qc' ? '#f3f4f6' : page.key === 'pending' ? '#f3f4f6' : page.key === 'ready-dispatch' ? '#f3f4f6' : page.key === 'dispatched-today' ? '#f3f4f6' : '#a78bfa';
             return (
           <div className="flex-1 grid grid-cols-2 gap-3 min-h-0 overflow-hidden">
-            {DEPT_COLUMNS.map(col => {
+            {DEPT_COLUMNS.map((col, idx) => {
               const colOrders = columnOrders[col.key];
               return (
                 <div key={col.key} className="flex flex-col min-h-0 overflow-hidden" style={{background:'#1d2024',border:'1px solid #34393e',borderRadius:'8px'}}>
                   {/* Column Header */}
-                  <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'12px',padding:'14px 16px',borderBottom:'1px solid #34393e',background:'#23262b'}}>
-                    <div style={{width:'12px',height:'12px',borderRadius:'50%',background:accentColor,animation:'pulseSlow 3s ease-in-out infinite'}} />
-                    <span style={{fontFamily:'Oswald,sans-serif',fontWeight:600,textTransform:'uppercase',fontSize:'20px',letterSpacing:'0.04em',color:'#f3f4f6'}}>{col.label}</span>
-                    <span style={{fontFamily:'IBM Plex Mono,monospace',fontWeight:600,fontSize:'13px',padding:'3px 12px',borderRadius:'5px',background:accentColor,color:'#15171a'}}>{colOrders.length}</span>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'12px',padding:'14px 16px',borderBottom:page.key === 'wip' ? '1px solid #93c5fd' : page.key === 'qc' ? '1px solid #a16207' : page.key === 'ready-dispatch' ? '1px solid #15803d' : page.key === 'dispatched-today' ? '1px solid #7c3aed' : page.key === 'pending' ? '1px solid #e5e7eb' : '1px solid #34393e',background:page.key === 'wip' ? '#5b9cf6' : page.key === 'qc' ? '#eab308' : page.key === 'ready-dispatch' ? '#60c17a' : page.key === 'dispatched-today' ? '#a78bfa' : page.key === 'pending' ? '#f3f4f6' : '#23262b'}}>
+                    <div style={{width:'12px',height:'12px',borderRadius:'50%',background:page.key === 'wip' ? '#93c5fd' : page.key === 'qc' ? '#fef08a' : page.key === 'ready-dispatch' ? '#86efac' : page.key === 'dispatched-today' ? '#c4b5fd' : page.key === 'pending' ? '#9ca3af' : accentColor}} />
+                    <span style={{fontFamily:'Oswald,sans-serif',fontWeight:600,textTransform:'uppercase',fontSize:'20px',letterSpacing:'0.04em',color:page.key === 'wip' ? '#15171a' : page.key === 'qc' ? '#15171a' : page.key === 'ready-dispatch' ? '#15171a' : page.key === 'dispatched-today' ? '#15171a' : page.key === 'pending' ? '#15171a' : '#f3f4f6'}}>{col.label}</span>
+                    <span style={{fontFamily:'IBM Plex Mono,monospace',fontWeight:600,fontSize:'13px',padding:'3px 12px',borderRadius:'5px',background:page.key === 'wip' ? '#93c5fd' : page.key === 'qc' ? '#a16207' : page.key === 'ready-dispatch' ? '#15803d' : page.key === 'dispatched-today' ? '#7c3aed' : page.key === 'pending' ? '#6b7280' : accentColor,color:page.key === 'wip' ? '#1e3a5f' : page.key === 'qc' ? '#ffffff' : page.key === 'ready-dispatch' ? '#ffffff' : page.key === 'dispatched-today' ? '#ffffff' : page.key === 'pending' ? '#ffffff' : '#15171a'}}>{colOrders.length}</span>
                   </div>
                   {/* Column Body */}
-                  <div className="flex-1 overflow-y-auto scrollbar-thin" style={{padding:'4px'}}>
+                  <div ref={el => { scrollRefs.current[idx] = el; }} className="flex-1 overflow-y-scroll scrollbar-thin" style={{padding:'4px'}} onMouseEnter={() => { scrollPausedRef.current = true; }} onMouseLeave={() => { scrollPausedRef.current = false; }}>
                     {colOrders.length === 0 ? (
                       <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'40px 0',gap:'10px',color:'#5e6469'}}>
                         <PlayCircle size={24} style={{opacity:0.5}} />
@@ -318,28 +420,38 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
                       </div>
                     ) : (
                       colOrders.map((wo, idx) => {
-                        const urgency = getUrgency(wo);
+                        const etdMs = wo.etd ? new Date(wo.etd + 'T12:00:00').getTime() : 0;
+                        const daysLeft = etdMs && !isNaN(etdMs) ? Math.ceil((etdMs - Date.now()) / 86400000) : 0;
+                        const isOverdue = daysLeft < 0;
+                        const daysAbs = Math.abs(daysLeft);
+                        const dateStr = wo.etd
+                          ? new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(wo.etd))
+                          : 'TBD';
                         return (
                         <div key={wo.id} className="animate-card-in" style={{margin:'4px',animationDelay:`${idx * 50}ms`}}>
-                          <div style={{background:'#1d2024',border:`1px solid #34393e`,borderLeft:`8px solid ${accentColor}`,borderRadius:'8px',padding:'16px 20px',transition:'all 0.2s'}}
-                            onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.3)'; }}
-                            onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; }}
+                          <div style={{background:'#1d2024',border:`1px solid #34393e`,borderLeft:`4px solid ${accentColor}`,borderRadius:'8px',padding:'14px 16px'}}
                           >
-                            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'8px',marginBottom:'4px'}}>
-                              <span style={{fontFamily:'IBM Plex Mono,monospace',fontWeight:700,fontSize:'20px',color:'#f3f4f6'}}>#{wo.id}</span>
-                              <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
-                                {urgency && (
-                                  <span style={{fontFamily:'IBM Plex Mono,monospace',fontSize:'12px',fontWeight:700,letterSpacing:'0.04em',textTransform:'uppercase',padding:'3px 10px',borderRadius:'5px',background: urgency.state === 'overdue' ? 'rgba(226,70,47,0.16)' : urgency.state === 'urgent' ? 'rgba(255,176,32,0.14)' : 'rgba(73,177,107,0.14)',color:accentColor,border:`1px solid ${urgency.state === 'overdue' ? 'rgba(226,70,47,0.45)' : urgency.state === 'urgent' ? 'rgba(255,176,32,0.4)' : 'rgba(73,177,107,0.4)'}`}}>{urgency.label}</span>
-                                )}
-                              </div>
-                            </div>
-                            <div style={{display:'grid',gridTemplateColumns:'1fr auto auto auto',gap:'20px',alignItems:'center',marginBottom:'6px'}}>
-                              <span style={{fontWeight:600,fontSize:'24px',color:textColor,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{wo.customer}</span>
-                              <span style={{fontWeight:600,fontSize:'24px',color:textColor,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{wo.job_details}</span>
-                              <span style={{fontWeight:600,fontSize:'24px',color:textColor}}>{wo.qty}</span>
-                              <span style={{fontFamily:'IBM Plex Mono,monospace',fontSize:'16px',fontWeight:600,color:'#9aa0a6',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:'4px'}}>
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>{wo.etd || 'TBD'}
-                              </span>
+                            <div style={{display:'flex',alignItems:'stretch',gap:'14px'}}>
+                              <div style={{flex:1,display:'grid',gridTemplateColumns:'auto 1fr auto',gap:'10px 36px',alignItems:'center',minWidth:0}}>
+                                <span style={{fontFamily:'IBM Plex Mono,monospace',fontWeight:700,fontSize:'18px',color:'#f3f4f6',flexShrink:0}}>#{wo.id}</span>
+                                <span style={{fontWeight:600,fontSize:'18px',color:textColor,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{wo.customer}</span>
+                                <span style={{display:'flex',alignItems:'center',gap:'8px',whiteSpace:'nowrap'}}>
+                                  <span style={{fontFamily:'IBM Plex Mono,monospace',fontSize:'14px',fontWeight:600,color:'#9aa0a6'}}>{dateStr}</span>
+                                  {wo.etd && (
+                                    <span style={{
+                                      fontFamily:'IBM Plex Mono,monospace',fontSize:'13px',fontWeight:700,
+                                      background:isOverdue?'rgba(226,70,47,0.15)':'rgba(73,177,107,0.15)',
+                                      color:accentColor,
+                                      padding:'2px 7px',borderRadius:'4px'
+                                    }}>
+                                      {daysAbs}D {isOverdue?'over':'left'}
+                                    </span>
+                                  )}
+                                </span>
+                                <span style={{fontFamily:'IBM Plex Mono,monospace',fontWeight:700,fontSize:'18px',color:'#f3f4f6',flexShrink:0,visibility:'hidden'}}>#{wo.id}</span>
+                                <span style={{fontWeight:600,fontSize:'22px',color:textColor,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{wo.job_details}</span>
+                                <span style={{fontWeight:600,fontSize:'22px',color:textColor,whiteSpace:'nowrap'}}>{page?.key === 'dispatched-today' ? (todayDispatchQtyMap.get(wo.id) || 0) : wo.qty}</span>
+                                </div>
                             </div>
                           </div>
                         </div>
@@ -357,13 +469,15 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
         </div>
 
         {/* Pager Dots */}
+        {activePages.length > 0 && (
         <div className="shrink-0 flex items-center justify-center gap-3 pt-2 pb-2">
-          {PAGES.map((p, i) => (
+          {activePages.map((p, i) => (
             <div key={p.key} className={`pager-dot ${i < currentPage ? 'done' : i === currentPage ? 'active' : ''}`} style={{cursor:'pointer'}} onClick={() => setCurrentPage(i)}>
-              <div className="pager-fill" style={{background: i < currentPage ? '#5e6469' : p.key === 'wip' ? '#ffb020' : p.key === 'qc' ? '#49b16b' : '#9aa0a6', width: i < currentPage ? '100%' : undefined}} />
+              <div className="pager-fill" style={{background: i < currentPage ? '#5e6469' : p.key === 'wip' ? '#5b9cf6' : p.key === 'qc' ? '#f59e0b' : p.key === 'pending' ? '#9aa0a6' : p.key === 'ready-dispatch' ? '#60c17a' : '#a78bfa', width: i < currentPage ? '100%' : undefined}} />
             </div>
           ))}
         </div>
+        )}
       </div>
 
       {/* Notice Manager Modal */}
