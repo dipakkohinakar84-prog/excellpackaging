@@ -9184,7 +9184,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
   const [items, setItems] = useState<Item[]>([]);
   const [components, setComponents] = useState<ChildItem[]>([]);
   const [dispatchLogs, setDispatchLogs] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'component-usage' | 'item-usage' | 'delivery-report'>('component-usage');
+  const [activeTab, setActiveTab] = useState<string>('component-usage');
 
   // Date range (shared across tabs)
   const [datePreset, setDatePreset] = useState<'today' | '7d' | '30d' | '90d' | 'all' | 'custom'>('all');
@@ -9577,11 +9577,21 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
 
   if (loading) return <LoadingState message="Loading reports..." />;
 
-  const tabMeta: { key: typeof activeTab; label: string }[] = [
+  const tabMeta: { key: string; label: string }[] = [
     { key: 'component-usage', label: 'Component Usage' },
     { key: 'item-usage', label: 'Item Usage' },
-    { key: 'delivery-report', label: 'Delivery Report' },
+    { key: 'on-time', label: 'On-Time Delivery' },
+    { key: 'delayed', label: 'Delayed' },
+    { key: 'dept-wise', label: 'Dept-Wise' },
+    { key: 'company-performance', label: 'Company Performance' },
   ];
+  const thClass = "px-4 py-3 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors whitespace-nowrap sticky top-0 bg-gray-50 z-10";
+
+  const SortIcon = ({ col }: { col: string }) => (
+    sortConfig?.key === col
+      ? <span className="ml-1 text-indigo-500">{sortConfig.dir === 'asc' ? '↑' : '↓'}</span>
+      : <span className="ml-1 opacity-25">↕</span>
+  );
 
   const presetButtons: { key: 'today' | '7d' | '30d' | '90d' | 'all'; label: string }[] = [
     { key: 'today', label: 'Today' },
@@ -9653,184 +9663,262 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
         </div>
       </div>
 
-      {/* Component Usage Tab */}
+      {/* Component Usage table */}
       {activeTab === 'component-usage' && (
-        <Card className="space-y-4">
-          <div className="flex justify-center">
-            <div className="w-full max-w-2xl"><DateRangeControls /></div>
+        <Card className="p-0 shadow-sm border border-gray-200/60 rounded-xl">
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full min-w-[750px] text-sm">
+              <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
+                <tr>
+                  <th className="px-4 py-3 w-8"></th>
+                  <th className={thClass} onClick={() => handleSort('component')}>Component <SortIcon col="component" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('totalQty')}>Total Qty <SortIcon col="totalQty" /></th>
+                  <th className={thClass} onClick={() => handleSort('parentItemsList')}>Parent Items <SortIcon col="parentItemsList" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('companyCount')}>Companies <SortIcon col="companyCount" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('orderCount')}>Orders <SortIcon col="orderCount" /></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {sortedRows.map((row: any, i: number) => {
+                  const isExpanded = expandedComponent === row.component;
+                  const detailRows = componentUsageRows.filter(r => r.component === row.component);
+                  return (
+                    <Fragment key={row.component}>
+                      <tr className={`hover:bg-indigo-50/40 transition-colors cursor-pointer ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`} onClick={() => setExpandedComponent(isExpanded ? null : row.component)}>
+                        <td className="px-4 py-3 text-gray-500 text-xs">{isExpanded ? '▼' : '▶'}</td>
+                        <td className="px-4 py-3 font-semibold text-gray-800">{row.component}</td>
+                        <td className="px-4 py-3 font-black text-gray-800 text-right tabular-nums">{row.totalQty}</td>
+                        <td className="px-4 py-3 text-gray-600 max-w-[200px] truncate" title={row.parentItemsList}>{row.parentItemsList}</td>
+                        <td className="px-4 py-3 font-semibold text-gray-800 text-right tabular-nums">{row.companyCount}</td>
+                        <td className="px-4 py-3 font-semibold text-indigo-600 text-right tabular-nums">{row.orderCount}</td>
+                      </tr>
+                      {isExpanded && (
+                        <tr key={`detail-${row.component}`}>
+                          <td colSpan={6} className="p-0 bg-indigo-50/20">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="text-[10px] uppercase text-gray-500 font-black border-b border-indigo-200">
+                                  <th className="px-4 py-2 text-left pl-8">Parent Item</th>
+                                  <th className="px-4 py-2 text-right">Qty Used</th>
+                                  <th className="px-4 py-2 text-left">Company</th>
+                                  <th className="px-4 py-2 text-right">Order #</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-200/50">
+                                {applySortGeneric(detailRows.map((r: any) => ({ ...r }))).map((detail: any, di: number) => (
+                                  <tr key={di} className={`hover:bg-indigo-50/20 ${di % 2 === 1 ? 'bg-gray-50/30' : ''}`}>
+                                    <td className="px-4 py-1.5 font-semibold text-gray-700 pl-8">{detail.parentItem}</td>
+                                    <td className="px-4 py-1.5 font-bold text-gray-800 text-right tabular-nums">{detail.qtyUsed}</td>
+                                    <td className="px-4 py-1.5 text-gray-600">{detail.company}</td>
+                                    <td className="px-4 py-1.5 font-semibold text-indigo-600 text-right tabular-nums">#{detail.orderId}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-          <div className="flex justify-center">
-            <div className="w-full max-w-4xl flex flex-col md:flex-row gap-4">
-              {/* Left: Selection panel */}
-              <div className="md:w-1/3 space-y-3">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
-                  <input type="text" placeholder="Search components..." value={componentSearch} onChange={e => setComponentSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
-                </div>
-                <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={allComponentsSelected} onChange={toggleAllComponents} className="w-4 h-4 rounded" />
-                    <span className="text-sm font-bold text-gray-700">Select All</span>
-                  </label>
-                  <span className="text-xs font-semibold text-gray-500">{selectedComponentNames.size} selected</span>
-                </div>
-                <div className="max-h-72 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
-                  {filteredComponents.map(c => (
-                    <label key={c.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 cursor-pointer">
-                      <input type="checkbox" checked={selectedComponentNames.has(c.name)} onChange={() => toggleComponent(c.name)} className="w-4 h-4 rounded" />
-                      <span className="text-sm font-medium text-gray-700">{c.name}</span>
-                    </label>
-                  ))}
-                  {filteredComponents.length === 0 && <div className="px-3 py-4 text-center text-sm text-gray-400">No components found</div>}
-                </div>
-                <button onClick={() => setShowComponentReport(true)} disabled={selectedComponentNames.size === 0}
-                  className={`w-full py-2.5 rounded-xl text-sm font-black transition-all ${selectedComponentNames.size > 0 ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
-                  Generate Report ({selectedComponentNames.size})
-                </button>
-              </div>
-              {/* Right: Report */}
-              <div className="md:flex-1 min-w-0">
-                {showComponentReport ? (
-                  <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                    {componentReportRows.length > 0 ? (
-                      <table className="w-full text-sm">
-                        <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
-                          <tr>
-                            <th className="px-4 py-3 text-left whitespace-nowrap">Component Name</th>
-                            <th className="px-4 py-3 text-left whitespace-nowrap">Item Name</th>
-                            <th className="px-4 py-3 text-right w-32">Quantity</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                          {componentReportRows.map((row, i) => (
-                            <tr key={i} className={i % 2 === 1 ? 'bg-gray-50/40' : ''}>
-                              <td className="px-4 py-2.5 font-semibold text-gray-800 whitespace-nowrap">{row.componentName}</td>
-                              <td className="px-4 py-2.5 text-gray-600 whitespace-nowrap">{row.itemName}</td>
-                              <td className="px-4 py-2.5 font-black text-indigo-700 text-right tabular-nums w-32">{row.qty}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                        <tfoot className="bg-indigo-50 border-t-2 border-indigo-300">
-                          <tr>
-                            <td colSpan={2} className="px-4 py-3 font-black text-gray-800 text-right">Total Quantity</td>
-                            <td className="px-4 py-3 font-black text-indigo-700 text-right tabular-nums text-base w-32">{componentTotalQty}</td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    ) : (
-                      <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No component usage data for the selected range.</div>
-                    )}
-                    {componentReportRows.length > 0 && (
-                      <div className="px-4 py-3 flex items-center gap-2 border-t border-gray-200">
-                        <button onClick={exportComponentUsagePdf} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-black hover:bg-indigo-700 transition-colors">PDF</button>
-                        <button onClick={exportComponentUsageCsv} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-black hover:bg-emerald-700 transition-colors">CSV</button>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="h-full min-h-[300px] flex flex-col items-center justify-center text-center border border-dashed border-gray-200 rounded-lg">
-                    <FileText size={32} className="text-gray-300" />
-                    <p className="text-sm text-gray-400 font-semibold mt-3">Select components and click Generate Report</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No component usage data for the selected range.</div>}
         </Card>
       )}
 
-      {/* Item Usage Tab */}
+      {/* Item Usage table */}
       {activeTab === 'item-usage' && (
-        <Card className="space-y-4">
-          <div className="flex justify-center">
-            <div className="w-full max-w-2xl"><DateRangeControls /></div>
+        <Card className="p-0 shadow-sm border border-gray-200/60 rounded-xl">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[600px] text-sm">
+              <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
+                <tr>
+                  <th className={thClass} onClick={() => handleSort('item')}>Item Name <SortIcon col="item" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('orders')}>Orders <SortIcon col="orders" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('totalQty')}>Total Qty <SortIcon col="totalQty" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('companyCount')}>Companies <SortIcon col="companyCount" /></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {sortedRows.map((row: any, i: number) => (
+                  <tr key={row.item} className={`hover:bg-indigo-50/40 transition-colors ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
+                    <td className="px-4 py-3 font-black text-gray-800">{row.item}</td>
+                    <td className="px-4 py-3 font-semibold text-gray-700 text-right tabular-nums">{row.orders}</td>
+                    <td className="px-4 py-3 font-semibold text-indigo-700 text-right tabular-nums">{row.totalQty}</td>
+                    <td className="px-4 py-3 text-gray-600 text-right tabular-nums">{row.companyCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <div className="flex justify-center">
-            <div className="w-full max-w-4xl flex flex-col md:flex-row gap-4">
-              {/* Left: Selection panel */}
-              <div className="md:w-1/3 space-y-3">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
-                  <input type="text" placeholder="Search items..." value={itemSearch} onChange={e => setItemSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
-                </div>
-                <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={allItemsSelected} onChange={toggleAllItems} className="w-4 h-4 rounded" />
-                    <span className="text-sm font-bold text-gray-700">Select All</span>
-                  </label>
-                  <span className="text-xs font-semibold text-gray-500">{selectedItemIds.size} selected</span>
-                </div>
-                <div className="max-h-72 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
-                  {filteredItems.map(it => (
-                    <label key={it.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 cursor-pointer">
-                      <input type="checkbox" checked={selectedItemIds.has(Number(it.id))} onChange={() => toggleItem(Number(it.id))} className="w-4 h-4 rounded" />
-                      <span className="text-sm font-medium text-gray-700">{it.name}</span>
-                    </label>
-                  ))}
-                  {filteredItems.length === 0 && <div className="px-3 py-4 text-center text-sm text-gray-400">No items found</div>}
-                </div>
-                <button onClick={() => setShowItemReport(true)} disabled={selectedItemIds.size === 0}
-                  className={`w-full py-2.5 rounded-xl text-sm font-black transition-all ${selectedItemIds.size > 0 ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
-                  Generate Report ({selectedItemIds.size})
-                </button>
-              </div>
-              {/* Right: Report */}
-              <div className="md:flex-1 min-w-0">
-                {showItemReport ? (
-                  <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                    {itemReportRows.length > 0 ? (
-                      <table className="w-full text-sm">
-                        <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
-                          <tr>
-                            <th className="px-4 py-3 text-left whitespace-nowrap">Item Name</th>
-                            <th className="px-4 py-3 text-right w-32">Quantity</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                          {itemReportRows.map((row, i) => (
-                            <tr key={i} className={i % 2 === 1 ? 'bg-gray-50/40' : ''}>
-                              <td className="px-4 py-2.5 font-semibold text-gray-800 whitespace-nowrap">{row.itemName}</td>
-                              <td className="px-4 py-2.5 font-black text-indigo-700 text-right tabular-nums w-32">{row.qty}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                        <tfoot className="bg-indigo-50 border-t-2 border-indigo-300">
-                          <tr>
-                            <td className="px-4 py-3 font-black text-gray-800 text-right">Total Quantity</td>
-                            <td className="px-4 py-3 font-black text-indigo-700 text-right tabular-nums text-base w-32">{itemTotalQty}</td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    ) : (
-                      <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No item usage data for the selected range.</div>
-                    )}
-                    {itemReportRows.length > 0 && (
-                      <div className="px-4 py-3 flex items-center gap-2 border-t border-gray-200">
-                        <button onClick={exportItemUsagePdf} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-black hover:bg-indigo-700 transition-colors">PDF</button>
-                        <button onClick={exportItemUsageCsv} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-black hover:bg-emerald-700 transition-colors">CSV</button>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="h-full min-h-[300px] flex flex-col items-center justify-center text-center border border-dashed border-gray-200 rounded-lg">
-                    <FileText size={32} className="text-gray-300" />
-                    <p className="text-sm text-gray-400 font-semibold mt-3">Select items and click Generate Report</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No item usage data for the selected range.</div>}
         </Card>
       )}
 
-      {/* Delivery Report Tab - Placeholder */}
-      {activeTab === 'delivery-report' && (
-        <Card className="py-20 flex flex-col items-center justify-center text-center">
-          <Truck size={40} className="text-gray-300" />
-          <p className="text-gray-500 font-bold mt-4">Delivery Report</p>
-          <p className="text-sm text-gray-400 mt-1">Coming soon</p>
+      {/* On-Time Delivery table */}
+      {activeTab === 'on-time' && (
+        <Card className="p-0 shadow-sm border border-gray-200/60 rounded-xl">
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full min-w-[800px] text-sm">
+              <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-green-300">
+                <tr>
+                  <th className={thClass} onClick={() => handleSort('_date')}>Date <SortIcon col="_date" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('work_order_id')}>WO <SortIcon col="work_order_id" /></th>
+                  <th className={thClass} onClick={() => handleSort('_customer')}>Company <SortIcon col="_customer" /></th>
+                  <th className={thClass} onClick={() => handleSort('_item')}>Item <SortIcon col="_item" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('dispatch_qty')}>Qty <SortIcon col="dispatch_qty" /></th>
+                  <th className={thClass} onClick={() => handleSort('invoice_no')}>Invoice <SortIcon col="invoice_no" /></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {sortedRows.map((row: any, i: number) => (
+                  <tr key={row.id} className={`hover:bg-green-50/40 transition-colors border-l-2 border-l-green-400 ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
+                    <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{row.when ? new Date(row.when).toLocaleString('en-GB') : '-'}</td>
+                    <td className="px-4 py-3 font-black text-indigo-600 text-right tabular-nums">#{row.work_order_id}</td>
+                    <td className="px-4 py-3 font-semibold text-gray-700">{row.order?.customer || '-'}</td>
+                    <td className="px-4 py-3 text-gray-600">{row.order?.job_details || '-'}</td>
+                    <td className="px-4 py-3 font-black text-green-700 text-right tabular-nums">{row.dispatch_qty}</td>
+                    <td className="px-4 py-3 text-gray-600">{row.invoice_no || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="md:hidden p-2 space-y-2">
+            {sortedRows.map((row: any, i: number) => (
+              <div key={row.id} className={`rounded-lg border border-green-200 p-2.5 border-l-4 border-l-green-400 ${i % 2 === 1 ? 'bg-gray-50/30' : ''}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="font-black text-indigo-700 text-sm">WO #{row.work_order_id}</div>
+                  <div className="text-[11px] font-semibold text-green-700 tabular-nums">Qty: {row.dispatch_qty} ✓</div>
+                </div>
+                <div className="text-xs text-gray-700 font-semibold mt-1">{row.order?.customer || '-'} • {row.order?.job_details || '-'}</div>
+                <div className="text-[11px] text-gray-500 mt-1">Invoice: {row.invoice_no || '-'}</div>
+              </div>
+            ))}
+          </div>
+          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No on-time deliveries for the selected range.</div>}
+        </Card>
+      )}
+
+      {/* Delayed Delivery table */}
+      {activeTab === 'delayed' && (
+        <Card className="p-0 shadow-sm border border-gray-200/60 rounded-xl">
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full min-w-[900px] text-sm">
+              <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-red-300">
+                <tr>
+                  <th className={thClass} onClick={() => handleSort('_date')}>Date <SortIcon col="_date" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('work_order_id')}>WO <SortIcon col="work_order_id" /></th>
+                  <th className={thClass} onClick={() => handleSort('_customer')}>Company <SortIcon col="_customer" /></th>
+                  <th className={thClass} onClick={() => handleSort('_item')}>Item <SortIcon col="_item" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('daysDelay')}>Days Late <SortIcon col="daysDelay" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('dispatch_qty')}>Qty <SortIcon col="dispatch_qty" /></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {sortedRows.map((row: any, i: number) => (
+                  <tr key={row.id} className={`hover:bg-red-50/40 transition-colors border-l-2 border-l-red-400 ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
+                    <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{row.when ? new Date(row.when).toLocaleString('en-GB') : '-'}</td>
+                    <td className="px-4 py-3 font-black text-indigo-600 text-right tabular-nums">#{row.work_order_id}</td>
+                    <td className="px-4 py-3 font-semibold text-gray-700">{row.order?.customer || '-'}</td>
+                    <td className="px-4 py-3 text-gray-600">{row.order?.job_details || '-'}</td>
+                    <td className="px-4 py-3 text-right tabular-nums"><span className={`px-2 py-0.5 rounded-lg font-black text-xs inline-block ${row.daysDelay <= 1 ? 'bg-amber-100 text-amber-700' : row.daysDelay <= 3 ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}`}>{row.daysDelay}d</span></td>
+                    <td className="px-4 py-3 font-black text-gray-800 text-right tabular-nums">{row.dispatch_qty}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="md:hidden p-2 space-y-2">
+            {sortedRows.map((row: any, i: number) => (
+              <div key={row.id} className={`rounded-lg border border-red-200 p-2.5 border-l-4 border-l-red-400 ${i % 2 === 1 ? 'bg-gray-50/30' : ''}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="font-black text-indigo-700 text-sm">WO #{row.work_order_id}</div>
+                  <span className={`px-1.5 py-0.5 rounded font-black text-xs ${row.daysDelay <= 1 ? 'bg-amber-100 text-amber-700' : row.daysDelay <= 3 ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}`}>{row.daysDelay}d late</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No delayed deliveries for the selected range.</div>}
+        </Card>
+      )}
+
+      {/* Department-Wise table */}
+      {activeTab === 'dept-wise' && (
+        <Card className="p-0 shadow-sm border border-gray-200/60 rounded-xl">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[700px] text-sm">
+              <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
+                <tr>
+                  <th className={thClass} onClick={() => handleSort('dept')}>Department <SortIcon col="dept" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('reports')}>Reports <SortIcon col="reports" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('shiftHrs')}>Shift Hrs <SortIcon col="shiftHrs" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('otHrs')}>OT Hrs <SortIcon col="otHrs" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('totalHrs')}>Total Hrs <SortIcon col="totalHrs" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('qtyProduced')}>Qty Produced <SortIcon col="qtyProduced" /></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {sortedRows.map((row: any, i: number) => (
+                  <tr key={row.dept} className={`hover:bg-indigo-50/40 transition-colors ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
+                    <td className="px-4 py-3 font-black text-gray-800">{row.dept}</td>
+                    <td className="px-4 py-3 font-semibold text-gray-700 text-right tabular-nums">{row.reports}</td>
+                    <td className="px-4 py-3 text-gray-600 text-right tabular-nums">{row.shiftHrs}</td>
+                    <td className="px-4 py-3 text-gray-600 text-right tabular-nums">{row.otHrs}</td>
+                    <td className="px-4 py-3 font-semibold text-indigo-700 text-right tabular-nums">{row.totalHrs}</td>
+                    <td className="px-4 py-3 font-black text-gray-800 text-right tabular-nums">{row.qtyProduced}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No department-wise data for the selected range.</div>}
+        </Card>
+      )}
+
+      {/* Company Performance table */}
+      {activeTab === 'company-performance' && (
+        <Card className="p-0 shadow-sm border border-gray-200/60 rounded-xl">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[700px] text-sm">
+              <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
+                <tr>
+                  <th className={thClass} onClick={() => handleSort('company')}>Company <SortIcon col="company" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('totalWOs')}>Total WOs <SortIcon col="totalWOs" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('totalQty')}>Total Qty <SortIcon col="totalQty" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('onTime')}>On-Time <SortIcon col="onTime" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('delayed')}>Delayed <SortIcon col="delayed" /></th>
+                  <th className="px-4 py-3 text-right whitespace-nowrap">On-Time %</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {sortedRows.map((row: any, i: number) => {
+                  const pct = row.totalWOs > 0 ? Math.round(row.onTime / row.totalWOs * 100) : 0;
+                  const barColor = pct >= 80 ? 'bg-green-400' : pct >= 50 ? 'bg-amber-400' : 'bg-red-400';
+                  return (
+                    <tr key={row.company} className={`hover:bg-indigo-50/40 transition-colors ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
+                      <td className="px-4 py-3 font-black text-gray-800">{row.company}</td>
+                      <td className="px-4 py-3 font-semibold text-gray-700 text-right tabular-nums">{row.totalWOs}</td>
+                      <td className="px-4 py-3 font-semibold text-indigo-700 text-right tabular-nums">{row.totalQty}</td>
+                      <td className="px-4 py-3 font-semibold text-green-700 text-right tabular-nums">{row.onTime}</td>
+                      <td className="px-4 py-3 font-semibold text-red-700 text-right tabular-nums">{row.delayed}</td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                            <div className={`h-full ${barColor} rounded-full`} style={{ width: `${pct}%` }}></div>
+                          </div>
+                          <span className="font-black text-gray-800 text-xs tabular-nums">{pct}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No company performance data for the selected range.</div>}
         </Card>
       )}
     </div>
