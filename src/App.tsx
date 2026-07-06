@@ -6384,12 +6384,8 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                                 <span className="inline-flex items-center">ETD<SortIcon col="etd" /></span>
                             </th>
                             <th className="px-4 py-1.5 whitespace-nowrap sticky top-0 bg-gray-50 z-10">
-                                <span className="inline-flex items-center">Status</span>
+                                <span className="inline-flex items-center">Departments</span>
                             </th>
-                            <th className="px-4 py-1.5 whitespace-nowrap sticky top-0 bg-gray-50 z-10">
-                                <span className="inline-flex items-center">Depts</span>
-                            </th>
-                            <th className="px-4 py-1.5 text-right whitespace-nowrap sticky top-0 bg-gray-50 z-10">Action</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -6452,38 +6448,25 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                                 <td className="px-4 py-1.5 font-bold text-sm whitespace-nowrap">{wo.qty}</td>
                                 <td className="px-4 py-1.5 text-sm font-bold text-orange-600 whitespace-nowrap">{wo.etd || 'TBD'}</td>
                                 <td className="px-4 py-1.5 whitespace-nowrap">
-                                  <div className="flex items-center gap-1 flex-wrap">
-                                    {(wo.assigned_departments || []).map(dept => {
-                                      const ds = (wo.department_statuses || []).find(s => normalizeDepartment(s.department) === normalizeDepartment(dept));
-                                      const qc = ds?.qc_status;
-                                      let badgeClass = 'bg-gray-100 text-gray-600';
-                                      let label = ds?.status ? STATUS_LABELS[ds.status] || ds.status : '—';
-                                      if (qc === 'QC Approved') { badgeClass = 'bg-green-100 text-green-700'; label = 'QC Approved'; }
-                                      else if (qc === 'QC Denied') { badgeClass = 'bg-red-100 text-red-700'; label = 'Denied'; }
-                                      else if (ds?.status === 'Work Started') { badgeClass = 'bg-blue-100 text-blue-700'; }
-                                      else if (ds?.status === 'Ready for QC') { badgeClass = 'bg-yellow-100 text-yellow-700'; }
-                                      const deptLabel = dept.replace(/_/g, ' ');
-                                      return (
-                                        <span key={dept} className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${badgeClass}`}>
-                                          {deptLabel}: {label}
-                                        </span>
-                                      );
-                                    })}
-                                  </div>
-                                </td>
-                                <td className="px-4 py-1.5 whitespace-nowrap">
-                                    <div className="flex flex-nowrap gap-1">
-                                        {(wo.assigned_departments || []).map(d => <Badge key={d} color="indigo" className="!text-xs">{d.replace(/_/g, ' ')}</Badge>)}
+                                    <div className="flex flex-nowrap gap-1.5">
+                                        {(wo.assigned_departments || []).map(dept => {
+                                          const ds = (wo.department_statuses || []).find(s => normalizeDepartment(s.department) === normalizeDepartment(dept));
+                                          const qc = ds?.qc_status;
+                                          let colorClass = 'text-gray-500';
+                                          let label = ds?.status ? STATUS_LABELS[ds.status] || ds.status : '—';
+                                          if (qc === 'QC Approved') { colorClass = 'text-green-600'; label = 'QC Approved'; }
+                                          else if (qc === 'QC Denied') { colorClass = 'text-red-600'; label = 'Denied'; }
+                                          else if (ds?.status === 'Work Started') { colorClass = 'text-blue-600'; }
+                                          else if (ds?.status === 'Ready for QC') { colorClass = 'text-yellow-600'; }
+                                          const deptLabel = dept.replace(/_/g, ' ');
+                                          return (
+                                            <span key={dept} className="inline-flex flex-col items-start px-2 py-1 rounded-md border border-gray-200 bg-white leading-tight">
+                                              <span className="font-bold text-gray-700 text-xs whitespace-nowrap">{deptLabel}</span>
+                                              <span className={`font-semibold text-xs ${colorClass} whitespace-nowrap`}>{label}</span>
+                                            </span>
+                                          );
+                                        })}
                                     </div>
-                                </td>
-                                <td className="px-4 py-1.5 text-right whitespace-nowrap">
-                                    <button 
-                                        onClick={(e) => { e.stopPropagation(); onView(wo.id); }}
-                                        className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
-                                        title="View Details"
-                                    >
-                                        <Eye size={16}/>
-                                    </button>
                                 </td>
                             </tr>
                           );
@@ -9553,6 +9536,178 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
     rows.push(['Total Quantity', String(itemTotalQty)]);
     exportCsv(rows, headers, 'item-usage-report');
   };
+
+  const [sortConfig, setSortConfig] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
+  const [expandedComponent, setExpandedComponent] = useState<string | null>(null);
+
+  const handleSort = (key: string) => {
+    setSortConfig(prev => {
+      if (prev?.key === key) {
+        if (prev.dir === 'desc') return null;
+        return { key, dir: 'desc' };
+      }
+      return { key, dir: 'asc' };
+    });
+  };
+
+  const applySortGeneric = (rows: any[]) => {
+    if (!sortConfig) return rows;
+    const { key, dir } = sortConfig;
+    return [...rows].sort((a, b) => {
+      let aVal = a[key], bVal = b[key];
+      if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+      if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+      if (aVal == null) aVal = '';
+      if (bVal == null) bVal = '';
+      if (aVal < bVal) return dir === 'asc' ? -1 : 1;
+      if (aVal > bVal) return dir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  };
+
+  const componentUsageRows = useMemo(() => {
+    const rows: any[] = [];
+    for (const wo of orders) {
+      if (wo.status !== 'Ready for despatch' && wo.status !== 'Dispatched') continue;
+      const dateVal = dateField === 'entry_date' ? (wo.entry_date || wo.created_at) : dispatchDateByOrderId.get(Number(wo.id));
+      if (!dateVal) continue;
+      if (!inDateRange(dateVal)) continue;
+      const item = itemsById.get(Number(wo.source_item_id || wo.itemId));
+      if (!item?.children) continue;
+      for (const child of item.children) {
+        const qty = (Number(child.qtyPerMaster) || 0) * Number(wo.qty);
+        rows.push({
+          component: child.name,
+          parentItem: item.name,
+          qtyUsed: qty,
+          company: wo.customer || '',
+          orderId: wo.id,
+        });
+      }
+    }
+    return rows;
+  }, [orders, itemsById, datePreset, fromDate, toDate, dateField, dispatchDateByOrderId]);
+
+  const itemUsageRows = useMemo(() => {
+    const map = new Map<string, { orders: number; totalQty: number; companies: Set<string> }>();
+    for (const wo of orders) {
+      const dateVal = dateField === 'entry_date' ? (wo.entry_date || wo.created_at) : dispatchDateByOrderId.get(Number(wo.id));
+      if (!dateVal) continue;
+      if (!inDateRange(dateVal)) continue;
+      const item = itemsById.get(Number(wo.source_item_id || wo.itemId));
+      if (!item) continue;
+      const existing = map.get(item.name);
+      if (existing) { existing.orders++; existing.totalQty += Number(wo.qty); existing.companies.add(wo.customer || ''); }
+      else map.set(item.name, { orders: 1, totalQty: Number(wo.qty), companies: new Set([wo.customer || '']) });
+    }
+    return Array.from(map.entries()).map(([item, v]) => ({ item, orders: v.orders, totalQty: v.totalQty, companyCount: v.companies.size }));
+  }, [orders, itemsById, datePreset, fromDate, toDate, dateField, dispatchDateByOrderId]);
+
+  const onTimeRows = useMemo(() => {
+    const rows: any[] = [];
+    for (const wo of orders) {
+      if (wo.status !== 'Dispatched') continue;
+      const logs = dispatchLogs.filter((l: any) => Number(l.work_order_id) === Number(wo.id));
+      for (const log of logs) {
+        if (!log.dispatch_date) continue;
+        if (!inDateRange(log.dispatch_date)) continue;
+        if (wo.etd && log.dispatch_date <= wo.etd) {
+          rows.push({ id: `ot-${wo.id}-${log.id || 0}`, when: log.dispatch_date, work_order_id: wo.id, order: wo, dispatch_qty: log.qty_dispatched || wo.qty, invoice_no: log.invoice_no || '' });
+        }
+      }
+    }
+    return rows;
+  }, [orders, dispatchLogs, datePreset, fromDate, toDate]);
+
+  const delayedRows = useMemo(() => {
+    const rows: any[] = [];
+    for (const wo of orders) {
+      if (wo.status !== 'Dispatched') continue;
+      const logs = dispatchLogs.filter((l: any) => Number(l.work_order_id) === Number(wo.id));
+      for (const log of logs) {
+        if (!log.dispatch_date) continue;
+        if (!inDateRange(log.dispatch_date)) continue;
+        if (wo.etd && log.dispatch_date > wo.etd) {
+          const daysDelay = Math.ceil((new Date(log.dispatch_date).getTime() - new Date(wo.etd).getTime()) / (1000 * 60 * 60 * 24));
+          rows.push({ id: `dl-${wo.id}-${log.id || 0}`, when: log.dispatch_date, work_order_id: wo.id, order: wo, daysDelay, dispatch_qty: log.qty_dispatched || wo.qty });
+        }
+      }
+    }
+    return rows;
+  }, [orders, dispatchLogs, datePreset, fromDate, toDate]);
+
+  const deptRows = useMemo(() => {
+    const departments = ['wood_work', 'corrugation', 'trading_consumables'];
+    return departments.map(dept => ({
+      dept: dept.replace(/_/g, ' '),
+      reports: orders.filter(wo => (wo.assigned_departments || []).some((d: string) => d === dept)).length,
+      shiftHrs: 0,
+      otHrs: 0,
+      totalHrs: 0,
+      qtyProduced: orders
+        .filter(wo => (wo.assigned_departments || []).some((d: string) => d === dept))
+        .reduce((s, wo) => s + Number(wo.qty || 0), 0),
+    }));
+  }, [orders]);
+
+  const companyRows = useMemo(() => {
+    const map = new Map<string, { totalWOs: number; totalQty: number; onTime: number; delayed: number }>();
+    for (const wo of orders) {
+      const customer = wo.customer || 'Unknown';
+      const existing = map.get(customer);
+      const qty = Number(wo.qty || 0);
+      if (!existing) { map.set(customer, { totalWOs: 1, totalQty: qty, onTime: 0, delayed: 0 }); }
+      else { existing.totalWOs++; existing.totalQty += qty; }
+      if (wo.status === 'Dispatched') {
+        const logs = dispatchLogs.filter((l: any) => Number(l.work_order_id) === Number(wo.id));
+        const anyLate = logs.some((l: any) => l.dispatch_date && wo.etd && l.dispatch_date > wo.etd);
+        const anyOnTime = logs.some((l: any) => l.dispatch_date && wo.etd && l.dispatch_date <= wo.etd);
+        if (anyLate) map.get(customer)!.delayed++;
+        if (anyOnTime) map.get(customer)!.onTime++;
+      }
+    }
+    return Array.from(map.entries()).map(([company, v]) => ({ company, ...v }));
+  }, [orders, dispatchLogs]);
+
+  const sortedRows = useMemo(() => {
+    let rows: any[];
+    switch (activeTab) {
+      case 'component-usage': {
+        const map = new Map<string, { totalQty: number; parentItems: Set<string>; companies: Set<string>; orders: Set<number> }>();
+        for (const r of componentUsageRows) {
+          const existing = map.get(r.component);
+          if (existing) { existing.totalQty += r.qtyUsed; existing.parentItems.add(r.parentItem); existing.companies.add(r.company); existing.orders.add(r.orderId); }
+          else map.set(r.component, { totalQty: r.qtyUsed, parentItems: new Set([r.parentItem]), companies: new Set([r.company]), orders: new Set([r.orderId]) });
+        }
+        rows = Array.from(map.entries()).map(([component, v]) => ({
+          component,
+          totalQty: v.totalQty,
+          parentItemsList: Array.from(v.parentItems).join(', '),
+          companyCount: v.companies.size,
+          orderCount: v.orders.size,
+        }));
+        break;
+      }
+      case 'item-usage': rows = itemUsageRows; break;
+      case 'on-time': rows = onTimeRows; break;
+      case 'delayed': rows = delayedRows; break;
+      case 'dept-wise': rows = deptRows; break;
+      case 'company-performance': rows = companyRows; break;
+      default: rows = [];
+    }
+    if (!sortConfig) return rows;
+    const { key, dir } = sortConfig;
+    return [...rows].sort((a, b) => {
+      let aVal = a[key], bVal = b[key];
+      if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+      if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+      if (aVal == null) aVal = '';
+      if (bVal == null) bVal = '';
+      if (aVal < bVal) return dir === 'asc' ? -1 : 1;
+      if (aVal > bVal) return dir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [activeTab, sortConfig, componentUsageRows, itemUsageRows, onTimeRows, delayedRows, deptRows, companyRows]);
 
   if (loading) return <LoadingState message="Loading reports..." />;
 
