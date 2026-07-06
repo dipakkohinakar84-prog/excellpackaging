@@ -2205,7 +2205,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
           return filterByDate(log.dispatch_date, dispatchDateFilter, dispatchCustomFrom, dispatchCustomTo);
         });
       }
-      return filterByDate(wo.entry_date, dispatchDateFilter, dispatchCustomFrom, dispatchCustomTo);
+      return filterByDate(wo.etd, dispatchDateFilter, dispatchCustomFrom, dispatchCustomTo);
     });
     if (!deferredSearchQuery) return dateFiltered;
     const lowerQuery = deferredSearchQuery.toLowerCase();
@@ -2244,6 +2244,20 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
         aVal = (a.qty || 0) - (a.qty_dispatched || 0); bVal = (b.qty || 0) - (b.qty_dispatched || 0);
       } else if (key === 'status') {
         aVal = a.status || ''; bVal = b.status || '';
+      } else if (key === 'dispatch_date') {
+        const aLogs = dispatchLogsMap.get(a.id) || [];
+        const bLogs = dispatchLogsMap.get(b.id) || [];
+        aVal = aLogs.length > 0 ? Math.max(...aLogs.map((l: any) => new Date(l.dispatch_date || 0).getTime())) : 0;
+        bVal = bLogs.length > 0 ? Math.max(...bLogs.map((l: any) => new Date(l.dispatch_date || 0).getTime())) : 0;
+      } else if (key === 'depts') {
+        aVal = (a.assigned_departments?.[0] || '').toLowerCase();
+        bVal = (b.assigned_departments?.[0] || '').toLowerCase();
+      } else if (key === 'vehicle_no') {
+        aVal = (a.last_vehicle_no || '').toLowerCase();
+        bVal = (b.last_vehicle_no || '').toLowerCase();
+      } else if (key === 'invoice_no') {
+        aVal = (a.last_invoice_no || '').toLowerCase();
+        bVal = (b.last_invoice_no || '').toLowerCase();
       } else {
         return 0;
       }
@@ -2251,7 +2265,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
       if (aVal > bVal) return 1 * sortDir;
       return 0;
     });
-  }, [filteredOrders, sortConfig]);
+  }, [filteredOrders, sortConfig, dispatchLogsMap]);
 
   useEffect(() => {
     setPage(1);
@@ -2420,11 +2434,11 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
 
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
         <div className="hidden md:block overflow-x-auto max-h-[85vh] overflow-y-auto">
-          <table className="w-full border-separate border-spacing-0">
+          <table className="w-full min-w-[1660px] text-left text-sm border-separate border-spacing-0">
             <thead className="bg-gray-50 border-b">
               <tr>
                 {dispatchMode && (
-                  <th className="px-4 py-3 w-12 sticky left-0 top-0 bg-gray-50 z-20">
+                  <th className="px-2 py-1.5 w-12 sticky left-0 top-0 bg-gray-50 z-20">
                     <input 
                       type="checkbox" 
                       className="w-4 h-4 rounded"
@@ -2446,32 +2460,27 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                     />
                   </th>
                 )}
-                <th className={`px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors ${dispatchMode ? 'sticky left-12 top-0 bg-gray-50 z-10' : 'sticky left-0 top-0 bg-gray-50 z-20'}`}><span className="inline-flex items-center">Sr. No.</span></th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('id')}><span className="inline-flex items-center">Order #<SortIcon col="id" /></span></th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('entry_date')}><span className="inline-flex items-center">Entry Date<SortIcon col="entry_date" /></span></th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('customer')}><span className="inline-flex items-center">Customer<SortIcon col="customer" /></span></th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('job_details')}><span className="inline-flex items-center">Job Details<SortIcon col="job_details" /></span></th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('drawing')}><span className="inline-flex items-center">Drawing No<SortIcon col="drawing" /></span></th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('qty')}><span className="inline-flex items-center">Total Qty<SortIcon col="qty" /></span></th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('etd')}><span className="inline-flex items-center">ETD<SortIcon col="etd" /></span></th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('dispatched')}><span className="inline-flex items-center">Dispatched<SortIcon col="dispatched" /></span></th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('remaining')}><span className="inline-flex items-center">Remaining<SortIcon col="remaining" /></span></th>
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Depts</th>
+                <th className={`px-4 py-2 text-left text-xs font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors ${dispatchMode ? 'sticky left-12 top-0 bg-gray-50 z-10' : 'sticky left-0 top-0 bg-gray-50 z-20'}`}><span className="inline-flex items-center">Sr. No.</span></th>
+                <th className="px-4 py-2 text-left text-xs font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('id')}><span className="inline-flex items-center">Order #<SortIcon col="id" /></span></th>
+                <th className="px-4 py-2 text-left text-xs font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('entry_date')}><span className="inline-flex items-center">Entry Date<SortIcon col="entry_date" /></span></th>
+                <th className="px-4 py-2 text-left text-xs font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('customer')}><span className="inline-flex items-center">Customer<SortIcon col="customer" /></span></th>
+                <th className="px-4 py-2 text-left text-xs font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('job_details')}><span className="inline-flex items-center">Job Details<SortIcon col="job_details" /></span></th>
+                <th className="px-4 py-2 text-left text-xs font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('drawing')}><span className="inline-flex items-center">Drawing No<SortIcon col="drawing" /></span></th>
+                <th className="px-4 py-2 text-left text-xs font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('etd')}><span className="inline-flex items-center">ETD<SortIcon col="etd" /></span></th>
                 {statusFilter === 'Dispatched' && (
-                  <>
-                    <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Invoice</th>
-                    <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Vehicle</th>
-                    <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Dispatch Date</th>
-                  </>
+                <th className="px-4 py-2 text-left text-xs font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('dispatch_date')}><span className="inline-flex items-center">Dispatch Date<SortIcon col="dispatch_date" /></span></th>
                 )}
+                <th className="px-4 py-2 text-left text-xs font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('qty')}><span className="inline-flex items-center">Total Qty<SortIcon col="qty" /></span></th>
+                <th className="px-4 py-2 text-left text-xs font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('remaining')}><span className="inline-flex items-center">Remaining<SortIcon col="remaining" /></span></th>
+                <th className="px-4 py-2 text-left text-xs font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('depts')}><span className="inline-flex items-center">Depts<SortIcon col="depts" /></span></th>
                 {dispatchMode && (
-                  <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Dispatch Qty</th>
+                  <th className="px-4 py-2 text-left text-xs font-black uppercase text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Dispatch Qty</th>
                 )}
-                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('status')}><span className="inline-flex items-center">Status<SortIcon col="status" /></span></th>
-                <th className="px-6 py-3 text-right text-[10px] font-black uppercase text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 z-10">Actions</th>
+                <th className="px-4 py-2 text-left text-xs font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('vehicle_no')}><span className="inline-flex items-center">Vehicle<SortIcon col="vehicle_no" /></span></th>
+                <th className="px-4 py-2 text-left text-xs font-black uppercase text-gray-500 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('invoice_no')}><span className="inline-flex items-center">Invoice<SortIcon col="invoice_no" /></span></th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-gray-100">
               {statusFilter === 'Dispatched' ? (
                 paginatedOrders.flatMap(wo => {
                   let logs = dispatchLogsMap.get(wo.id) || [];
@@ -2487,37 +2496,34 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                 }).map(({ log, wo }, flatIdx) => {
                   const srNo = flatIdx + 1;
                   return (
-                  <tr key={`log-${wo.id}-${log?.id || 0}`} className="border-b hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 text-xs font-bold text-gray-400 sticky left-0 bg-white z-10">{srNo}</td>
-                    <td className="px-6 py-4"><span className="text-blue-600 font-bold">#{wo.id}</span></td>
-                    <td className="px-6 py-4"><div className="text-xs font-bold text-gray-600 whitespace-nowrap">{formatEntryDate(wo.entry_date || (wo as any).created_at || (wo as any).created)}</div></td>
-                    <td className="px-6 py-4"><div className="font-semibold text-gray-800">{wo.customer}</div></td>
-                    <td className="px-6 py-4"><div className="text-gray-700">{wo.job_details}</div></td>
-                    <td className="px-6 py-4"><span className="font-mono font-bold text-gray-700 whitespace-nowrap">{wo.drawing || wo.itemInfo?.drawing_no || '-'}</span></td>
-                    <td className="px-6 py-4"><div className="font-bold text-gray-800">{wo.qty}</div></td>
-                    <td className="px-6 py-4"><div className="text-xs font-bold text-orange-600 whitespace-nowrap">{wo.etd || 'TBD'}</div></td>
-                    <td className="px-6 py-4"><div className="font-bold text-blue-600">{log?.dispatch_qty || wo.qty_dispatched || 0}</div></td>
-                    <td className="px-6 py-4"><div className="font-bold text-green-600">0</div></td>
-                    <td className="px-6 py-4">
+                  <tr key={`log-${wo.id}-${log?.id || 0}`} className="border-b hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => onView(wo.id)}>
+                    <td className="px-4 py-2 text-xs font-bold text-gray-400 whitespace-nowrap sticky left-0 bg-white z-10">{srNo}</td>
+                    <td className="px-4 py-2 whitespace-nowrap"><span className="text-blue-600 font-bold">#{wo.id}</span></td>
+                    <td className="px-4 py-2 whitespace-nowrap"><div className="text-xs font-bold text-gray-600 whitespace-nowrap">{formatEntryDate(wo.entry_date || (wo as any).created_at || (wo as any).created)}</div></td>
+                    <td className="px-4 py-2 whitespace-nowrap"><div className="font-semibold text-gray-800">{wo.customer}</div></td>
+                    <td className="px-4 py-2 whitespace-nowrap"><div className="text-gray-700">{wo.job_details}</div></td>
+                    <td className="px-4 py-2 whitespace-nowrap"><span className="font-mono font-bold text-gray-700 whitespace-nowrap">{wo.drawing || wo.itemInfo?.drawing_no || '-'}</span></td>
+                    <td className="px-4 py-2 whitespace-nowrap"><div className="text-xs font-bold text-orange-600 whitespace-nowrap">{wo.etd || 'TBD'}</div></td>
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      {log && editingDispatchDateId === log.id ? (
+                        <div className="flex items-center gap-1">
+                          <input type="date" value={editingDateValue} onChange={e => setEditingDateValue(e.target.value)} className="text-xs border border-gray-300 rounded px-1.5 py-0.5 w-[130px]" autoFocus />
+                          <button onClick={async (e) => { e.stopPropagation(); await saveSingleDispatchDate(log.id, editingDateValue); setEditingDispatchDateId(null); }} className="text-xs bg-green-500 text-white px-1.5 py-0.5 rounded font-bold" title="Save">✓</button>
+                          <button onClick={(e) => { e.stopPropagation(); setEditingDispatchDateId(null); }} className="text-xs bg-gray-400 text-white px-1.5 py-0.5 rounded font-bold" title="Cancel">✗</button>
+                        </div>
+                      ) : (
+                        <span onClick={(e) => { e.stopPropagation(); if (log) { setEditingDateValue(log?.dispatch_date || ''); setEditingDispatchDateId(log.id); } }} className={`text-sm font-bold ${log ? 'cursor-pointer hover:text-blue-600' : 'text-gray-400'} ${log?.dispatch_date ? 'text-gray-600' : 'text-blue-500'}`} title={log ? 'Click to edit date' : ''}>{log?.dispatch_date ? formatDateDMY(log.dispatch_date) : (log ? 'Add date' : '-')}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 whitespace-nowrap"><div className="font-bold text-gray-800">{wo.qty}</div></td>
+                    <td className="px-4 py-2 whitespace-nowrap"><div className="font-bold text-green-600">0</div></td>
+                    <td className="px-4 py-2 whitespace-nowrap">
                       <div className="flex flex-nowrap gap-1">
                         {(wo.assigned_departments || []).map(d => <Badge key={d} color="indigo" className="!text-xs">{d.replace(/_/g, ' ')}</Badge>)}
                       </div>
                     </td>
-                    <td className="px-6 py-4"><span className="text-xs font-bold text-gray-600">{log?.invoice_no || wo.last_invoice_no || '-'}</span></td>
-                    <td className="px-6 py-4"><span className="text-xs font-bold text-gray-600">{log?.vehicle_no || wo.last_vehicle_no || '-'}</span></td>
-                    <td className="px-6 py-4">
-                      {log && editingDispatchDateId === log.id ? (
-                        <div className="flex items-center gap-1">
-                          <input type="date" value={editingDateValue} onChange={e => setEditingDateValue(e.target.value)} className="text-xs border border-gray-300 rounded px-1.5 py-0.5 w-[130px]" autoFocus />
-                          <button onClick={async () => { await saveSingleDispatchDate(log.id, editingDateValue); setEditingDispatchDateId(null); }} className="text-xs bg-green-500 text-white px-1.5 py-0.5 rounded font-bold" title="Save">✓</button>
-                          <button onClick={() => setEditingDispatchDateId(null)} className="text-xs bg-gray-400 text-white px-1.5 py-0.5 rounded font-bold" title="Cancel">✗</button>
-                        </div>
-                      ) : (
-                        <span onClick={() => { if (log) { setEditingDateValue(log?.dispatch_date || ''); setEditingDispatchDateId(log.id); } }} className={`text-sm font-bold ${log ? 'cursor-pointer hover:text-blue-600' : 'text-gray-400'} ${log?.dispatch_date ? 'text-gray-600' : 'text-blue-500'}`} title={log ? 'Click to edit date' : ''}>{log?.dispatch_date ? formatDateDMY(log.dispatch_date) : (log ? 'Add date' : '-')}</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4"><StatusBadge status="Dispatched" /></td>
-                    <td className="px-6 py-4"><div className="flex justify-end"><button onClick={() => onView(wo.id)} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors" title="View Details"><Eye size={16}/></button></div></td>
+                    <td className="px-4 py-2 whitespace-nowrap"><span className="text-xs font-bold text-gray-600">{log?.vehicle_no || wo.last_vehicle_no || '-'}</span></td>
+                    <td className="px-4 py-2 whitespace-nowrap"><span className="text-xs font-bold text-gray-600">{log?.invoice_no || wo.last_invoice_no || '-'}</span></td>
                   </tr>
                 );})
               ) : (
@@ -2531,58 +2537,56 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                     return (
                       <tr 
                         key={wo.id}
-                        className={`border-b transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                        className={`border-b transition-colors cursor-pointer ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                        onClick={() => onView(wo.id)}
                       >
                         {dispatchMode && (
-                          <td className="px-4 py-4 sticky left-0 bg-white z-20">
+                          <td className="px-2 py-2 sticky left-0 bg-white z-20">
                             <input
                               type="checkbox"
                               className="w-4 h-4 rounded"
                               checked={isSelected}
                               disabled={!canDispatch}
-                              onChange={() => toggleOrderSelection(wo.id, remaining)}
+                              onChange={(e) => { e.stopPropagation(); toggleOrderSelection(wo.id, remaining); }}
                             />
                           </td>
                         )}
-                        <td className={`px-6 py-4 text-xs font-bold text-gray-400 ${dispatchMode ? 'sticky left-12 bg-white z-10' : 'sticky left-0 bg-white z-10'}`}>
+                          <td className={`px-4 py-2 text-xs font-bold text-gray-400 whitespace-nowrap ${dispatchMode ? 'sticky left-12 bg-white z-10' : 'sticky left-0 bg-white z-10'}`}>
                           {srNo}
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-2 whitespace-nowrap">
                           <span className="text-blue-600 font-bold">#{wo.id}</span>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-2 whitespace-nowrap">
                           <div className="text-xs font-bold text-gray-600 whitespace-nowrap">{formatEntryDate(wo.entry_date || (wo as any).created_at || (wo as any).created)}</div>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-2 whitespace-nowrap">
                           <div className="font-semibold text-gray-800">{wo.customer}</div>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-2 whitespace-nowrap">
                           <div className="text-gray-700">{wo.job_details}</div>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-2 whitespace-nowrap">
                           <span className="font-mono font-bold text-gray-700 whitespace-nowrap">{wo.drawing || wo.itemInfo?.drawing_no || '-'}</span>
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="font-bold text-gray-800">{wo.qty}</div>
-                        </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-2 whitespace-nowrap">
                           <div className="text-xs font-bold text-orange-600 whitespace-nowrap">{wo.etd || 'TBD'}</div>
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="font-bold text-blue-600">{wo.qty_dispatched || 0}</div>
+                        <td className="px-4 py-2 whitespace-nowrap">
+                          <div className="font-bold text-gray-800">{wo.qty}</div>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-2 whitespace-nowrap">
                           <div className={`font-bold ${remaining > 0 ? 'text-orange-600' : 'text-green-600'}`}>
                             {remaining}
                           </div>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-2 whitespace-nowrap">
                           <div className="flex flex-nowrap gap-1">
                             {(wo.assigned_departments || []).map(d => <Badge key={d} color="indigo" className="!text-xs">{d.replace(/_/g, ' ')}</Badge>)}
                           </div>
                         </td>
                         {dispatchMode && (
-                          <td className="px-6 py-4">
+                          <td className="px-4 py-2 whitespace-nowrap">
                             {isSelected ? (
                               <input
                                 type="number"
@@ -2597,43 +2601,18 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                             )}
                           </td>
                         )}
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-1 flex-wrap">
-                            {(wo.assigned_departments || []).map(dept => {
-                              const ds = (wo.department_statuses || []).find(s => normalizeDepartment(s.department) === normalizeDepartment(dept));
-                              const qc = ds?.qc_status;
-                              let badgeClass = 'bg-gray-100 text-gray-600';
-                              let label = ds?.status ? STATUS_LABELS[ds.status] || ds.status : '—';
-                              if (qc === 'QC Approved') { badgeClass = 'bg-green-100 text-green-700'; label = 'QC Approved'; }
-                              else if (qc === 'QC Denied') { badgeClass = 'bg-red-100 text-red-700'; label = 'Denied'; }
-                              else if (ds?.status === 'Work Started') { badgeClass = 'bg-blue-100 text-blue-700'; }
-                              else if (ds?.status === 'Ready for QC') { badgeClass = 'bg-yellow-100 text-yellow-700'; }
-                              const deptLabel = dept.replace(/_/g, ' ');
-                              return (
-                                <span key={dept} className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${badgeClass}`}>
-                                  {deptLabel}: {label}
-                                </span>
-                              );
-                            })}
-                          </div>
+                        <td className="px-4 py-2 whitespace-nowrap">
+                          <span className="text-xs font-bold text-gray-600">{wo.last_vehicle_no || '-'}</span>
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="flex justify-end">
-                            <button 
-                              onClick={() => onView(wo.id)} 
-                              className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
-                              title="View Details"
-                            >
-                              <Eye size={16}/>
-                            </button>
-                          </div>
+                        <td className="px-4 py-2 whitespace-nowrap">
+                          <span className="text-xs font-bold text-gray-600">{wo.last_invoice_no || '-'}</span>
                         </td>
                       </tr>
                     );
                   })}
                   {filteredOrders.length === 0 && (
                     <tr>
-                      <td colSpan={dispatchMode ? 14 : 13} className="px-6 py-12 text-center text-gray-500 italic font-semibold">
+                      <td colSpan={dispatchMode ? (statusFilter === 'Dispatched' ? 15 : 14) : (statusFilter === 'Dispatched' ? 14 : 12)} className="px-4 py-8 text-center text-gray-500 italic font-semibold">
                         No orders for dispatch
                       </td>
                     </tr>
@@ -6362,7 +6341,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
         <Card className="hidden md:block p-0 shadow-md border border-gray-100">
           <div className="overflow-x-auto overflow-y-auto max-h-[85vh]">
             <table className="w-full min-w-[1660px] text-left text-sm border-separate border-spacing-0">
-                    <thead className="bg-gray-50 text-xs font-black uppercase text-gray-500 border-b border-gray-200">
+<thead>
                         <tr>
                             {planMode && (
                               <th className="px-2 py-1.5 w-10 sticky left-0 top-0 bg-gray-50 z-20">
@@ -8011,8 +7990,8 @@ const CustomBOMPlanView: React.FC<{ onError: () => void }> = ({ onError }) => {
                           <th className="px-3 py-2 text-left sticky top-0 bg-gray-50 z-10">Total Qty</th>
                           <th className="px-3 py-2 text-right sticky top-0 bg-gray-50 z-10">Action</th>
                         </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
+            </thead>
+            <tbody>
                         {item.components.map(comp => (
                           <tr key={comp.component_name}>
                             <td className="px-3 py-2 font-bold text-gray-700 sticky left-0 bg-white z-10">{comp.component_name}</td>
@@ -9696,7 +9675,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
                         <tr key={`detail-${row.component}`}>
                           <td colSpan={6} className="p-0 bg-indigo-50/20">
                             <table className="w-full text-xs">
-                              <thead>
+<thead className="bg-gray-50 text-xs font-black uppercase text-gray-500 border-b border-gray-200">
                                 <tr className="text-[10px] uppercase text-gray-500 font-black border-b border-indigo-200">
                                   <th className="px-4 py-2 text-left pl-8">Parent Item</th>
                                   <th className="px-4 py-2 text-right">Qty Used</th>
@@ -10420,7 +10399,7 @@ const ProductionReports: React.FC<{ onError: () => void }> = ({ onError }) => {
                     <th className="text-center py-1">Total</th>
                   </tr>
                 </thead>
-                <tbody>
+<tbody className="divide-y divide-gray-100">
                   <tr>
                     <td className="py-1.5 pr-4 font-bold text-gray-800">Shift</td>
                     <td className="py-1.5 pr-3 text-center font-semibold text-gray-700">{r.shift_workers}</td>
