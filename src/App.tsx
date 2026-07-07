@@ -9158,8 +9158,6 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
   const [componentTableSearch, setComponentTableSearch] = useState('');
   const [itemTableSearch, setItemTableSearch] = useState('');
   const [deliverySearch, setDeliverySearch] = useState('');
-  const [deptSearch, setDeptSearch] = useState('');
-  const [companySearch, setCompanySearch] = useState('');
 
   // Report selection + preview state
   const [selectedComponents, setSelectedComponents] = useState<Set<string>>(new Set());
@@ -9386,39 +9384,6 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
     return rows;
   }, [orders, dispatchLogs, datePreset, fromDate, toDate]);
 
-  const deptRows = useMemo(() => {
-    const departments = ['wood_work', 'corrugation', 'trading_consumables'];
-    return departments.map(dept => ({
-      dept: dept.replace(/_/g, ' '),
-      reports: orders.filter(wo => (wo.assigned_departments || []).some((d: string) => d === dept)).length,
-      shiftHrs: 0,
-      otHrs: 0,
-      totalHrs: 0,
-      qtyProduced: orders
-        .filter(wo => (wo.assigned_departments || []).some((d: string) => d === dept))
-        .reduce((s, wo) => s + Number(wo.qty || 0), 0),
-    }));
-  }, [orders]);
-
-  const companyRows = useMemo(() => {
-    const map = new Map<string, { totalWOs: number; totalQty: number; onTime: number; delayed: number }>();
-    for (const wo of orders) {
-      const customer = wo.customer || 'Unknown';
-      const existing = map.get(customer);
-      const qty = Number(wo.qty || 0);
-      if (!existing) { map.set(customer, { totalWOs: 1, totalQty: qty, onTime: 0, delayed: 0 }); }
-      else { existing.totalWOs++; existing.totalQty += qty; }
-      if (wo.status === 'Dispatched') {
-        const logs = dispatchLogs.filter((l: any) => Number(l.work_order_id) === Number(wo.id));
-        const anyLate = logs.some((l: any) => l.dispatch_date && wo.etd && l.dispatch_date > wo.etd);
-        const anyOnTime = logs.some((l: any) => l.dispatch_date && wo.etd && l.dispatch_date <= wo.etd);
-        if (anyLate) map.get(customer)!.delayed++;
-        if (anyOnTime) map.get(customer)!.onTime++;
-      }
-    }
-    return Array.from(map.entries()).map(([company, v]) => ({ company, ...v }));
-  }, [orders, dispatchLogs]);
-
   const sortedRows = useMemo(() => {
     let rows: any[];
     switch (activeTab) {
@@ -9440,8 +9405,6 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
       }
       case 'item-usage': rows = itemOrderRows; break;
       case 'delivery-report': rows = deliveryRows; break;
-      case 'dept-wise': rows = deptRows; break;
-      case 'company-performance': rows = companyRows; break;
       default: rows = [];
     }
     if (!sortConfig) return rows;
@@ -9456,7 +9419,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
       if (aVal > bVal) return dir === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [activeTab, sortConfig, componentUsageRows, itemOrderRows, deliveryRows, deptRows, companyRows]);
+  }, [activeTab, sortConfig, componentUsageRows, itemOrderRows, deliveryRows]);
 
   const componentFlatData = useMemo(() => {
     const rows: { component: string; parentItem: string; qty: number; company: string; orderId: number }[] = [];
@@ -9506,8 +9469,6 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
     { key: 'component-usage', label: 'Component Usage' },
     { key: 'item-usage', label: 'Item Usage' },
     { key: 'delivery-report', label: 'Delivery Report' },
-    { key: 'dept-wise', label: 'Dept-Wise' },
-    { key: 'company-performance', label: 'Company Performance' },
   ];
   const thClass = "px-4 py-3 text-left cursor-pointer select-none hover:bg-gray-100 transition-colors whitespace-nowrap sticky top-0 bg-gray-50 z-10";
 
@@ -10318,102 +10279,10 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
       )}
 
       {/* Department-Wise table */}
-      {activeTab === 'dept-wise' && (
-        <div className="px-4 space-y-3">
-          <DateRangeControls />
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-            <input type="text" placeholder="Search departments..." value={deptSearch} onChange={e => setDeptSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300" />
-            {deptSearch && <button onClick={() => setDeptSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><X size={14} /></button>}
-          </div>
-          <Card className="p-0 shadow-sm border border-gray-200/60 rounded-xl">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[700px] text-sm">
-              <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
-                <tr>
-                  <th className={thClass} onClick={() => handleSort('dept')}>Department <SortIcon col="dept" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('reports')}>Reports <SortIcon col="reports" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('shiftHrs')}>Shift Hrs <SortIcon col="shiftHrs" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('otHrs')}>OT Hrs <SortIcon col="otHrs" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('totalHrs')}>Total Hrs <SortIcon col="totalHrs" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('qtyProduced')}>Qty Produced <SortIcon col="qtyProduced" /></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {sortedRows.filter(row => !deptSearch || row.dept.toLowerCase().includes(deptSearch.toLowerCase())).map((row: any, i: number) => (
-                  <tr key={row.dept} className={`hover:bg-indigo-50/40 transition-colors ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
-                    <td className="px-4 py-3 font-black text-gray-800">{row.dept}</td>
-                    <td className="px-4 py-3 font-semibold text-gray-700 text-right tabular-nums">{row.reports}</td>
-                    <td className="px-4 py-3 text-gray-600 text-right tabular-nums">{row.shiftHrs}</td>
-                    <td className="px-4 py-3 text-gray-600 text-right tabular-nums">{row.otHrs}</td>
-                    <td className="px-4 py-3 font-semibold text-indigo-700 text-right tabular-nums">{row.totalHrs}</td>
-                    <td className="px-4 py-3 font-black text-gray-800 text-right tabular-nums">{row.qtyProduced}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {sortedRows.filter(row => !deptSearch || row.dept.toLowerCase().includes(deptSearch.toLowerCase())).length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No department-wise data for the selected range.</div>}
-        </Card>
-        </div>
-      )}
-
-      {/* Company Performance table */}
-      {activeTab === 'company-performance' && (
-        <div className="px-4 space-y-3">
-          <DateRangeControls />
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-            <input type="text" placeholder="Search companies..." value={companySearch} onChange={e => setCompanySearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300" />
-            {companySearch && <button onClick={() => setCompanySearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><X size={14} /></button>}
-          </div>
-          <Card className="p-0 shadow-sm border border-gray-200/60 rounded-xl">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[700px] text-sm">
-              <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
-                <tr>
-                  <th className={thClass} onClick={() => handleSort('company')}>Company <SortIcon col="company" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('totalWOs')}>Total WOs <SortIcon col="totalWOs" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('totalQty')}>Total Qty <SortIcon col="totalQty" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('onTime')}>On-Time <SortIcon col="onTime" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('delayed')}>Delayed <SortIcon col="delayed" /></th>
-                  <th className="px-4 py-3 text-right whitespace-nowrap">On-Time %</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {sortedRows.filter(row => !companySearch || row.company.toLowerCase().includes(companySearch.toLowerCase())).map((row: any, i: number) => {
-                  const pct = row.totalWOs > 0 ? Math.round(row.onTime / row.totalWOs * 100) : 0;
-                  const barColor = pct >= 80 ? 'bg-green-400' : pct >= 50 ? 'bg-amber-400' : 'bg-red-400';
-                  return (
-                    <tr key={row.company} className={`hover:bg-indigo-50/40 transition-colors ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
-                      <td className="px-4 py-3 font-black text-gray-800">{row.company}</td>
-                      <td className="px-4 py-3 font-semibold text-gray-700 text-right tabular-nums">{row.totalWOs}</td>
-                      <td className="px-4 py-3 font-semibold text-indigo-700 text-right tabular-nums">{row.totalQty}</td>
-                      <td className="px-4 py-3 font-semibold text-green-700 text-right tabular-nums">{row.onTime}</td>
-                      <td className="px-4 py-3 font-semibold text-red-700 text-right tabular-nums">{row.delayed}</td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                            <div className={`h-full ${barColor} rounded-full`} style={{ width: `${pct}%` }}></div>
-                          </div>
-                          <span className="font-black text-gray-800 text-xs tabular-nums">{pct}%</span>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          {sortedRows.filter(row => !companySearch || row.company.toLowerCase().includes(companySearch.toLowerCase())).length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No company performance data for the selected range.</div>}
-        </Card>
-        </div>
-      )}
     </div>
   );
 };
+
 // --- Production Entry ---
 
 const formatEntryDate = (dateValue: string | undefined | null): string => {
