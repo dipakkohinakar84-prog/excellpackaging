@@ -1917,7 +1917,11 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
   const [data, setData] = useState<(WorkOrder & { itemInfo?: Item })[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'Ready for despatch' | 'Dispatched'>('Ready for despatch');
+  const [statusFilter, setStatusFilter] = useState<'Ready for despatch' | 'Dispatched'>(() => {
+    const saved = (window as any)._dispatchFilter;
+    if (saved === 'Dispatched' || saved === 'Ready for despatch') return saved;
+    return 'Ready for despatch';
+  });
   const [dispatchDateFilter, setDispatchDateFilter] = useState('all');
   const [dispatchCustomFrom, setDispatchCustomFrom] = useState('');
   const [dispatchCustomTo, setDispatchCustomTo] = useState('');
@@ -2035,6 +2039,15 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
       [orderId]: validQty
     }));
   };
+
+  const handleViewOrder = useCallback((woId: number) => {
+    (window as any)._dispatchFilter = statusFilter;
+    onView(woId);
+  }, [statusFilter, onView]);
+
+  useEffect(() => {
+    delete (window as any)._dispatchFilter;
+  }, []);
 
   const submitBulkDispatch = async () => {
     if (isSubmittingDispatch) return;
@@ -2496,7 +2509,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                 }).map(({ log, wo }, flatIdx) => {
                   const srNo = flatIdx + 1;
                   return (
-                  <tr key={`log-${wo.id}-${log?.id || 0}`} className="border-b hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => onView(wo.id)}>
+                  <tr key={`log-${wo.id}-${log?.id || 0}`} className="border-b hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => handleViewOrder(wo.id)}>
                     <td className="px-4 py-2 text-xs font-bold text-gray-400 whitespace-nowrap sticky left-0 bg-white z-10">{srNo}</td>
                     <td className="px-4 py-2 whitespace-nowrap"><span className="text-blue-600 font-bold">#{wo.id}</span></td>
                     <td className="px-4 py-2 whitespace-nowrap"><div className="text-xs font-bold text-gray-600 whitespace-nowrap">{formatEntryDate(wo.entry_date || (wo as any).created_at || (wo as any).created)}</div></td>
@@ -2538,16 +2551,16 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                       <tr 
                         key={wo.id}
                         className={`border-b transition-colors cursor-pointer ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
-                        onClick={() => onView(wo.id)}
+                        onClick={() => dispatchMode ? toggleOrderSelection(wo.id, remaining) : handleViewOrder(wo.id)}
                       >
                         {dispatchMode && (
-                          <td className="px-2 py-2 sticky left-0 bg-white z-20">
+                          <td className="px-2 py-2 sticky left-0 bg-white z-20" onClick={e => e.stopPropagation()}>
                             <input
                               type="checkbox"
                               className="w-4 h-4 rounded"
                               checked={isSelected}
                               disabled={!canDispatch}
-                              onChange={(e) => { e.stopPropagation(); toggleOrderSelection(wo.id, remaining); }}
+                              onChange={() => toggleOrderSelection(wo.id, remaining)}
                             />
                           </td>
                         )}
@@ -2716,7 +2729,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                 </div>
 
                 <button
-                  onClick={() => onView(wo.id)}
+                  onClick={() => handleViewOrder(wo.id)}
                   className="mt-2 w-full py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold"
                 >
                   View Details
@@ -2822,7 +2835,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                     )}
 
                     <button
-                      onClick={() => onView(wo.id)}
+                      onClick={() => handleViewOrder(wo.id)}
                       className="mt-2 w-full py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold"
                     >
                       View Details
@@ -5470,8 +5483,14 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
   const [viewMode, setViewMode] = useState<'table' | 'card'>(() => (
     typeof window !== 'undefined' && window.innerWidth < 768 ? 'card' : 'table'
   ));
-  const [planMode, setPlanMode] = useState(false);
-  const [planSelectedIds, setPlanSelectedIds] = useState<Set<number>>(new Set());
+  const [planMode, setPlanMode] = useState<boolean>(() => {
+    const saved = (window as any)._planModeBackup;
+    return saved === true || saved === false ? saved : false;
+  });
+  const [planSelectedIds, setPlanSelectedIds] = useState<Set<number>>(() => {
+    const saved = (window as any)._planSelectedIdsBackup;
+    return saved ? new Set(saved) : new Set();
+  });
 
   const isOrderOverdue = (wo: WorkOrder & { itemInfo?: Item }) => {
     if (!wo.etd || wo.status === 'Dispatched') return false;
@@ -6013,6 +6032,25 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
     return items.filter(item => item.customer_name?.trim().toLowerCase() === selectedCustomer);
   }, [items, customer]);
 
+  const handleViewOrder = useCallback((woId: number) => {
+    (window as any)._planModeBackup = planMode;
+    (window as any)._planSelectedIdsBackup = Array.from(planSelectedIds);
+    onView(woId);
+  }, [planMode, planSelectedIds, onView]);
+
+  const togglePlanSelection = useCallback((woId: number) => {
+    setPlanSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(woId)) next.delete(woId); else next.add(woId);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    delete (window as any)._planModeBackup;
+    delete (window as any)._planSelectedIdsBackup;
+  }, []);
+
   if (loading) return <LoadingState />;
 
   return (
@@ -6340,7 +6378,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
       {viewMode === 'table' ? (
         <Card className="hidden md:block p-0 shadow-md border border-gray-100">
           <div className="overflow-x-auto overflow-y-auto max-h-[85vh]">
-            <table className="w-full min-w-[1660px] text-left text-sm border-separate border-spacing-0">
+            <table className="w-full min-w-[1050px] text-left text-sm border-separate border-spacing-0">
 <thead>
                         <tr>
                             {planMode && (
@@ -6359,31 +6397,31 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                                 />
                               </th>
                             )}
-                            <th className={`px-4 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors ${planMode ? 'sticky left-10 top-0 bg-gray-50 z-10' : 'sticky left-0 top-0 bg-gray-50 z-20'}`}>
-                                <span className="inline-flex items-center">Sr. No.</span>
+                            <th className={`px-1 py-1.5 w-8 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors text-center ${planMode ? 'sticky left-10 top-0 bg-gray-50 z-10' : 'sticky left-0 top-0 bg-gray-50 z-20'}`}>
+                                <span className="inline-flex items-center">Sr.</span>
                             </th>
-                            <th className="px-4 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('id')}>
+                            <th className="px-2 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('id')}>
                                 <span className="inline-flex items-center">Order #<SortIcon col="id" /></span>
                             </th>
-                            <th className="px-4 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('created_at')}>
+                            <th className="px-2 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('created_at')}>
                                 <span className="inline-flex items-center">Entry Date<SortIcon col="created_at" /></span>
                             </th>
-                            <th className="px-4 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('customer')}>
+                            <th className="px-2 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('customer')}>
                                 <span className="inline-flex items-center">Customer<SortIcon col="customer" /></span>
                             </th>
-                            <th className="px-4 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('job_details')}>
+                            <th className="px-2 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('job_details')}>
                                 <span className="inline-flex items-center">Job Details<SortIcon col="job_details" /></span>
                             </th>
-                            <th className="px-4 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('drawing')}>
+                            <th className="px-2 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('drawing')}>
                                 <span className="inline-flex items-center">Drawing<SortIcon col="drawing" /></span>
                             </th>
-                            <th className="px-4 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('qty')}>
+                            <th className="px-2 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('qty')}>
                                 <span className="inline-flex items-center">Qty<SortIcon col="qty" /></span>
                             </th>
-                            <th className="px-4 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('etd')}>
+                            <th className="px-2 py-1.5 whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition-colors sticky top-0 bg-gray-50 z-10" onClick={() => handleSort('etd')}>
                                 <span className="inline-flex items-center">ETD<SortIcon col="etd" /></span>
                             </th>
-                            <th className="px-4 py-1.5 whitespace-nowrap sticky top-0 bg-gray-50 z-10">
+                            <th className="px-2 py-1.5 whitespace-nowrap sticky top-0 bg-gray-50 z-10">
                                 <span className="inline-flex items-center">Departments</span>
                             </th>
                         </tr>
@@ -6394,7 +6432,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                           return (
                             <tr 
                                 key={wo.id} 
-                                onClick={() => onView(wo.id)} 
+                                onClick={() => planMode ? togglePlanSelection(wo.id) : handleViewOrder(wo.id)} 
                                 className={`hover:bg-blue-50/50 cursor-pointer transition-colors group ${isOrderOverdue(wo) ? 'bg-red-100/60' : ''}`}
                             >
                                 {planMode && (
@@ -6403,31 +6441,25 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                                       type="checkbox"
                                       className="w-4 h-4 rounded"
                                       checked={planSelectedIds.has(wo.id)}
-                                      onChange={() => {
-                                        setPlanSelectedIds(prev => {
-                                          const next = new Set(prev);
-                                          if (next.has(wo.id)) next.delete(wo.id); else next.add(wo.id);
-                                          return next;
-                                        });
-                                      }}
+                                      onChange={() => togglePlanSelection(wo.id)}
                                     />
                                   </td>
                                 )}
-                                <td className={`px-4 py-1.5 font-black text-gray-400 text-xs whitespace-nowrap ${planMode ? 'sticky left-10 z-10' : 'sticky left-0 z-10'} ${isOrderOverdue(wo) ? 'bg-red-100/60' : 'bg-white'}`}>
+                                <td className={`px-1 py-1.5 w-8 font-black text-gray-400 text-xs whitespace-nowrap text-center ${planMode ? 'sticky left-10 z-10' : 'sticky left-0 z-10'} ${isOrderOverdue(wo) ? 'bg-red-100/60' : 'bg-white'}`}>
                                     {srNo}
                                 </td>
-                                <td className={`px-4 py-1.5 font-black text-indigo-600 text-sm whitespace-nowrap`}>
+                                 <td className={`px-2 py-1.5 font-black text-indigo-600 text-sm whitespace-nowrap`}>
                                   <div className="text-sm">#{wo.id}</div>
                                   {wo.order_type === 'suborder' && <Badge color="purple" className="!text-xs">Suborder Of #{wo.parent_work_order_id || '-'}</Badge>}
                                 </td>
-                                <td className="px-4 py-1.5 text-xs font-bold text-gray-600 whitespace-nowrap">
+                                 <td className="px-2 py-1.5 text-xs font-bold text-gray-600 whitespace-nowrap">
                                   {formatEntryDate(wo.entry_date || wo.created_at || (wo as any).created)}
                                 </td>
-                                <td className="px-4 py-1.5 font-bold text-gray-700 text-sm whitespace-nowrap">{wo.customer}</td>
-                                <td className="px-4 py-1.5 font-semibold text-gray-800 text-sm whitespace-nowrap">
+                                 <td className="px-2 py-1.5 font-bold text-gray-700 text-sm whitespace-nowrap">{wo.customer}</td>
+                                 <td className="px-2 py-1.5 font-semibold text-gray-800 text-sm whitespace-nowrap">
                                   <div>{wo.job_details}</div>
                                 </td>
-                                <td className="px-4 py-1.5 whitespace-nowrap">
+                                <td className="px-2 py-1.5 whitespace-nowrap">
                                     <div className="flex items-center gap-2">
                                         <span className="font-mono text-sm text-gray-500 font-bold">{wo.drawing || wo.itemInfo?.drawing_no || 'TBD'}</span>
                                         {(wo.drawing_image_url || wo.itemInfo?.drawing_image_url) && (
@@ -6445,9 +6477,9 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                                         )}
                                     </div>
                                 </td>
-                                <td className="px-4 py-1.5 font-bold text-sm whitespace-nowrap">{wo.qty}</td>
-                                <td className="px-4 py-1.5 text-sm font-bold text-orange-600 whitespace-nowrap">{wo.etd || 'TBD'}</td>
-                                <td className="px-4 py-1.5 whitespace-nowrap">
+                                 <td className="px-2 py-1.5 font-bold text-sm whitespace-nowrap">{wo.qty}</td>
+                                 <td className="px-2 py-1.5 text-sm font-bold text-orange-600 whitespace-nowrap">{wo.etd || 'TBD'}</td>
+                                 <td className="px-2 py-1.5 whitespace-nowrap">
                                     <div className="flex flex-nowrap gap-1.5">
                                         {(wo.assigned_departments || []).map(dept => {
                                           const ds = (wo.department_statuses || []).find(s => normalizeDepartment(s.department) === normalizeDepartment(dept));
@@ -6537,7 +6569,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
                     )}
                   </div>
                   <button 
-                    onClick={() => onView(wo.id)} 
+                    onClick={() => planMode ? togglePlanSelection(wo.id) : handleViewOrder(wo.id)} 
                     className="p-1.5 bg-gray-50 rounded-md text-gray-500 group-hover:text-blue-500 group-hover:bg-blue-50 transition-all"
                   >
                     <ChevronRight size={14} />
@@ -12486,16 +12518,7 @@ export default function App() {
       case 'child-items': return <ChildItemListView onError={onError} editingId={(window as any)._id} />;
       case 'vehicles': return <VehicleList onError={onError} />;
       case 'work-orders': return <WorkOrderList onError={onError} onView={id => navigateTo('wo-details', { payload: { id } })} onViewPlan={id => navigateTo('plan-generator', { payload: { ids: [id], backView: 'work-orders' } })} onCreatePlan={ids => navigateTo('plan-generator', { payload: { ids, backView: 'work-orders' } })} loggedInUser={loggedInUser} />;
-      case 'wo-details': return <WODetails id={(window as any)._id} onBack={() => {
-         const normDept = normalizeDepartment(loggedInUser.department);
-         if (normDept === 'Office') {
-            navigateTo('work-orders');
-         } else if (normDept === 'Dispatch') {
-            navigateTo('dispatch-dashboard');
-         } else {
-            navigateTo('worker-dashboard');
-         }
-      }} loggedInUser={loggedInUser} />;
+      case 'wo-details': return <WODetails id={(window as any)._id} onBack={() => window.history.back()} loggedInUser={loggedInUser} />;
        case 'production-plan': return <ProductionPlanList onError={onError} onGenerate={ids => navigateTo('plan-generator', { payload: { ids, backView: 'production-plan' } })} loggedInUser={loggedInUser} />;
        case 'plan-generator': return <PlanGenerator ids={(window as any)._ids} onBack={() => navigateTo((window as any)._planBackView || 'production-plan')} />;
        case 'custom-bom-plan': return <CustomBOMPlanView onError={onError} />;
