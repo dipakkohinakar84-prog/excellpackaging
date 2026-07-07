@@ -9154,24 +9154,18 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
   const [toDate, setToDate] = useState('');
   const [dateField, setDateField] = useState<'entry_date' | 'dispatched_date'>('dispatched_date');
 
-  // Component Usage tab
-  const [componentSearch, setComponentSearch] = useState('');
-  const [selectedComponentNames, setSelectedComponentNames] = useState<Set<string>>(new Set());
-  const [showComponentReport, setShowComponentReport] = useState(false);
+  // Per-tab search
+  const [componentTableSearch, setComponentTableSearch] = useState('');
+  const [itemTableSearch, setItemTableSearch] = useState('');
+  const [deliverySearch, setDeliverySearch] = useState('');
+  const [deptSearch, setDeptSearch] = useState('');
+  const [companySearch, setCompanySearch] = useState('');
 
-  // Item Usage tab
-  const [itemSearch, setItemSearch] = useState('');
-  const [selectedItemIds, setSelectedItemIds] = useState<Set<number>>(new Set());
-  const [showItemReport, setShowItemReport] = useState(false);
-
-  // Export dropdown
-  const [showExportDropdown, setShowExportDropdown] = useState(false);
-
-  useEffect(() => {
-    const close = () => setShowExportDropdown(false);
-    document.addEventListener('click', close);
-    return () => document.removeEventListener('click', close);
-  }, []);
+  // Report selection + preview state
+  const [selectedComponents, setSelectedComponents] = useState<Set<string>>(new Set());
+  const [showComponentPreview, setShowComponentPreview] = useState(false);
+  const [selectedItemOrderIds, setSelectedItemOrderIds] = useState<Set<number>>(new Set());
+  const [showItemPreview, setShowItemPreview] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -9181,7 +9175,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
           supabase.from('work_orders').select('*').order('id', { ascending: false }),
           loadCachedCollection<Item>('items'),
           loadCachedCollection<ChildItem>('child_items'),
-          supabase.from('dispatch_logs').select('work_order_id, dispatch_date').order('dispatch_date', { ascending: true }),
+          supabase.from('dispatch_logs').select('*').order('dispatch_date', { ascending: true }),
         ]);
         if (woRes.error?.code === '42P01') { onError(); return; }
         if (woRes.data) setOrders(woRes.data);
@@ -9243,300 +9237,6 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
     return map;
   }, [dispatchLogs]);
 
-  const filteredComponents = useMemo(() => {
-    const q = componentSearch.trim().toLowerCase();
-    return components.filter(c => {
-      const name = String(c.name || '');
-      if (!name) return false;
-      if (q && !name.toLowerCase().includes(q)) return false;
-      return true;
-    });
-  }, [components, componentSearch]);
-
-  const filteredItems = useMemo(() => {
-    const q = itemSearch.trim().toLowerCase();
-    return items.filter(it => {
-      const name = String(it.name || '');
-      if (!name) return false;
-      if (q && !name.toLowerCase().includes(q)) return false;
-      return true;
-    });
-  }, [items, itemSearch]);
-
-  const componentReportRows = useMemo(() => {
-    if (!showComponentReport) return [];
-    const grouped = new Map<string, { componentName: string; itemName: string; qty: number }>();
-    for (const wo of orders) {
-      if (wo.status !== 'Ready for despatch' && wo.status !== 'Dispatched') continue;
-      const dateVal = dateField === 'entry_date' ? (wo.entry_date || wo.created_at) : dispatchDateByOrderId.get(Number(wo.id));
-      if (!dateVal) continue;
-      if (!inDateRange(dateVal)) continue;
-      const item = itemsById.get(Number(wo.source_item_id || wo.itemId));
-      if (!item?.children) continue;
-      for (const child of item.children) {
-        if (!selectedComponentNames.has(child.name)) continue;
-        const qty = (Number(child.qtyPerMaster) || 0) * Number(wo.qty);
-        const key = `${child.name}||${item.name}`;
-        const existing = grouped.get(key);
-        if (existing) existing.qty += qty;
-        else grouped.set(key, { componentName: child.name, itemName: item.name, qty });
-      }
-    }
-    return Array.from(grouped.values()).sort((a, b) =>
-      a.componentName.localeCompare(b.componentName) || a.itemName.localeCompare(b.itemName)
-    );
-  }, [showComponentReport, orders, itemsById, selectedComponentNames, datePreset, fromDate, toDate, dateField, dispatchDateByOrderId]);
-
-  const itemReportRows = useMemo(() => {
-    if (!showItemReport) return [];
-    const grouped = new Map<string, { itemName: string; qty: number }>();
-    for (const wo of orders) {
-      if (wo.status !== 'Ready for despatch' && wo.status !== 'Dispatched') continue;
-      const dateVal = dateField === 'entry_date' ? (wo.entry_date || wo.created_at) : dispatchDateByOrderId.get(Number(wo.id));
-      if (!dateVal) continue;
-      if (!inDateRange(dateVal)) continue;
-      const item = itemsById.get(Number(wo.source_item_id || wo.itemId));
-      if (!item) continue;
-      if (!selectedItemIds.has(Number(item.id))) continue;
-      const name = item.name;
-      const existing = grouped.get(name);
-      if (existing) existing.qty += Number(wo.qty);
-      else grouped.set(name, { itemName: name, qty: Number(wo.qty) });
-    }
-    return Array.from(grouped.values()).sort((a, b) => b.qty - a.qty);
-  }, [showItemReport, orders, itemsById, selectedItemIds, datePreset, fromDate, toDate, dateField, dispatchDateByOrderId]);
-
-  const componentTotalQty = componentReportRows.reduce((s, r) => s + r.qty, 0);
-  const itemTotalQty = itemReportRows.reduce((s, r) => s + r.qty, 0);
-
-  const toggleComponent = (name: string) => {
-    setSelectedComponentNames(prev => {
-      const n = new Set(prev);
-      if (n.has(name)) n.delete(name); else n.add(name);
-      return n;
-    });
-    setShowComponentReport(false);
-  };
-
-  const toggleItem = (id: number) => {
-    setSelectedItemIds(prev => {
-      const n = new Set(prev);
-      if (n.has(id)) n.delete(id); else n.add(id);
-      return n;
-    });
-    setShowItemReport(false);
-  };
-
-  const toggleAllComponents = () => {
-    const allSel = filteredComponents.length > 0 && filteredComponents.every(c => selectedComponentNames.has(c.name));
-    setSelectedComponentNames(prev => {
-      const n = new Set(prev);
-      if (allSel) filteredComponents.forEach(c => n.delete(c.name));
-      else filteredComponents.forEach(c => n.add(c.name));
-      return n;
-    });
-    setShowComponentReport(false);
-  };
-
-  const toggleAllItems = () => {
-    const allSel = filteredItems.length > 0 && filteredItems.every(it => selectedItemIds.has(Number(it.id)));
-    setSelectedItemIds(prev => {
-      const n = new Set(prev);
-      if (allSel) filteredItems.forEach(it => n.delete(Number(it.id)));
-      else filteredItems.forEach(it => n.add(Number(it.id)));
-      return n;
-    });
-    setShowItemReport(false);
-  };
-
-  const dateRangeLabel = () => {
-    if (datePreset === 'all') return 'All dates';
-    if (datePreset === 'today') return new Date().toLocaleDateString('en-GB');
-    if (datePreset === 'custom') return `${new Date(fromDate).toLocaleDateString('en-GB')} — ${new Date(toDate).toLocaleDateString('en-GB')}`;
-    if (datePreset === '7d' || datePreset === '30d' || datePreset === '90d') {
-      const now = new Date();
-      const from = new Date(now); from.setDate(now.getDate() - (datePreset === '7d' ? 7 : datePreset === '30d' ? 30 : 90));
-      return `${from.toLocaleDateString('en-GB')} — ${now.toLocaleDateString('en-GB')}`;
-    }
-    return `${new Date(fromDate).toLocaleDateString('en-GB')} — ${new Date(toDate).toLocaleDateString('en-GB')}`;
-  };
-
-  const dateRangeFilename = () => {
-    if (datePreset === 'all') return 'all-dates';
-    if (fromDate && toDate) {
-      const f = new Date(fromDate).toLocaleDateString('en-GB').replace(/\//g, '-');
-      const t = new Date(toDate).toLocaleDateString('en-GB').replace(/\//g, '-');
-      return `${f}--${t}`;
-    }
-    return new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
-  };
-
-  const exportComponentUsagePdf = () => {
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    const pw = doc.internal.pageSize.getWidth();
-    const ph = doc.internal.pageSize.getHeight();
-    const ml = 14;
-    const slate = [30, 41, 59] as [number, number, number];
-    const muted = [100, 100, 100] as [number, number, number];
-    const border = [200, 200, 200] as [number, number, number];
-
-    let y = 22;
-    const sectionTitle = (title: string) => {
-      doc.setFontSize(11);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(slate[0], slate[1], slate[2]);
-      doc.text(title, ml, y);
-      doc.setDrawColor(border[0], border[1], border[2]);
-      doc.setLineWidth(0.3);
-      doc.line(ml, y + 1.5, pw - ml, y + 1.5);
-      y += 7;
-    };
-
-    // Header
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(slate[0], slate[1], slate[2]);
-    doc.text('Excell Packaging', pw / 2, y, { align: 'center' });
-    y += 8;
-
-    sectionTitle('Component Usage Report');
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(muted[0], muted[1], muted[2]);
-    doc.text(`Date Range (${dateFieldLabel}): ${dateRangeLabel()}`, ml, y); y += 5;
-
-    // Table
-    const tableData = componentReportRows.map(r => [r.componentName, r.itemName, String(r.qty)]);
-    const total = String(componentTotalQty);
-    tableData.push(['', 'Total Quantity', total]);
-
-    autoTable(doc, {
-      startY: y + 4,
-      head: [['Component Name', 'Item Name', 'Quantity']],
-      body: tableData,
-      headStyles: { fillColor: slate, textColor: 255, fontStyle: 'bold', fontSize: 8 },
-      bodyStyles: { fontSize: 8 },
-      columnStyles: { 0: { cellWidth: 'auto' }, 1: { cellWidth: 'auto' }, 2: { halign: 'right', cellWidth: 30 } },
-      footStyles: { fontStyle: 'bold', fontSize: 8 },
-      didParseCell: (data: any) => {
-        if (data.section === 'body' && data.row.index === tableData.length - 1) {
-          data.cell.styles.fontStyle = 'bold';
-          data.cell.styles.fillColor = [248, 250, 252];
-        }
-      },
-      margin: { left: ml, right: ml },
-    });
-
-    // Footer
-    const finalY = (doc as any).lastAutoTable?.finalY || y + 20;
-    doc.setDrawColor(border[0], border[1], border[2]);
-    doc.setLineWidth(0.3);
-    doc.line(ml, ph - 12, pw - ml, ph - 12);
-    doc.setFontSize(6.5);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(160);
-    doc.text('Excell Packaging', ml, ph - 7);
-    doc.text(`Generated: ${new Date().toLocaleString('en-GB')}`, ml, ph - 7, { align: 'right' });
-
-    doc.save(`component-usage-report-${dateRangeFilename()}.pdf`);
-  };
-
-  const exportItemUsagePdf = () => {
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    const pw = doc.internal.pageSize.getWidth();
-    const ph = doc.internal.pageSize.getHeight();
-    const ml = 14;
-    const slate = [30, 41, 59] as [number, number, number];
-    const muted = [100, 100, 100] as [number, number, number];
-    const border = [200, 200, 200] as [number, number, number];
-
-    let y = 22;
-    const sectionTitle = (title: string) => {
-      doc.setFontSize(11);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(slate[0], slate[1], slate[2]);
-      doc.text(title, ml, y);
-      doc.setDrawColor(border[0], border[1], border[2]);
-      doc.setLineWidth(0.3);
-      doc.line(ml, y + 1.5, pw - ml, y + 1.5);
-      y += 7;
-    };
-
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(slate[0], slate[1], slate[2]);
-    doc.text('Excell Packaging', pw / 2, y, { align: 'center' });
-    y += 8;
-
-    sectionTitle('Item Usage Report');
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(muted[0], muted[1], muted[2]);
-    doc.text(`Date Range (${dateFieldLabel}): ${dateRangeLabel()}`, ml, y); y += 5;
-
-    const tableData = itemReportRows.map(r => [r.itemName, String(r.qty)]);
-    const total = String(itemTotalQty);
-    tableData.push(['Total Quantity', total]);
-
-    autoTable(doc, {
-      startY: y + 4,
-      head: [['Item Name', 'Quantity']],
-      body: tableData,
-      headStyles: { fillColor: slate, textColor: 255, fontStyle: 'bold', fontSize: 8 },
-      bodyStyles: { fontSize: 8 },
-      columnStyles: { 0: { cellWidth: 'auto' }, 1: { halign: 'right', cellWidth: 30 } },
-      footStyles: { fontStyle: 'bold', fontSize: 8 },
-      didParseCell: (data: any) => {
-        if (data.section === 'body' && data.row.index === tableData.length - 1) {
-          data.cell.styles.fontStyle = 'bold';
-          data.cell.styles.fillColor = [248, 250, 252];
-        }
-      },
-      margin: { left: ml, right: ml },
-    });
-
-    const finalY = (doc as any).lastAutoTable?.finalY || y + 20;
-    doc.setDrawColor(border[0], border[1], border[2]);
-    doc.setLineWidth(0.3);
-    doc.line(ml, ph - 12, pw - ml, ph - 12);
-    doc.setFontSize(6.5);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(160);
-    doc.text('Excell Packaging', ml, ph - 7);
-    doc.text(`Generated: ${new Date().toLocaleString('en-GB')}`, pw - ml, ph - 7, { align: 'right' });
-
-    doc.save(`item-usage-report-${dateRangeFilename()}.pdf`);
-  };
-
-  const exportCsv = (rows: string[][], headers: string[], filename: string) => {
-    const escapeCsv = (val: string) => `"${String(val || '').replace(/"/g, '""')}"`;
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(r => r.map(v => escapeCsv(v)).join(',')),
-    ].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `${filename}-${dateRangeFilename()}.csv`;
-    document.body.appendChild(a); a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const exportComponentUsageCsv = () => {
-    const headers = ['Component Name', 'Item Name', 'Quantity'];
-    const rows = componentReportRows.map(r => [r.componentName, r.itemName, String(r.qty)]);
-    rows.push(['', 'Total Quantity', String(componentTotalQty)]);
-    exportCsv(rows, headers, 'component-usage-report');
-  };
-
-  const exportItemUsageCsv = () => {
-    const headers = ['Item Name', 'Quantity'];
-    const rows = itemReportRows.map(r => [r.itemName, String(r.qty)]);
-    rows.push(['Total Quantity', String(itemTotalQty)]);
-    exportCsv(rows, headers, 'item-usage-report');
-  };
-
   const [sortConfig, setSortConfig] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
   const [expandedComponent, setExpandedComponent] = useState<string | null>(null);
 
@@ -9565,11 +9265,14 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
     });
   };
 
+  const effectiveDateField: 'entry_date' | 'dispatched_date' =
+    activeTab === 'component-usage' || activeTab === 'item-usage' || activeTab === 'delivery-report' ? 'entry_date' : dateField;
+
   const componentUsageRows = useMemo(() => {
     const rows: any[] = [];
     for (const wo of orders) {
       if (wo.status !== 'Ready for despatch' && wo.status !== 'Dispatched') continue;
-      const dateVal = dateField === 'entry_date' ? (wo.entry_date || wo.created_at) : dispatchDateByOrderId.get(Number(wo.id));
+      const dateVal = effectiveDateField === 'entry_date' ? (wo.entry_date || wo.created_at) : dispatchDateByOrderId.get(Number(wo.id));
       if (!dateVal) continue;
       if (!inDateRange(dateVal)) continue;
       const item = itemsById.get(Number(wo.source_item_id || wo.itemId));
@@ -9586,12 +9289,12 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
       }
     }
     return rows;
-  }, [orders, itemsById, datePreset, fromDate, toDate, dateField, dispatchDateByOrderId]);
+  }, [orders, itemsById, datePreset, fromDate, toDate, effectiveDateField, dispatchDateByOrderId]);
 
   const itemUsageRows = useMemo(() => {
     const map = new Map<string, { orders: number; totalQty: number; companies: Set<string> }>();
     for (const wo of orders) {
-      const dateVal = dateField === 'entry_date' ? (wo.entry_date || wo.created_at) : dispatchDateByOrderId.get(Number(wo.id));
+      const dateVal = effectiveDateField === 'entry_date' ? (wo.entry_date || wo.created_at) : dispatchDateByOrderId.get(Number(wo.id));
       if (!dateVal) continue;
       if (!inDateRange(dateVal)) continue;
       const item = itemsById.get(Number(wo.source_item_id || wo.itemId));
@@ -9601,35 +9304,82 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
       else map.set(item.name, { orders: 1, totalQty: Number(wo.qty), companies: new Set([wo.customer || '']) });
     }
     return Array.from(map.entries()).map(([item, v]) => ({ item, orders: v.orders, totalQty: v.totalQty, companyCount: v.companies.size }));
-  }, [orders, itemsById, datePreset, fromDate, toDate, dateField, dispatchDateByOrderId]);
+  }, [orders, itemsById, datePreset, fromDate, toDate, effectiveDateField, dispatchDateByOrderId]);
 
-  const onTimeRows = useMemo(() => {
+  const itemOrderRows = useMemo(() => {
     const rows: any[] = [];
     for (const wo of orders) {
-      if (wo.status !== 'Dispatched') continue;
-      const logs = dispatchLogs.filter((l: any) => Number(l.work_order_id) === Number(wo.id));
-      for (const log of logs) {
-        if (!log.dispatch_date) continue;
-        if (!inDateRange(log.dispatch_date)) continue;
-        if (wo.etd && log.dispatch_date <= wo.etd) {
-          rows.push({ id: `ot-${wo.id}-${log.id || 0}`, when: log.dispatch_date, work_order_id: wo.id, order: wo, dispatch_qty: log.qty_dispatched || wo.qty, invoice_no: log.invoice_no || '' });
-        }
-      }
+      if (wo.status !== 'Ready for despatch' && wo.status !== 'Dispatched') continue;
+      const dateVal = effectiveDateField === 'entry_date' ? (wo.entry_date || wo.created_at) : dispatchDateByOrderId.get(Number(wo.id));
+      if (!dateVal) continue;
+      if (!inDateRange(dateVal)) continue;
+      const item = itemsById.get(Number(wo.source_item_id || wo.itemId));
+      if (!item) continue;
+      rows.push({ id: wo.id, item: item.name, company: wo.customer || '', qty: Number(wo.qty || 0) });
     }
     return rows;
-  }, [orders, dispatchLogs, datePreset, fromDate, toDate]);
+  }, [orders, itemsById, datePreset, fromDate, toDate, effectiveDateField, dispatchDateByOrderId]);
 
-  const delayedRows = useMemo(() => {
+  const deliveryRows = useMemo(() => {
     const rows: any[] = [];
     for (const wo of orders) {
       if (wo.status !== 'Dispatched') continue;
       const logs = dispatchLogs.filter((l: any) => Number(l.work_order_id) === Number(wo.id));
+      const depts: { department: string; status: string; qc_status?: string; orderEntryBy: string; orderEntryAt: string; workStartedBy: string; workStartedAt: string; workDoneBy: string; workDoneAt: string; qcApprovedBy: string; qcApprovedAt: string }[] = [];
+      const deptStatuses = wo.department_statuses || [];
+      for (const ds of deptStatuses) {
+        const history = ds.history || [];
+        const oeEntry = history.find((h: any) => h.status === 'Not Started');
+        const orderEntryBy = ds.created_by || oeEntry?.by || '';
+        const orderEntryAt = ds.created_at || oeEntry?.at || '';
+        const wsEntry = history.find((h: any) => h.status === 'Work Started');
+        const workStartedBy = wsEntry?.by || ds.updated_by || '';
+        const workStartedAt = wsEntry?.at || '';
+        const wdEntry = history.find((h: any) => h.status === 'Ready for QC');
+        const workDoneBy = wdEntry?.by || '';
+        const workDoneAt = wdEntry?.at || '';
+        const qcEntry = history.find((h: any) => h.qc_status === 'QC Approved');
+        const qcApprovedBy = qcEntry?.by || '';
+        const qcApprovedAt = qcEntry?.at || '';
+        depts.push({
+          department: ds.department || '',
+          status: ds.qc_status && ds.qc_status !== 'Pending QC' ? ds.qc_status : ds.status,
+          qc_status: ds.qc_status,
+          orderEntryBy, orderEntryAt, workStartedBy, workStartedAt, workDoneBy, workDoneAt, qcApprovedBy, qcApprovedAt,
+        });
+      }
+      if (depts.length === 0) {
+        depts.push({ department: '', status: '', orderEntryBy: '', orderEntryAt: '', workStartedBy: '', workStartedAt: '', workDoneBy: '', workDoneAt: '', qcApprovedBy: '', qcApprovedAt: '' });
+      }
       for (const log of logs) {
         if (!log.dispatch_date) continue;
-        if (!inDateRange(log.dispatch_date)) continue;
-        if (wo.etd && log.dispatch_date > wo.etd) {
-          const daysDelay = Math.ceil((new Date(log.dispatch_date).getTime() - new Date(wo.etd).getTime()) / (1000 * 60 * 60 * 24));
-          rows.push({ id: `dl-${wo.id}-${log.id || 0}`, when: log.dispatch_date, work_order_id: wo.id, order: wo, daysDelay, dispatch_qty: log.qty_dispatched || wo.qty });
+        for (const dept of depts) {
+          const dateVal = wo.entry_date || wo.created_at;
+          if (!dateVal) continue;
+          if (!inDateRange(dateVal)) continue;
+          rows.push({
+            id: `dl-${wo.id}-${log.id || 0}-${dept.department || 'none'}`,
+            orderId: wo.id,
+            entryDate: wo.entry_date || wo.created_at,
+            jobDetails: wo.job_details,
+            customer: wo.customer,
+            etd: wo.etd,
+            dispatchDate: log.dispatch_date,
+            dispatchedBy: log.dispatched_by || '',
+            dispatchedAt: log.created_at || '',
+            department: dept.department,
+            status: dept.status,
+            qc_status: dept.qc_status,
+            orderEntryBy: dept.orderEntryBy,
+            orderEntryAt: dept.orderEntryAt,
+            workStartedBy: dept.workStartedBy,
+            workStartedAt: dept.workStartedAt,
+            workDoneBy: dept.workDoneBy,
+            workDoneAt: dept.workDoneAt,
+            qcApprovedBy: dept.qcApprovedBy,
+            qcApprovedAt: dept.qcApprovedAt,
+            daysDelay: wo.etd && log.dispatch_date > wo.etd ? Math.ceil((new Date(log.dispatch_date).getTime() - new Date(wo.etd).getTime()) / (1000 * 60 * 60 * 24)) : 0,
+          });
         }
       }
     }
@@ -9688,9 +9438,8 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
         }));
         break;
       }
-      case 'item-usage': rows = itemUsageRows; break;
-      case 'on-time': rows = onTimeRows; break;
-      case 'delayed': rows = delayedRows; break;
+      case 'item-usage': rows = itemOrderRows; break;
+      case 'delivery-report': rows = deliveryRows; break;
       case 'dept-wise': rows = deptRows; break;
       case 'company-performance': rows = companyRows; break;
       default: rows = [];
@@ -9707,15 +9456,56 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
       if (aVal > bVal) return dir === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [activeTab, sortConfig, componentUsageRows, itemUsageRows, onTimeRows, delayedRows, deptRows, companyRows]);
+  }, [activeTab, sortConfig, componentUsageRows, itemOrderRows, deliveryRows, deptRows, companyRows]);
+
+  const componentFlatData = useMemo(() => {
+    const rows: { component: string; parentItem: string; qty: number; company: string; orderId: number }[] = [];
+    for (const r of componentUsageRows) {
+      if (selectedComponents.has(r.component)) {
+        rows.push({ component: r.component, parentItem: r.parentItem, qty: r.qtyUsed, company: r.company, orderId: r.orderId });
+      }
+    }
+    rows.sort((a, b) => a.component.localeCompare(b.component) || a.parentItem.localeCompare(b.parentItem));
+    return rows;
+  }, [componentUsageRows, selectedComponents]);
+
+  const componentGroupedData = useMemo(() => {
+    const map = new Map<string, { parentItems: { name: string; qty: number }[]; total: number }>();
+    for (const r of componentUsageRows) {
+      if (!selectedComponents.has(r.component)) continue;
+      const existing = map.get(r.component);
+      if (existing) {
+        const pi = existing.parentItems.find(p => p.name === r.parentItem);
+        if (pi) pi.qty += r.qtyUsed;
+        else existing.parentItems.push({ name: r.parentItem, qty: r.qtyUsed });
+        existing.total += r.qtyUsed;
+      } else {
+        map.set(r.component, { parentItems: [{ name: r.parentItem, qty: r.qtyUsed }], total: r.qtyUsed });
+      }
+    }
+    return Array.from(map.entries()).map(([component, v]) => ({ component, parentItems: v.parentItems, total: v.total }));
+  }, [componentUsageRows, selectedComponents]);
+
+  const itemReportData = useMemo(() => {
+    return itemOrderRows.filter(r => selectedItemOrderIds.has(r.id));
+  }, [itemOrderRows, selectedItemOrderIds]);
+
+  const itemGroupedData = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of itemReportData) {
+      map.set(r.item, (map.get(r.item) || 0) + r.qty);
+    }
+    return Array.from(map.entries()).map(([item, qty]) => ({ item, qty }));
+  }, [itemReportData]);
+
+  const previewRef = useRef<HTMLDivElement>(null);
 
   if (loading) return <LoadingState message="Loading reports..." />;
 
   const tabMeta: { key: string; label: string }[] = [
     { key: 'component-usage', label: 'Component Usage' },
     { key: 'item-usage', label: 'Item Usage' },
-    { key: 'on-time', label: 'On-Time Delivery' },
-    { key: 'delayed', label: 'Delayed' },
+    { key: 'delivery-report', label: 'Delivery Report' },
     { key: 'dept-wise', label: 'Dept-Wise' },
     { key: 'company-performance', label: 'Company Performance' },
   ];
@@ -9735,12 +9525,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
     { key: 'all', label: 'All' },
   ];
 
-  const allComponentsSelected = filteredComponents.length > 0 && filteredComponents.every(c => selectedComponentNames.has(c.name));
-  const allItemsSelected = filteredItems.length > 0 && filteredItems.every(it => selectedItemIds.has(Number(it.id)));
-
-  const dateFieldLabel = dateField === 'entry_date' ? 'Entry Date' : 'Dispatched Date';
-
-  const DateRangeControls = () => (
+  const DateRangeControls = ({ entryDateOnly = false }: { entryDateOnly?: boolean }) => (
     <>
       <div className="flex flex-wrap items-center gap-2">
         <CalendarDays size={14} className="text-gray-500" />
@@ -9764,27 +9549,330 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
             className="px-2 py-1.5 bg-gray-50 border border-gray-200 rounded text-xs" />
         </div>
       )}
-      <div className="flex items-center gap-2">
-        <span className="text-xs font-semibold text-gray-500">Filter by:</span>
-        <button onClick={() => setDateField('entry_date')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${dateField === 'entry_date' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-          Entry Date
-        </button>
-        <button onClick={() => setDateField('dispatched_date')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${dateField === 'dispatched_date' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-          Dispatched Date
-        </button>
-      </div>
+      {!entryDateOnly && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-gray-500">Filter by:</span>
+          <button onClick={() => setDateField('entry_date')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${dateField === 'entry_date' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+            Entry Date
+          </button>
+          <button onClick={() => setDateField('dispatched_date')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${dateField === 'dispatched_date' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+            Dispatched Date
+          </button>
+        </div>
+      )}
     </>
   );
 
+  const toggleComponentSelection = (name: string) => {
+    setSelectedComponents(prev => {
+      const n = new Set(prev);
+      if (n.has(name)) n.delete(name); else n.add(name);
+      return n;
+    });
+    setShowComponentPreview(false);
+  };
+
+  const toggleAllComponentSelection = () => {
+    const filtered = sortedRows.filter(row => !componentTableSearch || row.component.toLowerCase().includes(componentTableSearch.toLowerCase()));
+    const allSel = filtered.length > 0 && filtered.every(r => selectedComponents.has(r.component));
+    setSelectedComponents(prev => {
+      const n = new Set(prev);
+      if (allSel) filtered.forEach(r => n.delete(r.component));
+      else filtered.forEach(r => n.add(r.component));
+      return n;
+    });
+    setShowComponentPreview(false);
+  };
+
+  const toggleItemOrderSelection = (id: number) => {
+    setSelectedItemOrderIds(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+    setShowItemPreview(false);
+  };
+
+  const toggleAllItemOrdersSelection = () => {
+    const filtered = sortedRows.filter(row => !itemTableSearch ||
+      row.item.toLowerCase().includes(itemTableSearch.toLowerCase()) ||
+      row.company.toLowerCase().includes(itemTableSearch.toLowerCase()));
+    const allSel = filtered.length > 0 && filtered.every(r => selectedItemOrderIds.has(r.id));
+    setSelectedItemOrderIds(prev => {
+      const n = new Set(prev);
+      if (allSel) filtered.forEach(r => n.delete(r.id));
+      else filtered.forEach(r => n.add(r.id));
+      return n;
+    });
+    setShowItemPreview(false);
+  };
+
+  const generatePdf = (type: 'component-flat' | 'component-grouped' | 'item' | 'item-grouped' | 'delivery-report') => {
+    const doc = new jsPDF({ orientation: type === 'delivery-report' ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });
+    const pw = doc.internal.pageSize.getWidth();
+    const ph = doc.internal.pageSize.getHeight();
+    const ml = 14;
+    const mr = 14;
+    const brand = [67, 56, 202] as [number, number, number];
+    const brandDark = [55, 48, 163] as [number, number, number];
+    const slate = [30, 41, 59] as [number, number, number];
+    const gray400 = [156, 163, 175] as [number, number, number];
+    const gray200 = [229, 231, 235] as [number, number, number];
+    const indigo50 = [238, 242, 255] as [number, number, number];
+    let y = 20;
+
+    const drawTopBand = () => {
+      doc.setFillColor(brand[0], brand[1], brand[2]);
+      doc.rect(0, 0, pw, 3, 'F');
+    };
+
+    const drawPageHeader = (titleText: string, dateLabel: string) => {
+      drawTopBand();
+      y = 14;
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(brandDark[0], brandDark[1], brandDark[2]);
+      doc.text('EXCELL PACKAGING', ml, y);
+      y += 9;
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(slate[0], slate[1], slate[2]);
+      doc.text(titleText, ml, y);
+      y += 6;
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(gray400[0], gray400[1], gray400[2]);
+      doc.text(dateLabel, ml, y);
+      y += 4;
+      doc.setDrawColor(gray200[0], gray200[1], gray200[2]);
+      doc.setLineWidth(0.3);
+      doc.line(ml, y, pw - mr, y);
+      y += 5;
+    };
+
+    const drawFooter = () => {
+      doc.setDrawColor(gray200[0], gray200[1], gray200[2]);
+      doc.setLineWidth(0.3);
+      doc.line(ml, ph - 12, pw - mr, ph - 12);
+      doc.setFontSize(6.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(160);
+      doc.text('Excell Packaging', ml, ph - 7);
+      doc.text(`Generated: ${new Date().toLocaleString('en-GB')}  |  Page ${doc.internal.getCurrentPageInfo().pageNumber}`, pw - mr, ph - 7, { align: 'right' });
+    };
+
+    const tableStyles = {
+      theme: 'plain' as const,
+      margin: { left: ml, right: mr },
+      headStyles: { fillColor: brand, textColor: 255, fontStyle: 'bold' as const, fontSize: 9, halign: 'center' as const },
+      bodyStyles: { fontSize: 8.5, textColor: slate },
+      alternateRowStyles: { fillColor: [248, 250, 252] as [number, number, number] },
+      tableLineColor: gray200,
+      tableLineWidth: 0.2,
+    };
+
+    const colRight: any = { halign: 'right', cellWidth: 28 };
+    const colLeftWide: any = { cellWidth: 50 };
+    const colNarrow: any = { cellWidth: 22 };
+
+    if (type === 'component-flat') {
+      drawPageHeader('Component Usage Report — Flat View', `Date Range: ${dateRangeLabel()}`);
+      const data = componentFlatData.map(r => [String(r.orderId), r.component, r.company, r.parentItem, String(r.qty)]);
+      const totalQty = componentFlatData.reduce((s, r) => s + r.qty, 0);
+      data.push(['', '', 'TOTAL QUANTITY', '', String(totalQty)]);
+      autoTable(doc, {
+        ...tableStyles,
+        columns: [
+          { dataKey: 0, header: 'Order #' },
+          { dataKey: 1, header: 'Component Name' },
+          { dataKey: 2, header: 'Company' },
+          { dataKey: 3, header: 'Parent Item' },
+          { dataKey: 4, header: 'Quantity' },
+        ],
+        body: data.map((r, i) => ({ [0]: r[0], [1]: r[1], [2]: r[2], [3]: r[3], [4]: r[4] })),
+        columnStyles: { [0]: { ...colNarrow, halign: 'right' }, [1]: { cellWidth: 38 }, [2]: { cellWidth: 34 }, [3]: { cellWidth: 34 }, [4]: colRight },
+        startY: y,
+        didParseCell: (data: any) => {
+          if (data.section === 'body' && data.row.index === data.length - 1) {
+            data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.fillColor = indigo50;
+            data.cell.styles.halign = data.column.dataKey === 4 ? 'right' : 'left';
+          }
+        },
+      });
+      drawFooter();
+      doc.save(`component-usage-flat-${dateRangeFilename()}.pdf`);
+    } else if (type === 'component-grouped') {
+      drawPageHeader('Component Usage Report — Grouped View', `Date Range: ${dateRangeLabel()}`);
+      const flatRows: string[][] = [];
+      let totalQty = 0;
+      for (const group of componentGroupedData) {
+        for (const p of group.parentItems) {
+          flatRows.push([group.component, p.name, String(p.qty)]);
+          totalQty += p.qty;
+        }
+      }
+      flatRows.push(['', 'TOTAL QUANTITY', String(totalQty)]);
+      autoTable(doc, {
+        ...tableStyles,
+        columns: [
+          { dataKey: 0, header: 'Component Name' },
+          { dataKey: 1, header: 'Parent Item' },
+          { dataKey: 2, header: 'Quantity' },
+        ],
+        body: flatRows.map((r, i) => ({ [0]: r[0], [1]: r[1], [2]: r[2] })),
+        columnStyles: { [0]: colLeftWide, [1]: colLeftWide, [2]: colRight },
+        startY: y,
+        didParseCell: (data: any) => {
+          if (data.section === 'body' && data.row.index === flatRows.length - 1) {
+            data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.fillColor = indigo50;
+            data.cell.styles.halign = data.column.dataKey === 2 ? 'right' : 'left';
+          }
+        },
+      });
+      drawFooter();
+      doc.save(`component-usage-grouped-${dateRangeFilename()}.pdf`);
+    } else if (type === 'item') {
+      drawPageHeader('Item Usage Report', `Date Range: ${dateRangeLabel()}`);
+      const data = itemReportData.map(r => [String(r.id), r.item, r.company, String(r.qty)]);
+      const totalQty = itemReportData.reduce((s, r) => s + r.qty, 0);
+      data.push(['', '', 'TOTAL QUANTITY', String(totalQty)]);
+      autoTable(doc, {
+        ...tableStyles,
+        columns: [
+          { dataKey: 0, header: 'Order #' },
+          { dataKey: 1, header: 'Item Name' },
+          { dataKey: 2, header: 'Company' },
+          { dataKey: 3, header: 'Quantity' },
+        ],
+        body: data.map((r, i) => ({ [0]: r[0], [1]: r[1], [2]: r[2], [3]: r[3] })),
+        columnStyles: { [0]: { cellWidth: 22, halign: 'right' }, [1]: { cellWidth: 42 }, [2]: { cellWidth: 42 }, [3]: colRight },
+        startY: y,
+        didParseCell: (data: any) => {
+          if (data.section === 'body' && data.row.index === data.length - 1) {
+            data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.fillColor = indigo50;
+            data.cell.styles.halign = data.column.dataKey === 3 ? 'right' : 'left';
+          }
+        },
+      });
+      drawFooter();
+      doc.save(`item-usage-${dateRangeFilename()}.pdf`);
+    } else if (type === 'item-grouped') {
+      drawPageHeader('Item Usage Report — Grouped View', `Date Range: ${dateRangeLabel()}`);
+      const flatRows: string[][] = [];
+      let totalQty = 0;
+      for (const g of itemGroupedData) {
+        flatRows.push([g.item, String(g.qty)]);
+        totalQty += g.qty;
+      }
+      flatRows.push(['TOTAL QUANTITY', String(totalQty)]);
+      autoTable(doc, {
+        ...tableStyles,
+        columns: [
+          { dataKey: 0, header: 'Item Name' },
+          { dataKey: 1, header: 'Quantity' },
+        ],
+        body: flatRows.map((r, i) => ({ [0]: r[0], [1]: r[1] })),
+        columnStyles: { [0]: colLeftWide, [1]: colRight },
+        startY: y,
+        didParseCell: (data: any) => {
+          if (data.section === 'body' && data.row.index === flatRows.length - 1) {
+            data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.fillColor = indigo50;
+            data.cell.styles.halign = data.column.dataKey === 1 ? 'right' : 'left';
+          }
+        },
+      });
+      drawFooter();
+      doc.save(`item-usage-grouped-${dateRangeFilename()}.pdf`);
+    } else if (type === 'delivery-report') {
+      drawPageHeader('Delivery Report', `Date Range: ${dateRangeLabel()}`);
+      const allRows = sortedRows;
+      const fmt = (v: string) => v ? v : '—';
+      const fmtDate = (d: string) => d ? new Date(d).toLocaleDateString('en-GB') : '—';
+      const fmtDt = (d: string) => d ? new Date(d).toLocaleString('en-GB') : '—';
+      const data = allRows.map((r: any) => [
+        String(r.orderId),
+        fmtDate(r.entryDate),
+        fmt(r.jobDetails),
+        fmtDate(r.etd),
+        fmtDate(r.dispatchDate),
+        fmt(r.department),
+        r.orderEntryBy ? `${r.orderEntryBy}\n${fmtDt(r.orderEntryAt)}` : '—',
+        r.workStartedBy ? `${r.workStartedBy}\n${fmtDt(r.workStartedAt)}` : '—',
+        r.workDoneBy ? `${r.workDoneBy}\n${fmtDt(r.workDoneAt)}` : '—',
+        r.qcApprovedBy ? `${r.qcApprovedBy}\n${fmtDt(r.qcApprovedAt)}` : '—',
+        r.dispatchedBy ? `${r.dispatchedBy}\n${fmtDt(r.dispatchedAt)}` : '—',
+      ]);
+      autoTable(doc, {
+        ...tableStyles,
+        rowPageBreak: 'avoid',
+        columns: [
+          { dataKey: 0, header: 'Order #' },
+          { dataKey: 1, header: 'Entry Date' },
+          { dataKey: 2, header: 'Job Details' },
+          { dataKey: 3, header: 'ETD' },
+          { dataKey: 4, header: 'Dispatch Date' },
+          { dataKey: 5, header: 'Department' },
+          { dataKey: 6, header: 'Entry By' },
+          { dataKey: 7, header: 'Work Started' },
+          { dataKey: 8, header: 'Work Done' },
+          { dataKey: 9, header: 'QC' },
+          { dataKey: 10, header: 'Dispatched By' },
+        ],
+        body: data.map((r: string[], i: number) => ({ [0]: r[0], [1]: r[1], [2]: r[2], [3]: r[3], [4]: r[4], [5]: r[5], [6]: r[6], [7]: r[7], [8]: r[8], [9]: r[9], [10]: r[10] })),
+        columnStyles: {
+          [0]: { cellWidth: 15, halign: 'right' },
+          [1]: { cellWidth: 18 },
+          [2]: { cellWidth: 38 },
+          [3]: { cellWidth: 18 },
+          [4]: { cellWidth: 18 },
+          [5]: { cellWidth: 20 },
+          [6]: { cellWidth: 24 },
+          [7]: { cellWidth: 24 },
+          [8]: { cellWidth: 24 },
+          [9]: { cellWidth: 22 },
+          [10]: { cellWidth: 22 },
+        },
+        startY: y,
+        didParseCell: (data: any) => {
+          if (data.section === 'body') {
+            data.cell.styles.fontSize = 8;
+          }
+        },
+      });
+      drawFooter();
+      doc.save(`delivery-report-${dateRangeFilename()}.pdf`);
+    }
+  };
+
+  const dateRangeLabel = () => {
+    if (datePreset === 'all') return 'All dates';
+    if (datePreset === 'today') return new Date().toLocaleDateString('en-GB');
+    if (datePreset === 'custom') return `${new Date(fromDate).toLocaleDateString('en-GB')} — ${new Date(toDate).toLocaleDateString('en-GB')}`;
+    if (datePreset === '7d' || datePreset === '30d' || datePreset === '90d') {
+      const now = new Date();
+      const from = new Date(now); from.setDate(now.getDate() - (datePreset === '7d' ? 7 : datePreset === '30d' ? 30 : 90));
+      return `${from.toLocaleDateString('en-GB')} — ${now.toLocaleDateString('en-GB')}`;
+    }
+    return `${new Date(fromDate).toLocaleDateString('en-GB')} — ${new Date(toDate).toLocaleDateString('en-GB')}`;
+  };
+  const dateRangeFilename = () => {
+    if (datePreset === 'all') return 'all-dates';
+    if (fromDate && toDate) {
+      const f = new Date(fromDate).toLocaleDateString('en-GB').replace(/\//g, '-');
+      const t = new Date(toDate).toLocaleDateString('en-GB').replace(/\//g, '-');
+      return `${f}--${t}`;
+    }
+    return new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
+  };
+
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-        <h2 className="text-xl font-black text-gray-800 tracking-tight">Reports</h2>
-      </div>
-
       {/* Tabs */}
       <div className="px-4">
         <div className="flex flex-wrap bg-gray-100 rounded-xl p-1 gap-1">
@@ -9799,40 +9887,70 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
 
       {/* Component Usage table */}
       {activeTab === 'component-usage' && (
-        <Card className="p-0 shadow-sm border border-gray-200/60 rounded-xl">
-          <div className="hidden md:block overflow-x-auto">
-            <table className="w-full min-w-[750px] text-sm">
-              <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
+        <div className="px-4 space-y-3">
+          <div className="sticky top-0 z-20 pb-2 space-y-3">
+          <DateRangeControls entryDateOnly />
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <input type="text" placeholder="Search components..." value={componentTableSearch} onChange={e => setComponentTableSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300" />
+            {componentTableSearch && <button onClick={() => setComponentTableSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><X size={14} /></button>}
+          </div>
+          {/* Action bar */}
+          <div className="flex items-center justify-between bg-indigo-50/60 rounded-xl px-4 py-2.5 border border-indigo-100">
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-gray-600">
+                <input type="checkbox" checked={sortedRows.filter(row => !componentTableSearch || row.component.toLowerCase().includes(componentTableSearch.toLowerCase())).length > 0 && sortedRows.filter(row => !componentTableSearch || row.component.toLowerCase().includes(componentTableSearch.toLowerCase())).every(r => selectedComponents.has(r.component))} onChange={toggleAllComponentSelection} className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-400" />
+                Select all
+              </label>
+              <span className="text-xs text-gray-500 font-semibold">{selectedComponents.size} component(s) selected</span>
+            </div>
+            <button disabled={selectedComponents.size === 0} onClick={() => setShowComponentPreview(true)}
+              className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all ${selectedComponents.size > 0 ? 'bg-indigo-600 text-white shadow-sm hover:bg-indigo-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
+              Generate Report
+            </button>
+          </div>
+          </div>
+          <div className="flex gap-3 items-start">
+          <div className="flex-1 min-w-0 overflow-x-auto">
+          <Card className="p-0 shadow-sm border border-gray-200/60 rounded-xl">
+          <div className="hidden md:block overflow-auto max-h-[65vh]">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200 sticky top-0 z-10">
                 <tr>
+                  <th className="px-4 py-3 w-12"></th>
                   <th className="px-4 py-3 w-8"></th>
                   <th className={thClass} onClick={() => handleSort('component')}>Component <SortIcon col="component" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('totalQty')}>Total Qty <SortIcon col="totalQty" /></th>
                   <th className={thClass} onClick={() => handleSort('parentItemsList')}>Parent Items <SortIcon col="parentItemsList" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('companyCount')}>Companies <SortIcon col="companyCount" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('orderCount')}>Orders <SortIcon col="orderCount" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('totalQty')}>Total Qty <SortIcon col="totalQty" /></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {sortedRows.map((row: any, i: number) => {
+                {sortedRows.filter(row => !componentTableSearch || row.component.toLowerCase().includes(componentTableSearch.toLowerCase())).map((row: any, i: number) => {
                   const isExpanded = expandedComponent === row.component;
                   const detailRows = componentUsageRows.filter(r => r.component === row.component);
+                  const checked = selectedComponents.has(row.component);
                   return (
                     <Fragment key={row.component}>
-                      <tr className={`hover:bg-indigo-50/40 transition-colors cursor-pointer ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`} onClick={() => setExpandedComponent(isExpanded ? null : row.component)}>
-                        <td className="px-4 py-3 text-gray-500 text-xs">{isExpanded ? '▼' : '▶'}</td>
+                      <tr className={`hover:bg-indigo-50/40 transition-colors ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
+                        <td className="px-4 py-3">
+                          <input type="checkbox" checked={checked} onChange={() => toggleComponentSelection(row.component)}
+                            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-400 cursor-pointer" />
+                        </td>
+                        <td className="px-4 py-3 text-gray-500 text-xs cursor-pointer" onClick={() => setExpandedComponent(isExpanded ? null : row.component)}>
+                          {isExpanded ? '▼' : '▶'}
+                        </td>
                         <td className="px-4 py-3 font-semibold text-gray-800">{row.component}</td>
-                        <td className="px-4 py-3 font-black text-gray-800 text-right tabular-nums">{row.totalQty}</td>
                         <td className="px-4 py-3 text-gray-600 max-w-[200px] truncate" title={row.parentItemsList}>{row.parentItemsList}</td>
-                        <td className="px-4 py-3 font-semibold text-gray-800 text-right tabular-nums">{row.companyCount}</td>
-                        <td className="px-4 py-3 font-semibold text-indigo-600 text-right tabular-nums">{row.orderCount}</td>
+                        <td className="px-4 py-3 font-black text-gray-800 text-right tabular-nums">{row.totalQty}</td>
                       </tr>
                       {isExpanded && (
                         <tr key={`detail-${row.component}`}>
-                          <td colSpan={6} className="p-0 bg-indigo-50/20">
+                          <td colSpan={5} className="p-0 bg-indigo-50/20">
                             <table className="w-full text-xs">
 <thead className="bg-gray-50 text-xs font-black uppercase text-gray-500 border-b border-gray-200">
                                 <tr className="text-[10px] uppercase text-gray-500 font-black border-b border-indigo-200">
-                                  <th className="px-4 py-2 text-left pl-8">Parent Item</th>
+                                  <th className="px-4 py-2 text-left pl-20">Parent Item</th>
                                   <th className="px-4 py-2 text-right">Qty Used</th>
                                   <th className="px-4 py-2 text-left">Company</th>
                                   <th className="px-4 py-2 text-right">Order #</th>
@@ -9841,7 +9959,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
                               <tbody className="divide-y divide-gray-200/50">
                                 {applySortGeneric(detailRows.map((r: any) => ({ ...r }))).map((detail: any, di: number) => (
                                   <tr key={di} className={`hover:bg-indigo-50/20 ${di % 2 === 1 ? 'bg-gray-50/30' : ''}`}>
-                                    <td className="px-4 py-1.5 font-semibold text-gray-700 pl-8">{detail.parentItem}</td>
+                                    <td className="px-4 py-1.5 font-semibold text-gray-700 pl-20">{detail.parentItem}</td>
                                     <td className="px-4 py-1.5 font-bold text-gray-800 text-right tabular-nums">{detail.qtyUsed}</td>
                                     <td className="px-4 py-1.5 text-gray-600">{detail.company}</td>
                                     <td className="px-4 py-1.5 font-semibold text-indigo-600 text-right tabular-nums">#{detail.orderId}</td>
@@ -9858,130 +9976,358 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
               </tbody>
             </table>
           </div>
-          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No component usage data for the selected range.</div>}
+          {sortedRows.filter(row => !componentTableSearch || row.component.toLowerCase().includes(componentTableSearch.toLowerCase())).length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No component usage data for the selected range.</div>}
         </Card>
+        </div>
+        {/* Report Preview */}
+        {showComponentPreview && (
+        <div className="w-[480px] shrink-0">
+          <Card className="p-0 shadow-sm border border-indigo-200/60 rounded-xl bg-white overflow-hidden">
+            <div className="h-[3px] bg-indigo-600" />
+            <div className="p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-indigo-800">EXCELL PACKAGING</h3>
+                  <h4 className="text-sm font-bold text-gray-800 mt-0.5">Component Usage Report</h4>
+                  <p className="text-[10px] text-gray-400 mt-0.5">Date Range: {dateRangeLabel()}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => generatePdf('component-flat')} className="px-3 py-1.5 rounded-lg text-xs font-black bg-indigo-600 text-white hover:bg-indigo-700 transition-all">Download Flat PDF</button>
+                  <button onClick={() => generatePdf('component-grouped')} className="px-3 py-1.5 rounded-lg text-xs font-black bg-indigo-600 text-white hover:bg-indigo-700 transition-all">Download Grouped PDF</button>
+                  <button onClick={() => { setShowComponentPreview(false); setSelectedComponents(new Set()); }} className="px-3 py-1.5 rounded-lg text-xs font-black bg-gray-100 text-gray-600 hover:bg-gray-200 transition-all">Close</button>
+                </div>
+              </div>
+              <div className="border-t border-gray-200" />
+              <div className="max-h-[65vh] overflow-y-auto space-y-4 pr-1">
+              {/* Flat View */}
+              <div>
+                <h4 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Flat View</h4>
+                <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-indigo-600 text-white">
+                        <th className="px-3 py-2 text-right font-bold text-[10px] uppercase tracking-wider">Order #</th>
+                        <th className="px-3 py-2 text-left font-bold text-[10px] uppercase tracking-wider">Component Name</th>
+                        <th className="px-3 py-2 text-left font-bold text-[10px] uppercase tracking-wider">Company</th>
+                        <th className="px-3 py-2 text-left font-bold text-[10px] uppercase tracking-wider">Parent Item</th>
+                        <th className="px-3 py-2 text-right font-bold text-[10px] uppercase tracking-wider">Quantity</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {componentFlatData.map((r, i) => (
+                        <tr key={i} className={i % 2 === 1 ? 'bg-gray-50/50' : ''}>
+                          <td className="px-3 py-1.5 font-semibold text-indigo-700 text-right tabular-nums">#{r.orderId}</td>
+                          <td className="px-3 py-1.5 font-semibold text-gray-800">{r.component}</td>
+                          <td className="px-3 py-1.5 text-gray-600">{r.company}</td>
+                          <td className="px-3 py-1.5 text-gray-600">{r.parentItem}</td>
+                          <td className="px-3 py-1.5 text-right font-bold text-gray-800 tabular-nums">{r.qty}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-indigo-50 font-bold border-t border-indigo-200">
+                        <td className="px-3 py-2 text-right text-gray-800"></td>
+                        <td className="px-3 py-2 text-gray-800"></td>
+                        <td className="px-3 py-2 text-gray-800" colSpan={2}>TOTAL QUANTITY</td>
+                        <td className="px-3 py-2 text-right text-gray-800 tabular-nums">{componentFlatData.reduce((s, r) => s + r.qty, 0)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+              <div className="border-t border-gray-200" />
+              {/* Grouped View */}
+              <div>
+                <h4 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Grouped View</h4>
+                <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-indigo-600 text-white">
+                        <th className="px-3 py-2 text-left font-bold text-[10px] uppercase tracking-wider">Component Name</th>
+                        <th className="px-3 py-2 text-left font-bold text-[10px] uppercase tracking-wider">Parent Item</th>
+                        <th className="px-3 py-2 text-right font-bold text-[10px] uppercase tracking-wider">Quantity</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {componentFlatData.map((r, i) => (
+                        <tr key={i} className={i % 2 === 1 ? 'bg-gray-50/50' : ''}>
+                          <td className="px-3 py-1.5 font-semibold text-gray-800">{r.component}</td>
+                          <td className="px-3 py-1.5 text-gray-600">{r.parentItem}</td>
+                          <td className="px-3 py-1.5 text-right font-bold text-gray-800 tabular-nums">{r.qty}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-indigo-50 font-bold border-t border-indigo-200">
+                        <td className="px-3 py-2 text-gray-800" colSpan={2}>TOTAL QUANTITY</td>
+                        <td className="px-3 py-2 text-right text-gray-800 tabular-nums">{componentFlatData.reduce((s, r) => s + r.qty, 0)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            </div>
+            </div>
+            <div className="border-t border-gray-200 px-5 py-2 flex justify-between text-[9px] text-gray-400">
+              <span>Excell Packaging</span>
+              <span>Generated: {new Date().toLocaleString('en-GB')}</span>
+            </div>
+          </Card>
+        </div>
+        )}
+        </div>
+        </div>
       )}
 
       {/* Item Usage table */}
       {activeTab === 'item-usage' && (
-        <Card className="p-0 shadow-sm border border-gray-200/60 rounded-xl">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[600px] text-sm">
-              <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
+        <div className="px-4 space-y-3">
+          <div className="sticky top-0 z-20 pb-2 space-y-3">
+          <DateRangeControls entryDateOnly />
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <input type="text" placeholder="Search items or companies..." value={itemTableSearch} onChange={e => setItemTableSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300" />
+            {itemTableSearch && <button onClick={() => setItemTableSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><X size={14} /></button>}
+          </div>
+          {/* Action bar */}
+          <div className="flex items-center justify-between bg-indigo-50/60 rounded-xl px-4 py-2.5 border border-indigo-100">
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-gray-600">
+                <input type="checkbox" checked={(() => {
+                  const filtered = sortedRows.filter(row => !itemTableSearch ||
+                    row.item.toLowerCase().includes(itemTableSearch.toLowerCase()) ||
+                    row.company.toLowerCase().includes(itemTableSearch.toLowerCase()));
+                  return filtered.length > 0 && filtered.every(r => selectedItemOrderIds.has(r.id));
+                })()} onChange={toggleAllItemOrdersSelection} className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-400" />
+                Select all
+              </label>
+              <span className="text-xs text-gray-500 font-semibold">{selectedItemOrderIds.size} order(s) selected</span>
+            </div>
+            <button disabled={selectedItemOrderIds.size === 0} onClick={() => setShowItemPreview(true)}
+              className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all ${selectedItemOrderIds.size > 0 ? 'bg-indigo-600 text-white shadow-sm hover:bg-indigo-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
+              Generate Report
+            </button>
+          </div>
+          </div>
+          <div className="flex gap-3 items-start">
+          <div className="flex-1 min-w-0 overflow-x-auto">
+          <Card className="p-0 shadow-sm border border-gray-200/60 rounded-xl">
+          <div className="overflow-auto max-h-[65vh]">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200 sticky top-0 z-10">
                 <tr>
+                  <th className="px-4 py-3 w-12"></th>
                   <th className={thClass} onClick={() => handleSort('item')}>Item Name <SortIcon col="item" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('orders')}>Orders <SortIcon col="orders" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('totalQty')}>Total Qty <SortIcon col="totalQty" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('companyCount')}>Companies <SortIcon col="companyCount" /></th>
+                  <th className={thClass} onClick={() => handleSort('company')}>Company <SortIcon col="company" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('qty')}>Quantity <SortIcon col="qty" /></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {sortedRows.map((row: any, i: number) => (
-                  <tr key={row.item} className={`hover:bg-indigo-50/40 transition-colors ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
+                {(() => {
+                  const filtered = sortedRows.filter(row => !itemTableSearch ||
+                    row.item.toLowerCase().includes(itemTableSearch.toLowerCase()) ||
+                    row.company.toLowerCase().includes(itemTableSearch.toLowerCase()));
+                  return filtered.map((row: any, i: number) => (
+                  <tr key={row.id} className={`hover:bg-indigo-50/40 transition-colors ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
+                    <td className="px-4 py-3">
+                      <input type="checkbox" checked={selectedItemOrderIds.has(row.id)} onChange={() => toggleItemOrderSelection(row.id)}
+                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-400 cursor-pointer" />
+                    </td>
                     <td className="px-4 py-3 font-black text-gray-800">{row.item}</td>
-                    <td className="px-4 py-3 font-semibold text-gray-700 text-right tabular-nums">{row.orders}</td>
-                    <td className="px-4 py-3 font-semibold text-indigo-700 text-right tabular-nums">{row.totalQty}</td>
-                    <td className="px-4 py-3 text-gray-600 text-right tabular-nums">{row.companyCount}</td>
+                    <td className="px-4 py-3 font-semibold text-gray-700">{row.company}</td>
+                    <td className="px-4 py-3 font-bold text-indigo-700 text-right tabular-nums">{row.qty}</td>
                   </tr>
-                ))}
+                  ));
+                })()}
               </tbody>
+              {/* Summary row */}
+              {(() => {
+                const filtered = sortedRows.filter(row => !itemTableSearch ||
+                  row.item.toLowerCase().includes(itemTableSearch.toLowerCase()) ||
+                  row.company.toLowerCase().includes(itemTableSearch.toLowerCase()));
+                const totalQty = filtered.reduce((s, r) => s + r.qty, 0);
+                return filtered.length > 0 && (
+                  <tfoot className="bg-indigo-50/60 font-black border-t-2 border-indigo-200">
+                    <tr>
+                      <td className="px-4 py-3" colSpan={2}></td>
+                      <td className="px-4 py-3 text-right text-xs text-gray-500 uppercase">Total</td>
+                      <td className="px-4 py-3 font-black text-indigo-700 text-right tabular-nums">{totalQty}</td>
+                    </tr>
+                  </tfoot>
+                );
+              })()}
             </table>
           </div>
-          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No item usage data for the selected range.</div>}
+          {(() => {
+            const filtered = sortedRows.filter(row => !itemTableSearch ||
+              row.item.toLowerCase().includes(itemTableSearch.toLowerCase()) ||
+              row.company.toLowerCase().includes(itemTableSearch.toLowerCase()));
+            return filtered.length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No item usage data for the selected range.</div>;
+          })()}
         </Card>
+        </div>
+        {/* Report Preview */}
+        {showItemPreview && (
+        <div className="w-[480px] shrink-0">
+          <Card className="p-0 shadow-sm border border-indigo-200/60 rounded-xl bg-white overflow-hidden">
+            <div className="h-[3px] bg-indigo-600" />
+            <div className="p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-indigo-800">EXCELL PACKAGING</h3>
+                  <h4 className="text-sm font-bold text-gray-800 mt-0.5">Item Usage Report</h4>
+                  <p className="text-[10px] text-gray-400 mt-0.5">Date Range: {dateRangeLabel()}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => generatePdf('item')} className="px-3 py-1.5 rounded-lg text-xs font-black bg-indigo-600 text-white hover:bg-indigo-700 transition-all">Download Flat PDF</button>
+                  <button onClick={() => generatePdf('item-grouped')} className="px-3 py-1.5 rounded-lg text-xs font-black bg-indigo-600 text-white hover:bg-indigo-700 transition-all">Download Grouped PDF</button>
+                  <button onClick={() => { setShowItemPreview(false); setSelectedItemOrderIds(new Set()); }} className="px-3 py-1.5 rounded-lg text-xs font-black bg-gray-100 text-gray-600 hover:bg-gray-200 transition-all">Close</button>
+                </div>
+              </div>
+              <div className="border-t border-gray-200" />
+              <div className="max-h-[65vh] overflow-y-auto space-y-4 pr-1">
+              <div>
+                <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-indigo-600 text-white">
+                        <th className="px-3 py-2 text-right font-bold text-[10px] uppercase tracking-wider">Order #</th>
+                        <th className="px-3 py-2 text-left font-bold text-[10px] uppercase tracking-wider">Item Name</th>
+                        <th className="px-3 py-2 text-left font-bold text-[10px] uppercase tracking-wider">Company</th>
+                        <th className="px-3 py-2 text-right font-bold text-[10px] uppercase tracking-wider">Quantity</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {itemReportData.map((r, i) => (
+                        <tr key={i} className={i % 2 === 1 ? 'bg-gray-50/50' : ''}>
+                          <td className="px-3 py-1.5 font-semibold text-indigo-700 text-right tabular-nums">#{r.id}</td>
+                          <td className="px-3 py-1.5 font-semibold text-gray-800">{r.item}</td>
+                          <td className="px-3 py-1.5 text-gray-600">{r.company}</td>
+                          <td className="px-3 py-1.5 text-right font-bold text-gray-800 tabular-nums">{r.qty}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-indigo-50 font-bold border-t border-indigo-200">
+                        <td className="px-3 py-2 text-right text-gray-800"></td>
+                        <td className="px-3 py-2 text-gray-800" colSpan={2}>TOTAL QUANTITY</td>
+                        <td className="px-3 py-2 text-right text-gray-800 tabular-nums">{itemReportData.reduce((s, r) => s + r.qty, 0)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            </div>
+            </div>
+            <div className="border-t border-gray-200 px-5 py-2 flex justify-between text-[9px] text-gray-400">
+              <span>Excell Packaging</span>
+              <span>Generated: {new Date().toLocaleString('en-GB')}</span>
+            </div>
+          </Card>
+        </div>
+        )}
+        </div>
+        </div>
       )}
 
-      {/* On-Time Delivery table */}
-      {activeTab === 'on-time' && (
-        <Card className="p-0 shadow-sm border border-gray-200/60 rounded-xl">
-          <div className="hidden md:block overflow-x-auto">
-            <table className="w-full min-w-[800px] text-sm">
-              <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-green-300">
+      {/* Delivery Report table */}
+      {activeTab === 'delivery-report' && (
+        <div className="px-4 space-y-3">
+          <DateRangeControls entryDateOnly />
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <input type="text" placeholder="Search by Order ID, Job Details, Company, Department..." value={deliverySearch} onChange={e => setDeliverySearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300" />
+            {deliverySearch && <button onClick={() => setDeliverySearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><X size={14} /></button>}
+          </div>
+          {/* Action bar */}
+          <div className="flex items-center justify-between bg-indigo-50/60 rounded-xl px-4 py-2.5 border border-indigo-100">
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-gray-500 font-semibold">{sortedRows.length} order(s)</span>
+            </div>
+            <button onClick={() => generatePdf('delivery-report')}
+              className="px-4 py-1.5 rounded-lg text-xs font-black bg-indigo-600 text-white shadow-sm hover:bg-indigo-700 transition-all">
+              Generate Report
+            </button>
+          </div>
+          <Card className="p-0 shadow-sm border border-gray-200/60 rounded-xl">
+          <div className="overflow-auto max-h-[65vh]">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200 sticky top-0 z-10">
                 <tr>
-                  <th className={thClass} onClick={() => handleSort('_date')}>Date <SortIcon col="_date" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('work_order_id')}>WO <SortIcon col="work_order_id" /></th>
-                  <th className={thClass} onClick={() => handleSort('_customer')}>Company <SortIcon col="_customer" /></th>
-                  <th className={thClass} onClick={() => handleSort('_item')}>Item <SortIcon col="_item" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('dispatch_qty')}>Qty <SortIcon col="dispatch_qty" /></th>
-                  <th className={thClass} onClick={() => handleSort('invoice_no')}>Invoice <SortIcon col="invoice_no" /></th>
+                  <th className={`${thClass} text-right`} onClick={() => handleSort('orderId')}>Order # <SortIcon col="orderId" /></th>
+                  <th className={thClass} onClick={() => handleSort('entryDate')}>Entry Date <SortIcon col="entryDate" /></th>
+                  <th className={thClass} onClick={() => handleSort('jobDetails')}>Job Details <SortIcon col="jobDetails" /></th>
+                  <th className={thClass} onClick={() => handleSort('etd')}>ETD <SortIcon col="etd" /></th>
+                  <th className={thClass} onClick={() => handleSort('dispatchDate')}>Dispatch Date <SortIcon col="dispatchDate" /></th>
+                  <th className={thClass} onClick={() => handleSort('department')}>Department <SortIcon col="department" /></th>
+                  <th className={thClass}>Entry By</th>
+                  <th className={thClass}>Work Started</th>
+                  <th className={thClass}>Work Done</th>
+                  <th className={thClass}>QC</th>
+                  <th className={thClass}>Dispatched By</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {sortedRows.map((row: any, i: number) => (
-                  <tr key={row.id} className={`hover:bg-green-50/40 transition-colors border-l-2 border-l-green-400 ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
-                    <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{row.when ? new Date(row.when).toLocaleString('en-GB') : '-'}</td>
-                    <td className="px-4 py-3 font-black text-indigo-600 text-right tabular-nums">#{row.work_order_id}</td>
-                    <td className="px-4 py-3 font-semibold text-gray-700">{row.order?.customer || '-'}</td>
-                    <td className="px-4 py-3 text-gray-600">{row.order?.job_details || '-'}</td>
-                    <td className="px-4 py-3 font-black text-green-700 text-right tabular-nums">{row.dispatch_qty}</td>
-                    <td className="px-4 py-3 text-gray-600">{row.invoice_no || '-'}</td>
+                {(() => {
+                  const filtered = sortedRows.filter(row => !deliverySearch ||
+                    String(row.orderId).includes(deliverySearch) ||
+                    (row.jobDetails || '').toLowerCase().includes(deliverySearch.toLowerCase()) ||
+                    (row.customer || '').toLowerCase().includes(deliverySearch.toLowerCase()) ||
+                    (row.department || '').toLowerCase().includes(deliverySearch.toLowerCase()));
+                  return filtered.map((row: any, i: number) => (
+                  <tr key={row.id} className={`transition-colors ${row.daysDelay > 0 ? 'bg-red-50 hover:bg-red-100' : `hover:bg-indigo-50/40 ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}`}>
+                    <td className="px-4 py-3 font-black text-indigo-600 text-right tabular-nums">#{row.orderId}</td>
+                    <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{row.entryDate ? new Date(row.entryDate).toLocaleDateString('en-GB') : '-'}</td>
+                    <td className="px-4 py-3 font-semibold text-gray-800">{row.jobDetails || '-'}</td>
+                    <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{row.etd ? new Date(row.etd).toLocaleDateString('en-GB') : '-'}</td>
+                    <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{row.dispatchDate ? new Date(row.dispatchDate).toLocaleDateString('en-GB') : '-'}</td>
+                    <td className="px-4 py-3 font-medium text-gray-700">{row.department || '—'}</td>
+                    <td className="px-4 py-3 text-xs">
+                      {row.orderEntryBy ? <><span className="font-semibold text-gray-700">{row.orderEntryBy}</span><br /><span className="text-gray-400">{row.orderEntryAt ? new Date(row.orderEntryAt).toLocaleString('en-GB') : '—'}</span></> : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-xs">
+                      {row.workStartedBy ? <><span className="font-semibold text-gray-700">{row.workStartedBy}</span><br /><span className="text-gray-400">{row.workStartedAt ? new Date(row.workStartedAt).toLocaleString('en-GB') : '—'}</span></> : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-xs">
+                      {row.workDoneBy ? <><span className="font-semibold text-gray-700">{row.workDoneBy}</span><br /><span className="text-gray-400">{row.workDoneAt ? new Date(row.workDoneAt).toLocaleString('en-GB') : '—'}</span></> : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-xs">
+                      {row.qcApprovedBy ? <><span className="font-semibold text-gray-700">{row.qcApprovedBy}</span><br /><span className="text-gray-400">{row.qcApprovedAt ? new Date(row.qcApprovedAt).toLocaleString('en-GB') : '—'}</span></> : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-xs">
+                      {row.dispatchedBy ? <><span className="font-semibold text-gray-700">{row.dispatchedBy}</span><br /><span className="text-gray-400">{row.dispatchedAt ? new Date(row.dispatchedAt).toLocaleString('en-GB') : row.dispatchDate ? new Date(row.dispatchDate).toLocaleDateString('en-GB') : '—'}</span></> : <span className="text-gray-300">—</span>}
+                    </td>
                   </tr>
-                ))}
+                  ));
+                })()}
               </tbody>
             </table>
           </div>
-          <div className="md:hidden p-2 space-y-2">
-            {sortedRows.map((row: any, i: number) => (
-              <div key={row.id} className={`rounded-lg border border-green-200 p-2.5 border-l-4 border-l-green-400 ${i % 2 === 1 ? 'bg-gray-50/30' : ''}`}>
-                <div className="flex items-center justify-between gap-2">
-                  <div className="font-black text-indigo-700 text-sm">WO #{row.work_order_id}</div>
-                  <div className="text-[11px] font-semibold text-green-700 tabular-nums">Qty: {row.dispatch_qty} ✓</div>
-                </div>
-                <div className="text-xs text-gray-700 font-semibold mt-1">{row.order?.customer || '-'} • {row.order?.job_details || '-'}</div>
-                <div className="text-[11px] text-gray-500 mt-1">Invoice: {row.invoice_no || '-'}</div>
-              </div>
-            ))}
-          </div>
-          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No on-time deliveries for the selected range.</div>}
+          {(() => {
+            const filtered = sortedRows.filter(row => !deliverySearch ||
+              String(row.orderId).includes(deliverySearch) ||
+              (row.jobDetails || '').toLowerCase().includes(deliverySearch.toLowerCase()) ||
+              (row.customer || '').toLowerCase().includes(deliverySearch.toLowerCase()) ||
+              (row.department || '').toLowerCase().includes(deliverySearch.toLowerCase()));
+            return filtered.length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No deliveries found for the selected range.</div>;
+          })()}
         </Card>
-      )}
-
-      {/* Delayed Delivery table */}
-      {activeTab === 'delayed' && (
-        <Card className="p-0 shadow-sm border border-gray-200/60 rounded-xl">
-          <div className="hidden md:block overflow-x-auto">
-            <table className="w-full min-w-[900px] text-sm">
-              <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-red-300">
-                <tr>
-                  <th className={thClass} onClick={() => handleSort('_date')}>Date <SortIcon col="_date" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('work_order_id')}>WO <SortIcon col="work_order_id" /></th>
-                  <th className={thClass} onClick={() => handleSort('_customer')}>Company <SortIcon col="_customer" /></th>
-                  <th className={thClass} onClick={() => handleSort('_item')}>Item <SortIcon col="_item" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('daysDelay')}>Days Late <SortIcon col="daysDelay" /></th>
-                  <th className={`${thClass} text-right`} onClick={() => handleSort('dispatch_qty')}>Qty <SortIcon col="dispatch_qty" /></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {sortedRows.map((row: any, i: number) => (
-                  <tr key={row.id} className={`hover:bg-red-50/40 transition-colors border-l-2 border-l-red-400 ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
-                    <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{row.when ? new Date(row.when).toLocaleString('en-GB') : '-'}</td>
-                    <td className="px-4 py-3 font-black text-indigo-600 text-right tabular-nums">#{row.work_order_id}</td>
-                    <td className="px-4 py-3 font-semibold text-gray-700">{row.order?.customer || '-'}</td>
-                    <td className="px-4 py-3 text-gray-600">{row.order?.job_details || '-'}</td>
-                    <td className="px-4 py-3 text-right tabular-nums"><span className={`px-2 py-0.5 rounded-lg font-black text-xs inline-block ${row.daysDelay <= 1 ? 'bg-amber-100 text-amber-700' : row.daysDelay <= 3 ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}`}>{row.daysDelay}d</span></td>
-                    <td className="px-4 py-3 font-black text-gray-800 text-right tabular-nums">{row.dispatch_qty}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="md:hidden p-2 space-y-2">
-            {sortedRows.map((row: any, i: number) => (
-              <div key={row.id} className={`rounded-lg border border-red-200 p-2.5 border-l-4 border-l-red-400 ${i % 2 === 1 ? 'bg-gray-50/30' : ''}`}>
-                <div className="flex items-center justify-between gap-2">
-                  <div className="font-black text-indigo-700 text-sm">WO #{row.work_order_id}</div>
-                  <span className={`px-1.5 py-0.5 rounded font-black text-xs ${row.daysDelay <= 1 ? 'bg-amber-100 text-amber-700' : row.daysDelay <= 3 ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}`}>{row.daysDelay}d late</span>
-                </div>
-              </div>
-            ))}
-          </div>
-          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No delayed deliveries for the selected range.</div>}
-        </Card>
+        </div>
       )}
 
       {/* Department-Wise table */}
       {activeTab === 'dept-wise' && (
-        <Card className="p-0 shadow-sm border border-gray-200/60 rounded-xl">
+        <div className="px-4 space-y-3">
+          <DateRangeControls />
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <input type="text" placeholder="Search departments..." value={deptSearch} onChange={e => setDeptSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300" />
+            {deptSearch && <button onClick={() => setDeptSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><X size={14} /></button>}
+          </div>
+          <Card className="p-0 shadow-sm border border-gray-200/60 rounded-xl">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[700px] text-sm">
               <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
@@ -9995,7 +10341,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {sortedRows.map((row: any, i: number) => (
+                {sortedRows.filter(row => !deptSearch || row.dept.toLowerCase().includes(deptSearch.toLowerCase())).map((row: any, i: number) => (
                   <tr key={row.dept} className={`hover:bg-indigo-50/40 transition-colors ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
                     <td className="px-4 py-3 font-black text-gray-800">{row.dept}</td>
                     <td className="px-4 py-3 font-semibold text-gray-700 text-right tabular-nums">{row.reports}</td>
@@ -10008,13 +10354,22 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
               </tbody>
             </table>
           </div>
-          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No department-wise data for the selected range.</div>}
+          {sortedRows.filter(row => !deptSearch || row.dept.toLowerCase().includes(deptSearch.toLowerCase())).length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No department-wise data for the selected range.</div>}
         </Card>
+        </div>
       )}
 
       {/* Company Performance table */}
       {activeTab === 'company-performance' && (
-        <Card className="p-0 shadow-sm border border-gray-200/60 rounded-xl">
+        <div className="px-4 space-y-3">
+          <DateRangeControls />
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <input type="text" placeholder="Search companies..." value={companySearch} onChange={e => setCompanySearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300" />
+            {companySearch && <button onClick={() => setCompanySearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><X size={14} /></button>}
+          </div>
+          <Card className="p-0 shadow-sm border border-gray-200/60 rounded-xl">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[700px] text-sm">
               <thead className="bg-gray-50 text-[10px] uppercase text-gray-500 font-black border-b-2 border-indigo-200">
@@ -10028,7 +10383,7 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {sortedRows.map((row: any, i: number) => {
+                {sortedRows.filter(row => !companySearch || row.company.toLowerCase().includes(companySearch.toLowerCase())).map((row: any, i: number) => {
                   const pct = row.totalWOs > 0 ? Math.round(row.onTime / row.totalWOs * 100) : 0;
                   const barColor = pct >= 80 ? 'bg-green-400' : pct >= 50 ? 'bg-amber-400' : 'bg-red-400';
                   return (
@@ -10052,8 +10407,9 @@ const ReportsView: React.FC<{ onError: () => void }> = ({ onError }) => {
               </tbody>
             </table>
           </div>
-          {sortedRows.length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No company performance data for the selected range.</div>}
+          {sortedRows.filter(row => !companySearch || row.company.toLowerCase().includes(companySearch.toLowerCase())).length === 0 && <div className="py-12 text-center text-gray-500 italic font-semibold text-sm">No company performance data for the selected range.</div>}
         </Card>
+        </div>
       )}
     </div>
   );
