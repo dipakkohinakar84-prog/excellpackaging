@@ -27,7 +27,9 @@ export type AppView =
   | 'client-dashboard'
   | 'client-orders'
   | 'verify'
-  | 'vehicles';
+  | 'vehicles'
+  | 'expenses'
+  | 'parties';
 
 export interface User {
   id: number;
@@ -57,6 +59,8 @@ export interface User {
   can_access_production_entry?: boolean;
   can_place_order?: boolean;
   can_access_vehicles?: boolean;
+  can_access_expenses?: boolean;
+  can_access_expense_approval?: boolean;
 }
 
 export const FEATURE_FLAG_MAP: Record<string, keyof User> = {
@@ -82,6 +86,8 @@ export const FEATURE_FLAG_MAP: Record<string, keyof User> = {
   'live-screen-login': 'can_access_live_screen',
   'client-orders': 'can_access_client_orders',
   vehicles: 'can_access_vehicles',
+  expenses: 'can_access_expenses',
+  parties: 'can_access_expenses',
 };
 
 export const FEATURE_FLAG_GROUPS = [
@@ -107,6 +113,13 @@ export const FEATURE_FLAG_GROUPS = [
       { key: 'can_access_items', label: 'Items' },
       { key: 'can_access_components', label: 'Components' },
       { key: 'can_access_vehicles', label: 'Vehicles' },
+    ],
+  },
+  {
+    label: 'Finance',
+    flags: [
+      { key: 'can_access_expenses', label: 'Add Expenses' },
+      { key: 'can_access_expense_approval', label: 'Approve Expenses' },
     ],
   },
   {
@@ -288,6 +301,29 @@ export interface Notice {
   message: string;
   is_active: boolean;
   created_at: string;
+}
+
+export interface Expense {
+  id: number | string;
+  category: string;
+  party_name: string;
+  amount: number;
+  notes?: string;
+  added_by_name?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  approved_by_name?: string;
+  approved_at?: string;
+  reject_reason?: string;
+  created?: string;
+  created_at?: string;
+  pb_id?: string;
+}
+
+export interface Party {
+  id: number | string;
+  name: string;
+  contact?: string;
+  pb_id?: string;
 }
 
 export interface WorkOrder {

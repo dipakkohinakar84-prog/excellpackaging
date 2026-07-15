@@ -130,6 +130,8 @@ const FEATURE_FLAG_FIELDS: (keyof User)[] = [
   'can_access_notifications', 'can_access_components', 'can_access_custom_bom',
   'can_access_production_entry',
   'can_place_order',
+  'can_access_expenses',
+  'can_access_expense_approval',
 ];
 
 export const mapAuthRecordToUser = (record: RecordModel | Record<string, any> | null | undefined): User | null => {
@@ -243,7 +245,10 @@ const buildFilter = (collection: string, filters: Filter[]) => {
         return values.map((value) => `${field} = ${escapeFilterValue(value)}`).join(' || ');
       }
 
-      return `${field} = ${escapeFilterValue(filter.value)}`;
+      const opMap: Record<string, string> = {
+        eq: '=', lt: '<', lte: '<=', gt: '>', gte: '>=',
+      };
+      return `${field} ${opMap[filter.operator] || '='} ${escapeFilterValue(filter.value)}`;
     })
     .map((part) => `(${part})`)
     .join(' && ');
@@ -300,6 +305,26 @@ class PocketBaseQuery<T = any> implements PromiseLike<QueryResult<T>> {
 
   eq(field: string, value: any) {
     this.filters.push({ field, operator: 'eq', value });
+    return this;
+  }
+
+  lt(field: string, value: any) {
+    this.filters.push({ field, operator: 'lt', value });
+    return this;
+  }
+
+  lte(field: string, value: any) {
+    this.filters.push({ field, operator: 'lte', value });
+    return this;
+  }
+
+  gt(field: string, value: any) {
+    this.filters.push({ field, operator: 'gt', value });
+    return this;
+  }
+
+  gte(field: string, value: any) {
+    this.filters.push({ field, operator: 'gte', value });
     return this;
   }
 
@@ -389,10 +414,16 @@ class PocketBaseQuery<T = any> implements PromiseLike<QueryResult<T>> {
 
       if (mutation.type === 'delete') {
         const records = await collection.getFullList({ filter, requestKey: null });
+        let deleted = 0;
         for (const record of records) {
-          await collection.delete(record.id, { requestKey: null });
+          try {
+            await collection.delete(record.id, { requestKey: null });
+            deleted++;
+          } catch (_e) {
+            // skip if already deleted
+          }
         }
-        return { data: null, error: null, count: records.length };
+        return { data: null, error: null, count: deleted };
       }
 
       if (mutation.type === 'upsert') {

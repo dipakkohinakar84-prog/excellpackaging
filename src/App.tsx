@@ -61,7 +61,8 @@ import {
   ListTodo,
   Monitor,
   ShoppingCart,
-  CalendarDays
+  CalendarDays,
+  IndianRupee
 } from 'lucide-react';
 import { AppView, User, Customer, Item, WorkOrder, Department, WOStatus, ChildItem, DepartmentStatus, Metric, Vehicle, FEATURE_FLAG_GROUPS } from './types';
 import { supabase, supabaseAnonKey, pb, loginWithMobilePassword, getCurrentAuthUser, logoutAuth, mapAuthRecordToUser } from './supabase';
@@ -72,6 +73,8 @@ import DailyTasks from './DailyTasks';
 import LiveScreen from './LiveScreen';
 import ClientPortal from './ClientPortal';
 import ClientOrderManager from './ClientOrderManager';
+import ExpensesView from './ExpensesView';
+import PartiesView from './PartiesView';
 import { getCachedData, invalidateCachedData, primeCachedData } from './dataCache';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -2599,7 +2602,7 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
                           </div>
                         </td>
                         {dispatchMode && (
-                          <td className="px-4 py-2 whitespace-nowrap">
+                          <td className="px-4 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                             {isSelected ? (
                               <input
                                 type="number"
@@ -2915,6 +2918,8 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
     can_access_notifications: true, can_access_components: true, can_access_custom_bom: true,
     can_access_production_entry: true,
     can_place_order: true,
+    can_access_expenses: true,
+    can_access_expense_approval: true,
   };
   const [featureFlags, setFeatureFlags] = useState<Record<string, boolean>>(initialFeatureFlags);
 
@@ -3067,6 +3072,8 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
       can_access_custom_bom: user.can_access_custom_bom !== false,
       can_access_production_entry: user.can_access_production_entry !== false,
       can_place_order: user.can_place_order !== false,
+      can_access_expenses: user.can_access_expenses !== false,
+      can_access_expense_approval: user.can_access_expense_approval !== false,
     });
     setIsModalOpen(true);
   };
@@ -3173,6 +3180,7 @@ const UserList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
               <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500">Department</label>
               <select required disabled={isSubmitting} value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border rounded-xl disabled:opacity-60">
                 <option value="">Select department</option>
+                <option value="Finance">Finance</option>
                 {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
               </select>
             </div>
@@ -11979,6 +11987,8 @@ export default function App() {
     const normDept = normalizeDepartment(u.department);
     if (normDept === 'Office') {
       navigateTo('dashboard', { replace: true });
+    } else if (normDept === 'Finance') {
+      navigateTo('expenses', { replace: true });
     } else if (normDept === 'Dispatch') {
       navigateTo('dispatch-dashboard', { replace: true });
     } else {
@@ -12115,6 +12125,9 @@ export default function App() {
   };
 
   const canAccess = useCallback((user: User, targetView: AppView): boolean => {
+    if (targetView === 'expenses' || targetView === 'parties') {
+      return !!(user.can_access_expenses || user.can_access_expense_approval);
+    }
     return canAccessView(user, targetView);
   }, []);
 
@@ -12198,15 +12211,23 @@ export default function App() {
            { id: 'custom-bom-plan' as AppView, label: 'Custom BOM', icon: ListPlus, highlight: true },
          ],
        },
-       {
-         key: 'reports',
-         label: 'Reports',
-         items: [
-           { id: 'production-reports' as AppView, label: 'Production Entry', icon: ClipboardList, highlight: true },
-           { id: 'reports' as AppView, label: 'Reports', icon: GanttChartSquare, highlight: true },
-         ],
-       },
-    ]
+        {
+          key: 'reports',
+          label: 'Reports',
+          items: [
+            { id: 'production-reports' as AppView, label: 'Production Entry', icon: ClipboardList, highlight: true },
+            { id: 'reports' as AppView, label: 'Reports', icon: GanttChartSquare, highlight: true },
+          ],
+        },
+        {
+          key: 'finance',
+          label: 'Finance',
+          items: [
+            { id: 'expenses' as AppView, label: 'Expenses', icon: IndianRupee },
+            { id: 'parties' as AppView, label: 'Parties', icon: Phone },
+          ],
+        },
+     ]
       .map(group => ({
         ...group,
         items: group.items.filter(item => loggedInUser && canAccess(loggedInUser, item.id)),
@@ -12424,9 +12445,12 @@ export default function App() {
   const fetchNotificationEventsPreview = useCallback(async () => {
     setNotificationEventsLoading(true);
     try {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const { data } = await supabase
         .from('notification_events')
         .select('*')
+        .gte('created_at', sevenDaysAgo)
+        .order('event_time', { ascending: false })
         .limit(40);
 
       const sortedEvents = [...(data || [])]
@@ -12464,6 +12488,13 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [loggedInUser, fetchNotificationEventsPreview]);
 
+  useEffect(() => {
+    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    supabase.from('notification_events').delete().lt('created_at', cutoff).then(({ error }) => {
+      if (error) console.error('Notification cleanup failed:', error);
+    });
+  }, []);
+
   if (!dbReady) return <DatabaseSetup onRetry={() => setDbReady(true)} />;
 
   if (view === 'client-login') return <ClientPortal clientUser={clientUser} onLogin={handleClientLogin} onLogout={handleClientLogout} />;
@@ -12499,6 +12530,8 @@ export default function App() {
       const normDept = normalizeDepartment(loggedInUser.department);
       if (normDept === 'Office') {
         navigateTo('dashboard', { replace: true });
+      } else if (normDept === 'Finance') {
+        navigateTo('expenses', { replace: true });
       } else if (normDept === 'Dispatch') {
         navigateTo('dispatch-dashboard', { replace: true });
       } else {
@@ -12531,7 +12564,9 @@ export default function App() {
         case 'live-screen-login': return <LiveScreenLogin onLogin={handleLiveScreenLogin} />;
         case 'live-screen': return <Dashboard user={loggedInUser} setView={navigateTo} onError={onError} />;
         case 'client-orders': return <ClientOrderManager loggedInUser={loggedInUser} />;
-       default: return <Dashboard user={loggedInUser} setView={navigateTo} onError={onError} />;
+        case 'expenses': return <ExpensesView loggedInUser={loggedInUser} onError={onError} />;
+        case 'parties': return <PartiesView onError={onError} />;
+        default: return <Dashboard user={loggedInUser} setView={navigateTo} onError={onError} />;
     }
   };
 
@@ -13095,7 +13130,7 @@ export default function App() {
                 <RefreshCw size={20} />
               </button>
           </header>
-          <div className={`p-3 pb-24 sm:p-3 md:p-4 lg:pb-4 mx-auto w-full flex-1 ${view === 'work-orders' || view === 'dispatch-dashboard' || view === 'notification-audit' || view === 'users' || view === 'customers' || view === 'items' || view === 'child-items' || view === 'vehicles' || view === 'production-plan' || view === 'custom-bom-plan' || view === 'production-reports' || view === 'reports' ? 'max-w-none' : 'max-w-[1700px]'}`}>
+          <div className={`p-3 pb-24 sm:p-3 md:p-4 lg:pb-4 mx-auto w-full flex-1 ${view === 'work-orders' || view === 'dispatch-dashboard' || view === 'notification-audit' || view === 'users' || view === 'customers' || view === 'items' || view === 'child-items' || view === 'vehicles' || view === 'production-plan' || view === 'custom-bom-plan' || view === 'production-reports' || view === 'reports' || view === 'expenses' || view === 'parties' ? 'max-w-none' : 'max-w-[1700px]'}`}>
            {showExitHint && (
              <div className="mb-2 rounded-lg bg-slate-900 text-white px-3 py-2 text-xs font-bold no-print inline-block">
                Press back again to exit

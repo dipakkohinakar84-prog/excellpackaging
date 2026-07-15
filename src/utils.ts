@@ -25,7 +25,8 @@ export const normalizeDepartment = (dept: string): string => {
     'quality': 'Quality_Control',
     'office': 'Office',
     'dispatch': 'Dispatch',
-    'despatch': 'Dispatch'
+    'despatch': 'Dispatch',
+    'finance': 'Finance'
   };
   
   // Direct mapping match
@@ -102,9 +103,9 @@ export const requestNotificationPermission = () => {
 export const canAccessView = (user: User | null, view: string): boolean => {
   if (!user) return false;
 
-  if (view === 'worker-dashboard' || view === 'my-tasks') return true;
-
   const normDept = normalizeDepartment(user.department);
+
+  if ((view === 'worker-dashboard' || view === 'my-tasks') && normDept !== 'Finance') return true;
 
   if (normDept === 'Office' && user.level === '1-Manager') {
     return true;

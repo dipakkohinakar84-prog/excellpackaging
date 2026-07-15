@@ -169,8 +169,11 @@ const LiveScreen: React.FC<Props> = ({ loggedInUser, liveScreenUser, onBack }) =
           grouped[DEPT_COLUMNS[0].key].push(wo);
         }
       } else {
-        const match = DEPT_COLUMNS.find(col => depts.some(d => normalizeDepartment(d) === col.key));
-        if (match) grouped[match.key].push(wo);
+        DEPT_COLUMNS.forEach(col => {
+          if (depts.some(d => normalizeDepartment(d) === col.key)) {
+            grouped[col.key].push(wo);
+          }
+        });
       }
     });
     return grouped;
