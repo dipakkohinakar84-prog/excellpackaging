@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from './pocketbase';
 import { Expense, User, Party } from './types';
-import { Plus, CheckCircle2, XCircle, AlertCircle, Search, Loader2, X } from 'lucide-react';
+import { normalizeDepartment } from './utils';
+import { Plus, CheckCircle2, XCircle, AlertCircle, Search, Loader2, X, Trash2 } from 'lucide-react';
 
 const categoryColors: Record<string, string> = {
   'Excell Packaging': 'bg-blue-100 text-blue-700',
@@ -31,6 +32,7 @@ interface Props {
 const ExpensesView: React.FC<Props> = ({ loggedInUser, onError }) => {
   const canAdd = loggedInUser.can_access_expenses;
   const canApprove = loggedInUser.can_access_expense_approval;
+  const isOfficeAdmin = normalizeDepartment(loggedInUser.department) === 'Office' && loggedInUser.level === '1-Manager';
   const [myExpenses, setMyExpenses] = useState<Expense[]>([]);
   const [pendingExpenses, setPendingExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,6 +43,7 @@ const ExpensesView: React.FC<Props> = ({ loggedInUser, onError }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [category, setCategory] = useState<string>('Excell Packaging');
   const [partyName, setPartyName] = useState('');
+  const [expenseDate, setExpenseDate] = useState(new Date().toISOString().slice(0, 10));
   const [amount, setAmount] = useState('');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -85,6 +88,7 @@ const ExpensesView: React.FC<Props> = ({ loggedInUser, onError }) => {
   const resetAddForm = () => {
     setCategory('Excell Packaging');
     setPartyName('');
+    setExpenseDate(new Date().toISOString().slice(0, 10));
     setAmount('');
     setNotes('');
   };
@@ -104,6 +108,7 @@ const ExpensesView: React.FC<Props> = ({ loggedInUser, onError }) => {
       party_name: partyName.trim(),
       amount: amt,
       notes: notes.trim(),
+      date: expenseDate,
       added_by_name: loggedInUser.username,
       status: isPersonal ? 'approved' : 'pending',
     };
@@ -160,6 +165,13 @@ const ExpensesView: React.FC<Props> = ({ loggedInUser, onError }) => {
       fetchData();
     }
     setIsRejecting(false);
+  };
+
+  const handleDelete = async (expense: Expense) => {
+    if (!confirm(`Delete expense for ${expense.party_name} — ₹${formatCurrency(expense.amount)}?`)) return;
+    const { error } = await supabase.from('expenses').delete().eq('id', expense.id);
+    if (error) alert(error.message);
+    else fetchData();
   };
 
   const filteredParties = partyName
@@ -258,7 +270,7 @@ const ExpensesView: React.FC<Props> = ({ loggedInUser, onError }) => {
               <tbody className="divide-y divide-gray-100">
                 {sortedPendingExpenses.map(exp => (
                   <tr key={exp.pb_id || exp.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-xs font-semibold text-gray-600 whitespace-nowrap">{formatDate(exp.created)}</td>
+                    <td className="px-4 py-3 text-xs font-semibold text-gray-600 whitespace-nowrap">{formatDate((exp as any).date || exp.created)}</td>
                     <td className="px-4 py-3 font-semibold">{exp.added_by_name || '-'}</td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${categoryColors[exp.category] || 'bg-gray-100 text-gray-700'}`}>{exp.category}</span>
@@ -285,6 +297,15 @@ const ExpensesView: React.FC<Props> = ({ loggedInUser, onError }) => {
                         >
                           <XCircle size={18} />
                         </button>
+                        {isOfficeAdmin && (
+                          <button
+                            onClick={() => handleDelete(exp)}
+                            className="p-1.5 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -298,7 +319,7 @@ const ExpensesView: React.FC<Props> = ({ loggedInUser, onError }) => {
               <div key={exp.pb_id || exp.id} className="rounded-xl border border-orange-100 bg-white p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[10px] font-semibold text-gray-500">{formatDate(exp.created)}</span>
+                    <span className="text-[10px] font-semibold text-gray-500">{formatDate((exp as any).date || exp.created)}</span>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${categoryColors[exp.category] || 'bg-gray-100 text-gray-700'}`}>{exp.category}</span>
                   </div>
                 </div>
@@ -326,6 +347,15 @@ const ExpensesView: React.FC<Props> = ({ loggedInUser, onError }) => {
                   >
                     <XCircle size={16} /> Reject
                   </button>
+                  {isOfficeAdmin && (
+                    <button
+                      onClick={() => handleDelete(exp)}
+                      className="p-2.5 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -375,13 +405,15 @@ const ExpensesView: React.FC<Props> = ({ loggedInUser, onError }) => {
                   <th className="px-4 py-3 text-right cursor-pointer select-none hover:bg-gray-200" onClick={() => handleSort('amount')}>Amount<SortIcon field="amount" /></th>
                   <th className="px-4 py-3 cursor-pointer select-none hover:bg-gray-200" onClick={() => handleSort('status')}>Status<SortIcon field="status" /></th>
                   <th className="px-4 py-3">Notes</th>
+                  <th className="px-4 py-3">Approved At</th>
                   <th className="px-4 py-3">Approved By</th>
+                  {isOfficeAdmin && <th className="px-4 py-3 text-center">Action</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {sortedMyExpenses.map(exp => (
                   <tr key={exp.pb_id || exp.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-xs font-semibold text-gray-600 whitespace-nowrap">{formatDate(exp.created)}</td>
+                    <td className="px-4 py-3 text-xs font-semibold text-gray-600 whitespace-nowrap">{formatDate((exp as any).date || exp.created)}</td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${categoryColors[exp.category] || 'bg-gray-100 text-gray-700'}`}>{exp.category}</span>
                     </td>
@@ -396,12 +428,24 @@ const ExpensesView: React.FC<Props> = ({ loggedInUser, onError }) => {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-500 max-w-[150px] truncate">{exp.notes || '-'}</td>
+                    <td className="px-4 py-3 text-[10px] font-semibold text-gray-500">{exp.approved_at ? formatDate(exp.approved_at) : '-'}</td>
                     <td className="px-4 py-3 text-xs font-semibold text-gray-600">{exp.approved_by_name || '-'}</td>
+                    {isOfficeAdmin && (
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          onClick={() => handleDelete(exp)}
+                          className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
                 {filteredMyExpenses.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-10 text-center text-gray-500 italic font-semibold text-sm">No expenses found.</td>
+                    <td colSpan={isOfficeAdmin ? 9 : 8} className="px-4 py-10 text-center text-gray-500 italic font-semibold text-sm">No expenses found.</td>
                   </tr>
                 )}
               </tbody>
@@ -416,7 +460,7 @@ const ExpensesView: React.FC<Props> = ({ loggedInUser, onError }) => {
               <div key={exp.pb_id || exp.id} className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[10px] font-semibold text-gray-500">{formatDate(exp.created)}</span>
+                    <span className="text-[10px] font-semibold text-gray-500">{formatDate((exp as any).date || exp.created)}</span>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${categoryColors[exp.category] || 'bg-gray-100 text-gray-700'}`}>{exp.category}</span>
                   </div>
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${statusColors[exp.status] || 'bg-gray-100 text-gray-700'}`}>
@@ -431,9 +475,23 @@ const ExpensesView: React.FC<Props> = ({ loggedInUser, onError }) => {
                   <span className="text-lg font-black">₹{formatCurrency(exp.amount)}</span>
                   {exp.notes && <span className="text-xs text-gray-400 truncate max-w-[140px]">{exp.notes}</span>}
                 </div>
-                {exp.approved_by_name && exp.approved_by_name !== 'Auto-Approved' && (
-                  <div className="mt-1 text-[10px] font-semibold text-gray-500">Approved by: {exp.approved_by_name}</div>
-                )}
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  {exp.approved_at && (
+                    <span className="text-[10px] font-semibold text-gray-500">Approved: {formatDate(exp.approved_at)}</span>
+                  )}
+                  {exp.approved_by_name && exp.approved_by_name !== 'Auto-Approved' && !exp.approved_at && (
+                    <span className="text-[10px] font-semibold text-gray-500">by {exp.approved_by_name}</span>
+                  )}
+                  {isOfficeAdmin && (
+                    <button
+                      onClick={() => handleDelete(exp)}
+                      className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  )}
+                </div>
                 {exp.status === 'rejected' && exp.reject_reason && (
                   <div className="mt-1 text-[10px] font-semibold text-red-500">Reason: {exp.reject_reason}</div>
                 )}
@@ -479,6 +537,17 @@ const ExpensesView: React.FC<Props> = ({ loggedInUser, onError }) => {
                   >
                     {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500">Date</label>
+                  <input
+                    required
+                    disabled={isSubmitting}
+                    type="date"
+                    value={expenseDate}
+                    onChange={e => setExpenseDate(e.target.value)}
+                    className="w-full px-4 py-3 bg-gray-50 border rounded-xl text-sm disabled:opacity-60"
+                  />
                 </div>
                 <div className="relative" ref={suggestRef}>
                   <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500">Party Name</label>
