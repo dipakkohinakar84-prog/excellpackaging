@@ -75,6 +75,7 @@ import ClientPortal from './ClientPortal';
 import ClientOrderManager from './ClientOrderManager';
 import ExpensesView from './ExpensesView';
 import PartiesView from './PartiesView';
+import ExpenseReportView from './ExpenseReportView';
 import { getCachedData, invalidateCachedData, primeCachedData } from './dataCache';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -12125,7 +12126,7 @@ export default function App() {
   };
 
   const canAccess = useCallback((user: User, targetView: AppView): boolean => {
-    if (targetView === 'expenses' || targetView === 'parties') {
+    if (targetView === 'expenses' || targetView === 'parties' || targetView === 'expense-report') {
       return !!(user.can_access_expenses || user.can_access_expense_approval);
     }
     return canAccessView(user, targetView);
@@ -12225,6 +12226,7 @@ export default function App() {
           items: [
             { id: 'expenses' as AppView, label: 'Expenses', icon: IndianRupee },
             { id: 'parties' as AppView, label: 'Parties', icon: Phone },
+            { id: 'expense-report' as AppView, label: 'Reports', icon: FileText },
           ],
         },
      ]
@@ -12566,6 +12568,7 @@ export default function App() {
         case 'client-orders': return <ClientOrderManager loggedInUser={loggedInUser} />;
         case 'expenses': return <ExpensesView loggedInUser={loggedInUser} onError={onError} />;
         case 'parties': return <PartiesView onError={onError} />;
+        case 'expense-report': return <ExpenseReportView />;
         default: return <Dashboard user={loggedInUser} setView={navigateTo} onError={onError} />;
     }
   };
@@ -13130,7 +13133,7 @@ export default function App() {
                 <RefreshCw size={20} />
               </button>
           </header>
-          <div className={`p-3 pb-24 sm:p-3 md:p-4 lg:pb-4 mx-auto w-full flex-1 ${view === 'work-orders' || view === 'dispatch-dashboard' || view === 'notification-audit' || view === 'users' || view === 'customers' || view === 'items' || view === 'child-items' || view === 'vehicles' || view === 'production-plan' || view === 'custom-bom-plan' || view === 'production-reports' || view === 'reports' || view === 'expenses' || view === 'parties' ? 'max-w-none' : 'max-w-[1700px]'}`}>
+          <div className={`p-3 pb-24 sm:p-3 md:p-4 lg:pb-4 mx-auto w-full flex-1 ${view === 'work-orders' || view === 'dispatch-dashboard' || view === 'notification-audit' || view === 'users' || view === 'customers' || view === 'items' || view === 'child-items' || view === 'vehicles' || view === 'production-plan' || view === 'custom-bom-plan' || view === 'production-reports' || view === 'reports' || view === 'expenses' || view === 'parties' || view === 'expense-report' ? 'max-w-none' : 'max-w-[1700px]'}`}>
            {showExitHint && (
              <div className="mb-2 rounded-lg bg-slate-900 text-white px-3 py-2 text-xs font-bold no-print inline-block">
                Press back again to exit

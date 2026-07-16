@@ -29,7 +29,8 @@ export type AppView =
   | 'verify'
   | 'vehicles'
   | 'expenses'
-  | 'parties';
+  | 'parties'
+  | 'expense-report';
 
 export interface User {
   id: number;
@@ -88,6 +89,7 @@ export const FEATURE_FLAG_MAP: Record<string, keyof User> = {
   vehicles: 'can_access_vehicles',
   expenses: 'can_access_expenses',
   parties: 'can_access_expenses',
+  'expense-report': 'can_access_expenses',
 };
 
 export const FEATURE_FLAG_GROUPS = [

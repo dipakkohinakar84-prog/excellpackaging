@@ -1,6 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
-  <rect width="256" height="256" rx="56" fill="#0f172a"/>
-  <rect x="42" y="42" width="172" height="172" rx="36" fill="#1d4ed8"/>
-  <path d="M82 86h92v24h-64v22h56v24h-56v30h-28z" fill="#fff"/>
-  <circle cx="184" cy="184" r="16" fill="#22c55e"/>
+<svg viewBox="0 0 1254 1254" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="1254" height="1254" rx="250" ry="250" fill="#0169D1"/>
+  <polygon points="513,249 877,459 985,397 633,185" fill="#FFFFFF"/>
+  <polygon points="367,337 728,550 842,484 484,270" fill="#FFFFFF"/>
+  <polygon points="328,358 270,396 270,847 638,1054 645,953 377,802 373,711 644,862 645,756 375,603 373,513 643,664 645,605 694,570" fill="#FFFFFF"/>
+  <path d="M983,463 L688,636 L691,1005 L989,833 Z M949,517 L950,804 L723,944 L722,657 Z" fill="#FFFFFF" fill-rule="evenodd"/>
 </svg>
