@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from './pocketbase';
 import { Expense, User, Party } from './types';
 import { normalizeDepartment } from './utils';
-import { Plus, CheckCircle2, XCircle, AlertCircle, Search, Loader2, X, Trash2 } from 'lucide-react';
+import { Plus, CheckCircle2, XCircle, AlertCircle, Search, Loader2, X, Trash2, Edit3 } from 'lucide-react';
 
 const categoryColors: Record<string, string> = {
   'Excell Packaging': 'bg-blue-100 text-blue-700',
@@ -66,9 +66,7 @@ const ExpensesView: React.FC<Props> = ({ loggedInUser, onError }) => {
     setLoading(true);
     try {
       if (canAdd || canApprove) {
-        let query = supabase.from('expenses').select('*');
-        if (canAdd) query = query.eq('added_by_name', loggedInUser.username);
-        const { data } = await query.order('created', { ascending: false });
+        const { data } = await supabase.from('expenses').select('*').order('created', { ascending: false });
         if (data) setMyExpenses(data);
       }
       if (canApprove) {
@@ -172,6 +170,68 @@ const ExpensesView: React.FC<Props> = ({ loggedInUser, onError }) => {
     const { error } = await supabase.from('expenses').delete().eq('id', expense.id);
     if (error) alert(error.message);
     else fetchData();
+  };
+
+  const [editTarget, setEditTarget] = useState<Expense | null>(null);
+  const [editCategory, setEditCategory] = useState('Excell Packaging');
+  const [editPartyName, setEditPartyName] = useState('');
+  const [editExpenseDate, setEditExpenseDate] = useState(new Date().toISOString().slice(0, 10));
+  const [editAmount, setEditAmount] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editStatus, setEditStatus] = useState<string>('pending');
+  const [isEditSubmitting, setIsEditSubmitting] = useState(false);
+
+  const handleEditClick = (exp: Expense) => {
+    setEditTarget(exp);
+    setEditCategory(exp.category);
+    setEditPartyName(exp.party_name);
+    setEditExpenseDate(((exp as any).date || exp.created || '').slice(0, 10) || new Date().toISOString().slice(0, 10));
+    setEditAmount(String(exp.amount));
+    setEditNotes(exp.notes || '');
+    setEditStatus(exp.status);
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editTarget) return;
+    if (!editPartyName.trim()) { alert('Please enter a party name.'); return; }
+    const amt = parseFloat(editAmount);
+    if (isNaN(amt) || amt <= 0) { alert('Please enter a valid amount.'); return; }
+    setIsEditSubmitting(true);
+
+    const now = new Date().toISOString();
+    const updates: Record<string, any> = {
+      category: editCategory,
+      party_name: editPartyName.trim(),
+      amount: amt,
+      notes: editNotes.trim(),
+      date: editExpenseDate,
+      edited: true,
+      edited_at: now,
+    };
+
+    if (editStatus !== editTarget.status) {
+      updates.status = editStatus;
+      if (editStatus === 'approved') {
+        updates.approved_by_name = loggedInUser.username;
+        updates.approved_at = now;
+      } else if (editStatus === 'rejected') {
+        updates.approved_by_name = loggedInUser.username;
+        updates.approved_at = now;
+      } else {
+        updates.approved_by_name = null;
+        updates.approved_at = null;
+      }
+    }
+
+    const { error } = await supabase.from('expenses').update(updates).eq('id', editTarget.id);
+    if (error) {
+      alert(error.message);
+    } else {
+      setEditTarget(null);
+      fetchData();
+    }
+    setIsEditSubmitting(false);
   };
 
   const filteredParties = partyName
@@ -280,7 +340,10 @@ const ExpensesView: React.FC<Props> = ({ loggedInUser, onError }) => {
                       {partyContactMap[exp.party_name] && <span className="text-xs text-indigo-600 font-bold ml-2">{partyContactMap[exp.party_name]}</span>}
                     </td>
                     <td className="px-4 py-3 text-right font-bold">₹{formatCurrency(exp.amount)}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500 max-w-[150px] truncate">{exp.notes || '-'}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500 max-w-[150px] truncate">
+                      {exp.notes || '-'}
+                      {(exp as any).edited && <span className="text-[9px] text-gray-400 ml-1 italic" title={(exp as any).edited_at ? formatDate((exp as any).edited_at) : ''}>edited</span>}
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-2">
                         <button
@@ -297,6 +360,15 @@ const ExpensesView: React.FC<Props> = ({ loggedInUser, onError }) => {
                         >
                           <XCircle size={18} />
                         </button>
+                        {isOfficeAdmin && (
+                          <button
+                            onClick={() => handleEditClick(exp)}
+                            className="p-1.5 rounded-lg bg-indigo-50 text-indigo-400 hover:bg-indigo-100 hover:text-indigo-600 transition-colors"
+                            title="Edit"
+                          >
+                            <Edit3 size={18} />
+                          </button>
+                        )}
                         {isOfficeAdmin && (
                           <button
                             onClick={() => handleDelete(exp)}
@@ -332,7 +404,10 @@ const ExpensesView: React.FC<Props> = ({ loggedInUser, onError }) => {
                 </div>
                 <div className="mt-1 flex items-center justify-between">
                   <span className="text-lg font-black">₹{formatCurrency(exp.amount)}</span>
-                  {exp.notes && <span className="text-xs text-gray-400 truncate max-w-[140px]">{exp.notes}</span>}
+                  <div className="flex items-center gap-1 min-w-0">
+                    {exp.notes && <span className="text-xs text-gray-400 truncate max-w-[140px]">{exp.notes}</span>}
+                    {(exp as any).edited && <span className="text-[9px] text-gray-400 italic flex-shrink-0" title={(exp as any).edited_at ? formatDate((exp as any).edited_at) : ''}>edited</span>}
+                  </div>
                 </div>
                 <div className="mt-3 flex items-center gap-2">
                   <button
@@ -347,6 +422,15 @@ const ExpensesView: React.FC<Props> = ({ loggedInUser, onError }) => {
                   >
                     <XCircle size={16} /> Reject
                   </button>
+                  {isOfficeAdmin && (
+                    <button
+                      onClick={() => handleEditClick(exp)}
+                      className="p-2.5 rounded-lg bg-indigo-50 text-indigo-400 hover:bg-indigo-100 hover:text-indigo-600 transition-colors"
+                      title="Edit"
+                    >
+                      <Edit3 size={16} />
+                    </button>
+                  )}
                   {isOfficeAdmin && (
                     <button
                       onClick={() => handleDelete(exp)}
@@ -428,17 +512,29 @@ const ExpensesView: React.FC<Props> = ({ loggedInUser, onError }) => {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-500 max-w-[150px] truncate">{exp.notes || '-'}</td>
-                    <td className="px-4 py-3 text-[10px] font-semibold text-gray-500">{exp.approved_at ? formatDate(exp.approved_at) : '-'}</td>
+                    <td className="px-4 py-3 text-[10px] font-semibold text-gray-500 whitespace-nowrap">
+                      {exp.approved_at ? formatDate(exp.approved_at) : '-'}
+                      {(exp as any).edited && <span className="text-[9px] text-gray-400 ml-1 italic" title={(exp as any).edited_at ? formatDate((exp as any).edited_at) : ''}>edited</span>}
+                    </td>
                     <td className="px-4 py-3 text-xs font-semibold text-gray-600">{exp.approved_by_name || '-'}</td>
                     {isOfficeAdmin && (
                       <td className="px-4 py-3 text-center">
-                        <button
-                          onClick={() => handleDelete(exp)}
-                          className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => handleEditClick(exp)}
+                            className="p-1.5 rounded-lg text-indigo-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                            title="Edit"
+                          >
+                            <Edit3 size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(exp)}
+                            className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       </td>
                     )}
                   </tr>
@@ -476,11 +572,23 @@ const ExpensesView: React.FC<Props> = ({ loggedInUser, onError }) => {
                   {exp.notes && <span className="text-xs text-gray-400 truncate max-w-[140px]">{exp.notes}</span>}
                 </div>
                 <div className="mt-1 flex items-center justify-between gap-2">
-                  {exp.approved_at && (
-                    <span className="text-[10px] font-semibold text-gray-500">Approved: {formatDate(exp.approved_at)}</span>
-                  )}
+                  <div className="flex items-center gap-1 min-w-0">
+                    {exp.approved_at && (
+                      <span className="text-[10px] font-semibold text-gray-500 whitespace-nowrap">Approved: {formatDate(exp.approved_at)}</span>
+                    )}
+                    {(exp as any).edited && <span className="text-[9px] text-gray-400 italic flex-shrink-0" title={(exp as any).edited_at ? formatDate((exp as any).edited_at) : ''}>edited</span>}
+                  </div>
                   {exp.approved_by_name && exp.approved_by_name !== 'Auto-Approved' && !exp.approved_at && (
                     <span className="text-[10px] font-semibold text-gray-500">by {exp.approved_by_name}</span>
+                  )}
+                  {isOfficeAdmin && (
+                    <button
+                      onClick={() => handleEditClick(exp)}
+                      className="p-1.5 rounded-lg text-indigo-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                      title="Edit"
+                    >
+                      <Edit3 size={15} />
+                    </button>
                   )}
                   {isOfficeAdmin && (
                     <button
@@ -616,6 +724,123 @@ const ExpensesView: React.FC<Props> = ({ loggedInUser, onError }) => {
                 >
                   {isSubmitting && <Loader2 size={16} className="animate-spin" />}
                   {category === 'Personal' ? 'Submit (Auto-Approved)' : 'Submit for Approval'}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editTarget && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => { if (!isEditSubmitting) setEditTarget(null); }} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[92vh] sm:max-h-[90vh]">
+            <div className="px-4 sm:px-6 py-4 border-b flex justify-between items-center gap-3 bg-gray-50/50 flex-shrink-0">
+              <h3 className="text-base sm:text-lg font-bold text-gray-800">Edit Expense</h3>
+              <button
+                onClick={() => { if (!isEditSubmitting) setEditTarget(null); }}
+                className="p-2 hover:bg-gray-200 rounded-lg transition-colors text-gray-500"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-4 sm:p-6 flex-1 min-h-0 overflow-y-auto">
+              <form onSubmit={handleEditSubmit} className="space-y-5">
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500">Category</label>
+                  <select
+                    required
+                    disabled={isEditSubmitting}
+                    value={editCategory}
+                    onChange={e => setEditCategory(e.target.value)}
+                    className="w-full px-4 py-3 bg-gray-50 border rounded-xl text-sm disabled:opacity-60"
+                  >
+                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500">Date</label>
+                  <input
+                    required
+                    disabled={isEditSubmitting}
+                    type="date"
+                    value={editExpenseDate}
+                    onChange={e => setEditExpenseDate(e.target.value)}
+                    className="w-full px-4 py-3 bg-gray-50 border rounded-xl text-sm disabled:opacity-60"
+                  />
+                </div>
+                <div className="relative" ref={suggestRef}>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500">Party Name</label>
+                  <input
+                    required
+                    disabled={isEditSubmitting}
+                    placeholder="Type to search or enter new..."
+                    autoComplete="off"
+                    value={editPartyName}
+                    onFocus={() => { const fp = parties.filter(p => p.name.toLowerCase().includes(editPartyName.toLowerCase())); if (fp.length > 0) setShowSuggestions(true); }}
+                    onChange={e => { setEditPartyName(e.target.value); setShowSuggestions(e.target.value.length > 0); }}
+                    className="w-full px-4 py-3 bg-gray-50 border rounded-xl text-sm disabled:opacity-60"
+                  />
+                  {showSuggestions && parties.filter(p => p.name.toLowerCase().includes(editPartyName.toLowerCase())).length > 0 && (
+                    <div className="absolute z-20 top-full mt-1 left-0 right-0 bg-white border border-gray-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+                      {parties.filter(p => p.name.toLowerCase().includes(editPartyName.toLowerCase())).map(p => (
+                        <button
+                          key={p.pb_id || p.id}
+                          type="button"
+                          onClick={() => { setEditPartyName(p.name); setShowSuggestions(false); }}
+                          className="w-full text-left px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors border-b border-gray-50 last:border-b-0 flex items-center justify-between"
+                        >
+                          <span>{p.name}</span>
+                          {p.contact && <span className="text-[10px] text-gray-400 font-normal">{p.contact}</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500">Amount (₹)</label>
+                  <input
+                    required
+                    disabled={isEditSubmitting}
+                    type="number"
+                    min="1"
+                    placeholder="0"
+                    value={editAmount}
+                    onChange={e => setEditAmount(e.target.value)}
+                    className="w-full px-4 py-3 bg-gray-50 border rounded-xl text-sm disabled:opacity-60"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500">Notes <span className="text-gray-400">(optional)</span></label>
+                  <textarea
+                    disabled={isEditSubmitting}
+                    placeholder="Any remarks..."
+                    value={editNotes}
+                    onChange={e => setEditNotes(e.target.value)}
+                    className="w-full px-4 py-3 bg-gray-50 border rounded-xl text-sm disabled:opacity-60 resize-none"
+                    rows={2}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500">Status</label>
+                  <select
+                    disabled={isEditSubmitting}
+                    value={editStatus}
+                    onChange={e => setEditStatus(e.target.value)}
+                    className="w-full px-4 py-3 bg-gray-50 border rounded-xl text-sm disabled:opacity-60"
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="approved">Approved</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </div>
+                <button
+                  type="submit"
+                  disabled={isEditSubmitting}
+                  className="w-full py-4 bg-indigo-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-xl font-black text-sm shadow-lg hover:bg-indigo-700 transition-all active:scale-95 flex items-center justify-center gap-2"
+                >
+                  {isEditSubmitting && <Loader2 size={16} className="animate-spin" />}
+                  Save Changes
                 </button>
               </form>
             </div>

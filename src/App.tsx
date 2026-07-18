@@ -12567,7 +12567,7 @@ export default function App() {
         case 'live-screen': return <Dashboard user={loggedInUser} setView={navigateTo} onError={onError} />;
         case 'client-orders': return <ClientOrderManager loggedInUser={loggedInUser} />;
         case 'expenses': return <ExpensesView loggedInUser={loggedInUser} onError={onError} />;
-        case 'parties': return <PartiesView onError={onError} />;
+        case 'parties': return <PartiesView loggedInUser={loggedInUser} onError={onError} />;
         case 'expense-report': return <ExpenseReportView />;
         default: return <Dashboard user={loggedInUser} setView={navigateTo} onError={onError} />;
     }

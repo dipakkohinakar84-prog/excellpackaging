@@ -316,6 +316,8 @@ export interface Expense {
   approved_by_name?: string;
   approved_at?: string;
   reject_reason?: string;
+  edited?: boolean;
+  edited_at?: string;
   created?: string;
   created_at?: string;
   pb_id?: string;

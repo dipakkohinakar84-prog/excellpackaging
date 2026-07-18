@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './pocketbase';
-import { Party } from './types';
-import { Plus, Search, Loader2, X, Trash2, Phone, IndianRupee } from 'lucide-react';
+import { Party, User } from './types';
+import { normalizeDepartment } from './utils';
+import { Plus, Search, Loader2, X, Trash2, Phone, IndianRupee, Edit3 } from 'lucide-react';
 
 interface Props {
+  loggedInUser: User;
   onError: () => void;
 }
 
-const PartiesView: React.FC<Props> = ({ onError }) => {
+const PartiesView: React.FC<Props> = ({ loggedInUser, onError }) => {
+  const isOfficeAdmin = normalizeDepartment(loggedInUser.department) === 'Office' && loggedInUser.level === '1-Manager';
   const [parties, setParties] = useState<Party[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -73,6 +76,28 @@ const PartiesView: React.FC<Props> = ({ onError }) => {
     await fetchParties();
   };
 
+  const [editTarget, setEditTarget] = useState<Party | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editContact, setEditContact] = useState('');
+  const [isEditSubmitting, setIsEditSubmitting] = useState(false);
+
+  const handleEditClick = (party: Party) => {
+    setEditTarget(party);
+    setEditName(party.name);
+    setEditContact(party.contact || '');
+  };
+
+  const handleEditSubmit = async () => {
+    if (!editTarget) return;
+    if (!editName.trim()) { alert('Enter a party name.'); return; }
+    setIsEditSubmitting(true);
+    const { error } = await supabase.from('parties').update({ name: editName.trim(), contact: editContact.trim() }).eq('id', editTarget.id);
+    if (error) { alert(error.message); setIsEditSubmitting(false); return; }
+    setEditTarget(null);
+    setIsEditSubmitting(false);
+    await fetchParties();
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -126,9 +151,18 @@ const PartiesView: React.FC<Props> = ({ onError }) => {
                       {p.contact ? <span className="flex items-center gap-1"><Phone size={13} /> {p.contact}</span> : '-'}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <button onClick={() => handleDelete(p)} className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors" title="Delete">
-                        <Trash2 size={16} />
-                      </button>
+                      <div className="flex items-center justify-center gap-1">
+                        {isOfficeAdmin && (
+                          <button onClick={() => handleEditClick(p)} className="p-1.5 rounded-lg text-indigo-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors" title="Edit">
+                            <Edit3 size={16} />
+                          </button>
+                        )}
+                        {isOfficeAdmin && (
+                          <button onClick={() => handleDelete(p)} className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors" title="Delete">
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -151,9 +185,18 @@ const PartiesView: React.FC<Props> = ({ onError }) => {
                   <p className="text-sm font-bold text-gray-800">{p.name}</p>
                   {p.contact && <p className="text-xs font-semibold text-gray-500 flex items-center gap-1 mt-0.5"><Phone size={12} /> {p.contact}</p>}
                 </div>
-                <button onClick={() => handleDelete(p)} className="p-2.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors">
-                  <Trash2 size={18} />
-                </button>
+                <div className="flex items-center gap-1">
+                  {isOfficeAdmin && (
+                    <button onClick={() => handleEditClick(p)} className="p-2.5 rounded-lg text-indigo-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors" title="Edit">
+                      <Edit3 size={18} />
+                    </button>
+                  )}
+                  {isOfficeAdmin && (
+                    <button onClick={() => handleDelete(p)} className="p-2.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors">
+                      <Trash2 size={18} />
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -199,6 +242,51 @@ const PartiesView: React.FC<Props> = ({ onError }) => {
               >
                 {isSubmitting && <Loader2 size={16} className="animate-spin" />}
                 Add Party
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editTarget && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => { if (!isEditSubmitting) setEditTarget(null); }} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="px-4 sm:px-6 py-4 border-b flex justify-between items-center gap-3 bg-gray-50/50">
+              <h3 className="text-base sm:text-lg font-bold text-gray-800">Edit Party</h3>
+              <button onClick={() => { if (!isEditSubmitting) setEditTarget(null); }} className="p-2 hover:bg-gray-200 rounded-lg transition-colors text-gray-500">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-4 sm:p-6 space-y-5">
+              <div>
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500">Party Name</label>
+                <input
+                  required
+                  disabled={isEditSubmitting}
+                  placeholder="Enter party name"
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  className="w-full px-4 py-3 bg-gray-50 border rounded-xl text-sm disabled:opacity-60"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-gray-500">Contact <span className="text-gray-400">(optional)</span></label>
+                <input
+                  disabled={isEditSubmitting}
+                  placeholder="Phone number"
+                  value={editContact}
+                  onChange={e => setEditContact(e.target.value)}
+                  className="w-full px-4 py-3 bg-gray-50 border rounded-xl text-sm disabled:opacity-60"
+                />
+              </div>
+              <button
+                onClick={handleEditSubmit}
+                disabled={isEditSubmitting}
+                className="w-full py-4 bg-indigo-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-xl font-black text-sm shadow-lg hover:bg-indigo-700 transition-all active:scale-95 flex items-center justify-center gap-2"
+              >
+                {isEditSubmitting && <Loader2 size={16} className="animate-spin" />}
+                Save Changes
               </button>
             </div>
           </div>
