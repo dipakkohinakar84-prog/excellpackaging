@@ -73,6 +73,7 @@ import DailyTasks from './DailyTasks';
 import LiveScreen from './LiveScreen';
 import ClientPortal from './ClientPortal';
 import ClientOrderManager from './ClientOrderManager';
+import { sendOrderEmail } from './orderEmail';
 import ExpensesView from './ExpensesView';
 import PartiesView from './PartiesView';
 import ExpenseReportView from './ExpenseReportView';
@@ -1014,6 +1015,14 @@ const sendBackgroundPushEvent = async (params: {
   } catch (error) {
     console.error('Background push request failed:', error);
   }
+};
+
+const getCustomerEmailByName = async (customerName?: string) => {
+  const name = customerName?.trim();
+  if (!name) return '';
+  const { data } = await supabase.from('customers').select('email').eq('name', name).single();
+  const email = String(data?.email || '').trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : '';
 };
 
 const logActivity = async (params: {
@@ -2132,6 +2141,16 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
         if (logError) {
           console.error('Dispatch log insert failed:', logError);
         }
+
+        void getCustomerEmailByName(order.customer).then(recipient => sendOrderEmail({
+          type: 'dispatched',
+          to: recipient,
+          erpOrderId: orderId,
+          itemName: order.job_details,
+          qty: dispatchQty,
+          etd: order.etd,
+          dispatchedDate: dispatchDate,
+        }));
 
         void logActivity({
           eventType: 'dispatch',
@@ -3523,6 +3542,26 @@ const CustomerManagement: React.FC<{ onError: () => void; editingId?: number }> 
     }
   };
 
+  const handleInvite = async (customer: Customer) => {
+    if (!customer.email) return;
+    try {
+      const existing = await pb.collection('client_portal_users').getFullList({ filter: `customer_id = ${customer.id}`, requestKey: null as any });
+      if (existing.length > 0) {
+        await pb.collection('client_portal_users').requestPasswordReset(customer.email);
+        alert('Password reset email sent to ' + customer.email);
+        return;
+      }
+
+      const randomPass = crypto.randomUUID();
+      await pb.collection('client_portal_users').create({ email: customer.email, emailVisibility: true, password: randomPass, passwordConfirm: randomPass, customer_id: customer.id, customer_name: customer.name, is_active: true });
+
+      await pb.collection('client_portal_users').requestPasswordReset(customer.email);
+      alert('Invitation sent to ' + customer.email);
+    } catch (err: any) {
+      alert(err?.data?.message || err?.message || 'Failed to send invitation');
+    }
+  };
+
   const deleteCustomer = async (customer: Customer) => {
     const customerKey = normalizeDuplicateKey(customer.name || '');
     const linkedItems = items.filter(item => normalizeDuplicateKey(item.customer_name || '') === customerKey);
@@ -3604,6 +3643,7 @@ const CustomerManagement: React.FC<{ onError: () => void; editingId?: number }> 
                   <td className="px-6 py-4 text-right">
                     <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
                       <button onClick={() => { setEditingCustomer(c); setFormData({ name: c.name || '', proprietor: c.proprietor || '', address: c.address || '', city: c.city || '', contact: c.contact || '', email: c.email || '', gst: c.gst || '', type: c.type || 'Direct', reference: c.reference || '', remarks: c.remarks || '' }); setIsModalOpen(true); }} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg"><Edit size={15} /></button>
+                      {c.email && <button onClick={() => handleInvite(c)} className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg" title="Send portal invitation"><Mail size={15} /></button>}
                       <button onClick={() => deleteCustomer(c)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={15} /></button>
                     </div>
                   </td>
@@ -3621,6 +3661,7 @@ const CustomerManagement: React.FC<{ onError: () => void; editingId?: number }> 
                 <Badge color="green">{c.type}</Badge>
                 <div className="flex gap-1">
                   <button onClick={() => { setEditingCustomer(c); setFormData({ name: c.name || '', proprietor: c.proprietor || '', address: c.address || '', city: c.city || '', contact: c.contact || '', email: c.email || '', gst: c.gst || '', type: c.type || 'Direct', reference: c.reference || '', remarks: c.remarks || '' }); setIsModalOpen(true); }} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg"><Edit size={14} /></button>
+                  {c.email && <button onClick={() => handleInvite(c)} className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg" title="Send portal invitation"><Mail size={14} /></button>}
                   <button onClick={() => deleteCustomer(c)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={14} /></button>
                 </div>
               </div>
@@ -5799,6 +5840,15 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
             workOrderId: insertedOrder.id,
             actor: loggedInUser.username,
           }))).catch(error => console.error('Work order notification failed:', error));
+
+          void getCustomerEmailByName(customer).then(recipient => sendOrderEmail({
+            type: 'received',
+            to: recipient,
+            erpOrderId: insertedOrder.id,
+            itemName: lineItem.itemName,
+            qty: Number(lineItem.qty) || 1,
+            etd: lineItem.etd,
+          }));
 
           if (selectedOrderItem) {
             await createSubordersForItem({
@@ -11408,8 +11458,10 @@ const VerifyPage: React.FC = () => {
 // --- App Root ---
 export default function App() {
   const initialView = (): AppView => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('portal')) return 'client-login';
     const host = window.location.hostname.toLowerCase();
-    if (host === 'portal.excellpackaging.in' || host.startsWith('portal.')) return 'client-login';
+    if (host === 'portal.excellpackaging.in' || host.startsWith('portal.') || host === 'order.excellpackaging.com' || host.startsWith('order.')) return 'client-login';
     if (window.location.hash.startsWith('#/verify')) return 'verify';
     const savedView = sessionStorage.getItem('excell_erp_view') as AppView | null;
     if (savedView) return savedView;
@@ -11903,6 +11955,17 @@ export default function App() {
 
   useEffect(() => {
     const loadUser = async () => {
+      if ((pb.authStore as any).isSuperuser) {
+        logoutAuth();
+        localStorage.removeItem('excell_erp_user');
+        setLoggedInUser(null);
+        return;
+      }
+      const record = pb.authStore.record;
+      if (record?.collectionName === 'client_portal_users') {
+        setClientUser(record);
+        return;
+      }
       const authUser = getCurrentAuthUser();
       if (!authUser) { localStorage.removeItem('excell_erp_user'); return; }
       try {
@@ -11916,9 +11979,15 @@ export default function App() {
             return;
           }
         }
-      } catch {}
-      setLoggedInUser(authUser);
-      localStorage.setItem('excell_erp_user', JSON.stringify(authUser));
+      } catch (e: any) {
+        if (e?.status === 404) {
+          logoutAuth();
+          localStorage.removeItem('excell_erp_user');
+          setLoggedInUser(null);
+          return;
+        }
+      }
+      if (authUser) { setLoggedInUser(authUser); localStorage.setItem('excell_erp_user', JSON.stringify(authUser)); }
     };
     loadUser();
   }, []);
@@ -11926,6 +11995,7 @@ export default function App() {
   // Poll for feature flag / profile changes every 30 seconds
   useEffect(() => {
     if (!loggedInUser) return;
+    if (view === 'client-login' || view === 'client-dashboard') return;
     const interval = setInterval(async () => {
       try {
         const recordId = pb.authStore.record?.id;
@@ -11941,7 +12011,7 @@ export default function App() {
       }
     }, 30000);
     return () => clearInterval(interval);
-  }, [loggedInUser?.id]);
+  }, [loggedInUser?.id, view]);
 
   const applyNavigationPayload = useCallback((payload?: AppHistoryState['payload']) => {
     if (!payload) return;
@@ -11998,7 +12068,11 @@ export default function App() {
   };
   const handleLogout = () => { logoutAuth(); setLoggedInUser(null); localStorage.removeItem('excell_erp_user'); localStorage.removeItem('pocketbase_auth'); };
   const handleClientLogin = (user: any) => { setClientUser(user); };
-  const handleClientLogout = () => { setClientUser(null); navigateTo('client-login'); };
+  const handleClientLogout = () => {
+    setClientUser(null);
+    pb.authStore.clear();
+    navigateTo('client-login');
+  };
   const handleLiveScreenLogin = (user: any) => { setLiveScreenUser(user); navigateTo('live-screen'); };
   const handleLiveScreenLogout = () => { setLiveScreenUser(null); navigateTo('live-screen-login'); };
 

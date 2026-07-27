@@ -271,11 +271,12 @@ export interface DailyTask {
 }
 
 export interface ClientUser {
-  id: number | string;
+  id: string;
   customer_id: number;
-  portal_id: string;
-  portal_password: string;
+  customer_name?: string;
+  email: string;
   is_active: boolean;
+  verified?: boolean;
 }
 
 export interface ClientOrderItem {
@@ -283,6 +284,10 @@ export interface ClientOrderItem {
   item_name: string;
   qty: number;
   drawing_no: string;
+  etd?: string;
+  work_order_id?: number;
+  status?: 'Pending' | 'Accepted' | 'Rejected';
+  rejection_reason?: string;
 }
 
 export interface ClientOrder {
@@ -296,6 +301,7 @@ export interface ClientOrder {
   created_by: string;
   created_at: string;
   updated_at: string;
+  work_order_ids?: number[];
 }
 
 export interface Notice {

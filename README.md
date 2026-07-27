@@ -25,6 +25,7 @@ Prerequisites: Node.js and PocketBase.
    ```env
    VITE_POCKETBASE_URL=http://127.0.0.1:8090
    VITE_PUSH_API_URL=http://127.0.0.1:8091/api/send-push
+   VITE_ORDER_EMAIL_API_URL=http://127.0.0.1:8091/api/send-order-email
    VITE_VAPID_PUBLIC_KEY=your_public_key
    ```
 
@@ -57,6 +58,21 @@ VAPID_PUBLIC_KEY=your_public_key
 VAPID_PRIVATE_KEY=your_private_key
 VAPID_SUBJECT=mailto:admin@example.com
 ```
+
+Order emails use the same relay endpoint at `/api/send-order-email`. For Hostinger mail with one real mailbox and aliases, authenticate SMTP with the real mailbox and set the visible sender/reply aliases:
+
+```env
+SMTP_HOST=smtp.hostinger.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=admin@excellpackaging.in
+SMTP_PASS=your_admin_mailbox_password
+SMTP_FROM_NAME=Excell Packaging
+SMTP_FROM_EMAIL=orders@excellpackaging.in
+SMTP_REPLY_TO=support@excellpackaging.in
+```
+
+Frontend order-email calls are authorized with the current PocketBase `erp_users` auth token. `MAIL_API_KEY` is optional and should only be used for server-side curl/manual tests.
 
 Start it with:
 
