@@ -1025,6 +1025,66 @@ const getCustomerEmailByName = async (customerName?: string) => {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : '';
 };
 
+const findClientOrderByWorkOrderId = async (workOrderId: number) => {
+  const { data: orders, error } = await supabase.from('client_orders').select('*');
+  if (error) throw error;
+  const rows = Array.isArray(orders) ? orders : [];
+  return rows.find((order: any) => (
+    Array.isArray(order.items) && order.items.some((item: any) => Number(item.work_order_id) === workOrderId)
+  ));
+};
+
+const getClientEmailForWorkOrder = async (workOrderId: number) => {
+  const order = await findClientOrderByWorkOrderId(workOrderId);
+  const createdBy = String(order?.created_by || '').trim();
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(createdBy)) return createdBy;
+  return '';
+};
+
+const markClientOrderItemDispatched = async (workOrderId: number, dispatchDate: string) => {
+  const order = await findClientOrderByWorkOrderId(workOrderId);
+  if (!order) return;
+  const items = Array.isArray(order.items) ? [...order.items] : [];
+  const idx = items.findIndex((item: any) => Number(item.work_order_id) === workOrderId);
+  if (idx === -1) return;
+
+  items[idx] = { ...items[idx], status: 'Dispatched', dispatched_date: dispatchDate };
+  const workOrderIds = items.map((item: any) => item.work_order_id).filter((id: unknown) => typeof id === 'number');
+  await supabase
+    .from('client_orders')
+    .update({ items: items as any, work_order_ids: workOrderIds, updated_at: new Date().toISOString() })
+    .eq('id', order.id);
+};
+
+const getClientOrderParentStatus = (items: any[]): 'Pending' | 'Accepted' | 'Rejected' | 'Cancelled' => {
+  const statuses = items.map(item => item.status || (item.work_order_id ? 'Accepted' : 'Pending'));
+  if (statuses.some(status => status === 'Pending')) return 'Pending';
+  if (statuses.length > 0 && statuses.every(status => status === 'Rejected')) return 'Rejected';
+  if (statuses.length > 0 && statuses.every(status => status === 'Cancelled' || status === 'Rejected')) return 'Cancelled';
+  return 'Accepted';
+};
+
+const markClientOrderItemCancelled = async (workOrderId: number) => {
+  const order = await findClientOrderByWorkOrderId(workOrderId);
+  if (!order) return;
+  const items = Array.isArray(order.items) ? [...order.items] : [];
+  const idx = items.findIndex((item: any) => Number(item.work_order_id) === workOrderId);
+  if (idx === -1) return;
+
+  items[idx] = { ...items[idx], status: 'Cancelled', cancelled_date: new Date().toISOString() };
+  const workOrderIds = items.map((item: any) => item.work_order_id).filter((id: unknown) => typeof id === 'number');
+  const { error: updateError } = await supabase
+    .from('client_orders')
+    .update({
+      status: getClientOrderParentStatus(items),
+      items: items as any,
+      work_order_ids: workOrderIds,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', order.id);
+  if (updateError) throw updateError;
+};
+
 const logActivity = async (params: {
   eventType: string;
   action: string;
@@ -2142,7 +2202,12 @@ const DispatchDashboard: React.FC<{ onError: () => void; onView: (id: number) =>
           console.error('Dispatch log insert failed:', logError);
         }
 
-        void getCustomerEmailByName(order.customer).then(recipient => sendOrderEmail({
+        markClientOrderItemDispatched(orderId, dispatchDate);
+
+        void getClientEmailForWorkOrder(orderId).then(clientRecipient => {
+          if (clientRecipient) return clientRecipient;
+          return getCustomerEmailByName(order.customer);
+        }).then(recipient => sendOrderEmail({
           type: 'dispatched',
           to: recipient,
           erpOrderId: orderId,
@@ -7350,7 +7415,18 @@ const WODetails: React.FC<{ id: number; onBack: () => void; loggedInUser: User }
               {isOffice && (
                 <button onClick={async () => {
                   if(confirm("Delete Order?")) {
-                    await supabase.from('work_orders').delete().eq('id', id);
+                    const { error: deleteError } = await supabase.from('work_orders').delete().eq('id', id);
+                    if (deleteError) {
+                      console.error('Order delete failed:', deleteError);
+                      alert('Could not delete this order. Please try again.');
+                      return;
+                    }
+                    try {
+                      await markClientOrderItemCancelled(Number(id));
+                    } catch (portalError) {
+                      console.error('Client portal item cancellation failed:', portalError);
+                      alert('Order was deleted, but the linked client portal item could not be marked as Cancelled. Please update it manually.');
+                    }
                     void logActivity({ eventType: 'work_order', action: 'deleted', title: 'Order Deleted', body: `Deleted order #${id} from WO Details`, actor: getStoredLoggedInUser(), targetCollection: 'work_orders', targetId: id, severity: 'warning' });
                     onBack();
                   }

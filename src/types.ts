@@ -286,8 +286,10 @@ export interface ClientOrderItem {
   drawing_no: string;
   etd?: string;
   work_order_id?: number;
-  status?: 'Pending' | 'Accepted' | 'Rejected';
+  status?: 'Pending' | 'Accepted' | 'Rejected' | 'Dispatched' | 'Cancelled';
   rejection_reason?: string;
+  dispatched_date?: string;
+  cancelled_date?: string;
 }
 
 export interface ClientOrder {

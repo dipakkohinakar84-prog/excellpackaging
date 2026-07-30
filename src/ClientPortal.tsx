@@ -22,6 +22,7 @@ const STATUS_STYLES: Record<string, string> = {
   Pending: 'bg-yellow-50 text-yellow-800 border-yellow-200',
   Accepted: 'bg-green-50 text-green-800 border-green-200',
   Rejected: 'bg-white text-slate-700 border-slate-200',
+  Dispatched: 'bg-indigo-50 text-indigo-800 border-indigo-200',
   Completed: 'bg-white text-slate-700 border-slate-200',
   Cancelled: 'bg-white text-slate-700 border-slate-200',
 };
@@ -30,6 +31,7 @@ const STATUS_DOT_STYLES: Record<string, string> = {
   Pending: 'bg-slate-400',
   Accepted: 'bg-slate-700',
   Rejected: 'bg-slate-500',
+  Dispatched: 'bg-indigo-600',
   Completed: 'bg-slate-700',
   Cancelled: 'bg-slate-300',
 };
@@ -38,6 +40,7 @@ const getPortalItemStatus = (order: ClientOrder, item: any) => {
   if (item.status) return item.status;
   if (item.work_order_id) return 'Accepted';
   if (order.status === 'Rejected') return 'Rejected';
+  if (order.status === 'Cancelled') return 'Cancelled';
   if (order.status === 'Accepted') return 'Accepted';
   return 'Pending';
 };

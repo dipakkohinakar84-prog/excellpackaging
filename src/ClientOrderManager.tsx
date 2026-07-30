@@ -9,7 +9,7 @@ interface Props {
   loggedInUser: User;
 }
 
-type OrderItemStatus = 'Pending' | 'Accepted' | 'Rejected';
+type OrderItemStatus = 'Pending' | 'Accepted' | 'Rejected' | 'Dispatched' | 'Cancelled';
 
 interface ClientOrderRow {
   key: string;
@@ -20,7 +20,7 @@ interface ClientOrderRow {
 }
 
 const getItemStatus = (order: ClientOrder, item: ClientOrderItem): OrderItemStatus => {
-  if (item.status) return item.status;
+  if (item.status) return item.status as OrderItemStatus;
   if (item.work_order_id) return 'Accepted';
   if (order.status === 'Rejected') return 'Rejected';
   if (order.status === 'Accepted') return 'Accepted';
@@ -31,6 +31,7 @@ const getParentStatus = (items: ClientOrderItem[]): ClientOrder['status'] => {
   const statuses = items.map(item => item.status || (item.work_order_id ? 'Accepted' : 'Pending'));
   if (statuses.some(status => status === 'Pending')) return 'Pending';
   if (statuses.length > 0 && statuses.every(status => status === 'Rejected')) return 'Rejected';
+  if (statuses.length > 0 && statuses.every(status => status === 'Cancelled' || status === 'Rejected')) return 'Cancelled';
   return 'Accepted';
 };
 
@@ -40,7 +41,7 @@ const ClientOrderManager: React.FC<Props> = ({ loggedInUser }) => {
   const [orders, setOrders] = useState<ClientOrder[]>([]);
   const [allItems, setAllItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'Pending' | 'Accepted' | 'Rejected' | 'All'>('Pending');
+  const [tab, setTab] = useState<OrderItemStatus | 'All'>('Pending');
   const [rejectModal, setRejectModal] = useState<{ orderId: number | string; itemIndex: number; itemName: string; reason: string } | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [etdEdits, setEtdEdits] = useState<Record<string, string>>({});
@@ -177,12 +178,14 @@ const ClientOrderManager: React.FC<Props> = ({ loggedInUser }) => {
     fetchOrders();
   };
 
-  const tabs = ['Pending', 'Accepted', 'Rejected', 'All'] as const;
+  const tabs = ['Pending', 'Accepted', 'Dispatched', 'Rejected', 'Cancelled', 'All'] as const;
 
   const tabColors: Record<string, string> = {
     Pending: 'bg-yellow-100 text-yellow-700 border-yellow-200',
     Accepted: 'bg-green-100 text-green-700 border-green-200',
+    Dispatched: 'bg-indigo-100 text-indigo-700 border-indigo-200',
     Rejected: 'bg-red-100 text-red-700 border-red-200',
+    Cancelled: 'bg-gray-100 text-gray-600 border-gray-200',
     All: 'bg-slate-900 text-white',
   };
 
@@ -234,7 +237,7 @@ const ClientOrderManager: React.FC<Props> = ({ loggedInUser }) => {
                       </td>
                       <td className="px-4 py-3 text-center font-black text-gray-700">{row.item.qty}</td>
                       <td className="px-4 py-3">
-                        <input type="date" value={editedEtd} onChange={e => setEtdEdits(prev => ({ ...prev, [row.key]: e.target.value }))} disabled={row.status === 'Accepted'} className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs font-semibold outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60" />
+                        <input type="date" value={editedEtd} onChange={e => setEtdEdits(prev => ({ ...prev, [row.key]: e.target.value }))} disabled={row.status === 'Accepted' || row.status === 'Dispatched' || row.status === 'Cancelled'} className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs font-semibold outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60" />
                       </td>
                       <td className="px-4 py-3"><OrderStatusBadge status={row.status} /></td>
                       <td className="px-4 py-3 font-black text-indigo-600">{row.item.work_order_id ? `#${row.item.work_order_id}` : '-'}</td>
@@ -286,6 +289,7 @@ const OrderStatusBadge: React.FC<{ status: string }> = ({ status }) => {
   const styles: Record<string, string> = {
     Pending: 'bg-yellow-100 text-yellow-700 border-yellow-200',
     Accepted: 'bg-green-100 text-green-700 border-green-200',
+    Dispatched: 'bg-indigo-100 text-indigo-700 border-indigo-200',
     Rejected: 'bg-red-100 text-red-700 border-red-200',
     Completed: 'bg-blue-100 text-blue-700 border-blue-200',
     Cancelled: 'bg-gray-100 text-gray-600 border-gray-200',
