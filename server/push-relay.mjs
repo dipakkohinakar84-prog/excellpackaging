@@ -20,6 +20,7 @@ const smtpPass = process.env.SMTP_PASS || '';
 const smtpFromName = process.env.SMTP_FROM_NAME || 'Excell Packaging';
 const smtpFromEmail = process.env.SMTP_FROM_EMAIL || smtpUser;
 const smtpReplyTo = process.env.SMTP_REPLY_TO || 'support@excellpackaging.in';
+const websiteEnquiryTo = process.env.WEBSITE_ENQUIRY_TO || smtpReplyTo;
 
 const pushEnabled = Boolean(vapidPublicKey && vapidPrivateKey);
 const mailEnabled = Boolean(smtpUser && smtpPass && smtpFromEmail);
@@ -40,6 +41,10 @@ const mailTransporter = nodemailer.createTransport({
   secure: smtpSecure,
   auth: smtpUser && smtpPass ? { user: smtpUser, pass: smtpPass } : undefined,
 });
+
+const websiteEnquiryHits = new Map();
+const websiteEnquiryWindowMs = 15 * 60 * 1000;
+const websiteEnquiryMaxHits = 5;
 
 const normalizeDepartment = (dept = '') => {
   const normalized = dept.trim().toLowerCase().replace(/[^a-z]/g, '_').replace(/_+/g, '_');
@@ -138,6 +143,58 @@ const buildOrderMail = ({ type, erpOrderId, itemName, qty, etd, dispatchedDate }
   return { subject: config.subject, text: lines.join('\n'), html };
 };
 
+const buildWebsiteEnquiryMail = ({ name, company, email, quantity, product, message }) => {
+  const safeName = String(name || '').trim();
+  const safeCompany = String(company || '').trim() || '-';
+  const safeEmail = String(email || '').trim();
+  const safeQuantity = String(quantity || '').trim() || '-';
+  const safeProduct = String(product || '').trim() || '-';
+  const safeMessage = String(message || '').trim();
+
+  const rows = [
+    ['Name', safeName],
+    ['Company', safeCompany],
+    ['Email', safeEmail],
+    ['Quantity', safeQuantity],
+    ['Product Requirement', safeProduct],
+  ];
+
+  const text = [
+    'New website enquiry received.',
+    '',
+    `Name: ${safeName}`,
+    `Company: ${safeCompany}`,
+    `Email: ${safeEmail}`,
+    `Quantity: ${safeQuantity}`,
+    `Product Requirement: ${safeProduct}`,
+    '',
+    'Message:',
+    safeMessage,
+  ].join('\n');
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;color:#0f172a;line-height:1.5">
+      <h2 style="margin:0 0 12px">New website enquiry</h2>
+      <table cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-size:14px">
+        ${rows.map(([label, value]) => `<tr><td style="font-weight:700;color:#334155">${escapeHtml(label)}:</td><td>${escapeHtml(value)}</td></tr>`).join('')}
+      </table>
+      <p style="font-weight:700;color:#334155;margin:18px 0 6px">Message:</p>
+      <p style="white-space:pre-wrap;margin:0">${escapeHtml(safeMessage)}</p>
+    </div>
+  `;
+
+  return { subject: `Website Enquiry - ${safeProduct}`, text, html };
+};
+
+const isWebsiteEnquiryRateLimited = (req) => {
+  const key = req.ip || req.get('x-forwarded-for') || 'unknown';
+  const now = Date.now();
+  const hits = (websiteEnquiryHits.get(key) || []).filter((timestamp) => now - timestamp < websiteEnquiryWindowMs);
+  hits.push(now);
+  websiteEnquiryHits.set(key, hits);
+  return hits.length > websiteEnquiryMaxHits;
+};
+
 const buildDepartmentFilter = (departments) => {
   const departmentFilter = departments.map((department) => `department = ${escapeFilterValue(department)}`).join(' || ');
   return `is_active = true && (${departmentFilter})`;
@@ -176,11 +233,65 @@ const authorizeOrderEmailRequest = async (req) => {
 };
 
 const app = express();
+app.set('trust proxy', true);
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, version: 'push-mail-2026-07-27', pocketBaseUrl, pushEnabled, mailEnabled });
+  res.json({ ok: true, version: 'push-mail-2026-08-04', pocketBaseUrl, pushEnabled, mailEnabled });
+});
+
+app.post('/api/send-website-enquiry', async (req, res) => {
+  try {
+    if (!mailEnabled) {
+      res.status(500).json({ error: 'Mail is not configured. Set SMTP_USER, SMTP_PASS, and SMTP_FROM_EMAIL.' });
+      return;
+    }
+
+    if (isWebsiteEnquiryRateLimited(req)) {
+      res.status(429).json({ error: 'Too many enquiries. Please try again later.' });
+      return;
+    }
+
+    const { name, company, email, quantity, product, message, website } = req.body || {};
+
+    if (website) {
+      res.json({ ok: true });
+      return;
+    }
+
+    const senderEmail = String(email || '').trim();
+    const senderName = String(name || '').trim();
+    const enquiryMessage = String(message || '').trim();
+
+    if (!senderName || senderName.length > 120) {
+      res.status(400).json({ error: 'Valid name is required.' });
+      return;
+    }
+    if (!isValidEmail(senderEmail)) {
+      res.status(400).json({ error: 'Valid email is required.' });
+      return;
+    }
+    if (!enquiryMessage || enquiryMessage.length > 5000) {
+      res.status(400).json({ error: 'Valid message is required.' });
+      return;
+    }
+
+    const mail = buildWebsiteEnquiryMail({ name, company, email, quantity, product, message });
+    const info = await mailTransporter.sendMail({
+      from: `${smtpFromName} <${smtpFromEmail}>`,
+      replyTo: `${senderName} <${senderEmail}>`,
+      to: websiteEnquiryTo,
+      subject: mail.subject,
+      text: mail.text,
+      html: mail.html,
+    });
+
+    res.json({ ok: true, messageId: info.messageId });
+  } catch (error) {
+    console.error('Website enquiry email failed:', describeError(error));
+    res.status(500).json({ error: error?.message || 'Website enquiry email failed' });
+  }
 });
 
 app.post('/api/send-order-email', async (req, res) => {

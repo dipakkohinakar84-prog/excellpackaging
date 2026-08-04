@@ -1,0 +1,1153 @@
+html {
+    scroll-behavior: smooth;
+}
+
+:root {
+    --motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --motion-duration: 680ms;
+}
+
+.excell-site {
+    background: #f7f9fc;
+    color: #183b56;
+}
+
+.excell-site img {
+    max-width: 100%;
+}
+
+.text-reveal {
+    opacity: 0;
+    transform: translateY(16px);
+    transition: opacity var(--motion-duration) ease, transform var(--motion-duration) var(--motion-ease);
+    transition-delay: var(--reveal-delay, 0ms);
+    will-change: opacity, transform;
+}
+
+.text-reveal.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.text-reveal:nth-child(2) {
+    --reveal-delay: 90ms;
+}
+
+.text-reveal:nth-child(3) {
+    --reveal-delay: 160ms;
+}
+
+.text-reveal:nth-child(4) {
+    --reveal-delay: 230ms;
+}
+
+.excell-navbar {
+    background: rgba(255, 255, 255, 0.97);
+    box-shadow: 0 10px 30px rgba(24, 59, 86, 0.08);
+    position: relative;
+    z-index: 20;
+}
+
+.excell-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    color: #183b56;
+    font-weight: 800;
+}
+
+.excell-brand img,
+.excell-footer-logo img {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+}
+
+.excell-brand span,
+.excell-footer-logo span {
+    color: #183b56;
+    font-size: 18px;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.excell-navbar.navbar-white .navbar-nav > .nav-item > .nav-link {
+    color: #183b56;
+    font-weight: 700;
+    transition: color 220ms ease;
+}
+
+.excell-navbar.navbar-white .navbar-nav > .nav-item > .nav-link:hover,
+.excell-navbar.navbar-white .navbar-nav > .nav-item > .nav-link:focus {
+    color: #0169d1;
+}
+
+.excell-navbar .navbar-nav > .nav-item {
+    margin-left: 28px;
+}
+
+.excell-navbar .navbar-nav > .nav-item:first-child {
+    margin-left: 0;
+}
+
+.excell-navbar .close-button {
+    display: none;
+}
+
+.excell-navbar .navbar-toggler {
+    padding: 8px;
+}
+
+.excell-navbar .navbar-toggler img {
+    width: 24px;
+    height: 24px;
+}
+
+.excell-hero-section {
+    background-image: linear-gradient(90deg, rgba(12, 31, 51, 0.9), rgba(12, 31, 51, 0.62), rgba(12, 31, 51, 0.08)), url('../images/excell/hero.png');
+    background-position: center;
+    background-size: cover;
+    min-height: 760px;
+    padding: 132px 0 34px;
+    overflow: hidden;
+}
+
+.excell-hero-copy h1,
+.excell-section-head h2,
+.excell-capability-section h2,
+.excell-process-section h2,
+.excell-applications-panel h2,
+.excell-contact-section h2 {
+    color: #183b56;
+    font-weight: 800;
+    letter-spacing: -0.035em;
+}
+
+.excell-hero-copy h1 {
+    color: #ffffff;
+    font-size: 72px;
+    line-height: 1.02;
+    margin: 22px 0;
+    max-width: 680px;
+}
+
+.excell-hero-copy p {
+    max-width: 560px;
+    color: rgba(255, 255, 255, 0.86);
+    font-size: 20px;
+    line-height: 1.7;
+}
+
+.excell-hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-top: 30px;
+}
+
+.excell-hero-actions .btn,
+.excell-product-content a,
+.excell-text-link,
+.excell-enquiry-form button {
+    transition: background-color 220ms ease, border-color 220ms ease, color 220ms ease, opacity 220ms ease;
+}
+
+.excell-products-section,
+.excell-facilities-section,
+.excell-process-section,
+.excell-applications-section,
+.excell-contact-section {
+    padding: 110px 0;
+}
+
+.excell-kicker {
+    display: inline-block;
+    color: #0169d1;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    margin-bottom: 18px;
+    text-transform: uppercase;
+}
+
+.excell-section-head h2,
+.excell-capability-section h2,
+.excell-process-section h2,
+.excell-applications-panel h2,
+.excell-contact-section h2 {
+    font-size: 52px;
+    line-height: 1.08;
+}
+
+.excell-contact-section p {
+    color: #5a7184;
+    font-size: 18px;
+    line-height: 1.8;
+}
+
+.excell-text-link,
+.excell-product-content a {
+    color: #0169d1;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 800;
+}
+
+.excell-section-head {
+    max-width: 760px;
+    margin-bottom: 52px;
+}
+
+.excell-product-line {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 48px;
+    align-items: center;
+    padding: 46px;
+    background: #ffffff;
+    border-radius: 34px;
+    box-shadow: 0 24px 70px rgba(24, 59, 86, 0.08);
+    transition: border-color 260ms ease, box-shadow 260ms ease, transform 260ms var(--motion-ease);
+}
+
+.excell-product-line:hover {
+    box-shadow: 0 28px 78px rgba(24, 59, 86, 0.11);
+    transform: translateY(-3px);
+}
+
+.excell-product-line + .excell-product-line {
+    margin-top: 30px;
+}
+
+.excell-product-line-reverse .excell-product-media {
+    order: 2;
+}
+
+.excell-product-media img {
+    display: block;
+    width: 100%;
+    height: 430px;
+    object-fit: cover;
+    border-radius: 26px;
+    transition: transform 700ms var(--motion-ease);
+}
+
+.excell-product-line:hover .excell-product-media img {
+    transform: scale(1.025);
+}
+
+.excell-product-content > span {
+    color: #0169d1;
+    font-size: 14px;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+}
+
+.excell-product-content h3 {
+    color: #183b56;
+    font-size: 38px;
+    font-weight: 800;
+    margin: 12px 0 14px;
+}
+
+.excell-product-content p {
+    color: #5a7184;
+    font-size: 17px;
+}
+
+.excell-product-content ul {
+    counter-reset: product-items;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    list-style: none;
+    margin: 30px 0;
+    padding: 0;
+}
+
+.excell-product-content li {
+    align-items: center;
+    background: #f7f9fc;
+    border: 1px solid #e6edf4;
+    border-radius: 16px;
+    color: #183b56;
+    display: grid;
+    grid-template-columns: 12px 1fr;
+    gap: 12px;
+    font-size: 17px;
+    font-weight: 800;
+    line-height: 1.35;
+    min-height: 64px;
+    padding: 14px;
+    position: relative;
+    transition: background-color 220ms ease, border-color 220ms ease;
+}
+
+.excell-product-content li:hover {
+    background: #eef6ff;
+    border-color: rgba(1, 105, 209, 0.18);
+}
+
+.excell-product-content li::before {
+    background: #0169d1;
+    border-radius: 999px;
+    content: '';
+    counter-increment: product-items;
+    display: block;
+    height: 9px;
+    position: static;
+    width: 9px;
+}
+
+.excell-capability-section {
+    background: #eff5fb;
+    padding: 110px 0;
+}
+
+.excell-capability-image img,
+.excell-facility-image img,
+.excell-process-image {
+    display: block;
+    width: 100%;
+    object-fit: cover;
+    border-radius: 34px;
+    box-shadow: 0 24px 70px rgba(24, 59, 86, 0.12);
+    transition: transform 700ms var(--motion-ease), box-shadow 260ms ease;
+}
+
+.excell-capability-image:hover img,
+.excell-facility-image:hover img,
+.excell-process-image:hover {
+    box-shadow: 0 28px 82px rgba(24, 59, 86, 0.15);
+    transform: translateY(-3px);
+}
+
+.excell-capability-image img {
+    height: 640px;
+}
+
+.excell-accordion {
+    margin-top: 34px;
+}
+
+.excell-accordion-item {
+    background: #ffffff;
+    border-radius: 18px;
+    margin-bottom: 12px;
+    overflow: hidden;
+    transition: box-shadow 220ms ease, transform 260ms var(--motion-ease);
+}
+
+.excell-accordion-item:hover {
+    box-shadow: 0 14px 38px rgba(24, 59, 86, 0.08);
+    transform: translateY(-2px);
+}
+
+.excell-accordion-item button {
+    width: 100%;
+    border: 0;
+    background: #ffffff;
+    color: #183b56;
+    cursor: pointer;
+    font-weight: 800;
+    padding: 20px 22px;
+    text-align: left;
+    transition: color 220ms ease, background-color 220ms ease;
+}
+
+.excell-accordion-item button:hover {
+    color: #0169d1;
+}
+
+.excell-accordion-item p {
+    color: #5a7184;
+    margin: 0;
+    padding: 0 22px 22px;
+}
+
+.excell-accordion-item .collapsing {
+    transition: height 340ms var(--motion-ease);
+}
+
+.excell-facility-grid {
+    display: grid;
+    grid-template-columns: 1.18fr 0.82fr;
+    gap: 34px;
+    align-items: stretch;
+}
+
+.excell-facility-image img {
+    height: 620px;
+}
+
+.excell-facility-cards {
+    display: grid;
+    gap: 18px;
+}
+
+.excell-facility-cards div {
+    display: grid;
+    align-content: center;
+    min-height: 180px;
+    padding: 28px;
+    background: #ffffff;
+    border-radius: 24px;
+    box-shadow: 0 18px 60px rgba(24, 59, 86, 0.08);
+}
+
+.excell-facility-cards strong {
+    color: #0169d1;
+    font-size: 14px;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.excell-facility-cards p {
+    color: #5a7184;
+    font-size: 17px;
+    margin: 10px 0 0;
+}
+
+.excell-process-section {
+    background: #ffffff;
+}
+
+.excell-process-list {
+    list-style: none;
+    margin: 34px 0 0;
+    padding: 0;
+}
+
+.excell-process-list li {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    border-bottom: 1px solid #e6edf4;
+    color: #183b56;
+    font-size: 18px;
+    font-weight: 800;
+    padding: 18px 0;
+}
+
+.excell-process-list span {
+    color: #0169d1;
+    font-size: 13px;
+    letter-spacing: 0.08em;
+}
+
+.excell-process-image {
+    height: 560px;
+}
+
+.excell-applications-section {
+    padding-top: 0;
+}
+
+.excell-clients-section {
+    background: #ffffff;
+    overflow: hidden;
+    padding: 96px 0;
+}
+
+.excell-clients-head {
+    max-width: 760px;
+    margin-bottom: 34px;
+}
+
+.excell-clients-head h2 {
+    color: #183b56;
+    font-size: 42px;
+    font-weight: 800;
+    letter-spacing: -0.035em;
+    line-height: 1.12;
+}
+
+.excell-client-marquee {
+    display: flex;
+    gap: 18px;
+    overflow: hidden;
+    padding: 8px 0;
+    position: relative;
+    user-select: none;
+}
+
+.excell-client-marquee::before,
+.excell-client-marquee::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 2;
+    width: min(140px, 18vw);
+    pointer-events: none;
+}
+
+.excell-client-marquee::before {
+    left: 0;
+    background: linear-gradient(90deg, #ffffff, rgba(255, 255, 255, 0));
+}
+
+.excell-client-marquee::after {
+    right: 0;
+    background: linear-gradient(270deg, #ffffff, rgba(255, 255, 255, 0));
+}
+
+.excell-client-track {
+    animation: excellClientScroll 42s linear infinite;
+    display: flex;
+    flex: 0 0 auto;
+    gap: 18px;
+    min-width: max-content;
+}
+
+.excell-client-marquee:hover .excell-client-track {
+    animation-play-state: paused;
+}
+
+.excell-client-logo {
+    align-items: center;
+    background: #f7f9fc;
+    border: 1px solid #e6edf4;
+    border-radius: 22px;
+    display: flex;
+    height: 112px;
+    justify-content: center;
+    padding: 18px 26px;
+    width: 220px;
+    transition: background-color 220ms ease, border-color 220ms ease;
+}
+
+.excell-client-logo:hover {
+    background: #ffffff;
+    border-color: rgba(1, 105, 209, 0.22);
+}
+
+.excell-client-logo img {
+    display: block;
+    filter: none;
+    max-height: 66px;
+    max-width: 160px;
+    object-fit: contain;
+    opacity: 1;
+    transition: opacity 220ms ease, transform 260ms var(--motion-ease);
+}
+
+.excell-client-logo:hover img {
+    opacity: 1;
+    transform: translateY(-2px);
+}
+
+@keyframes excellClientScroll {
+    from {
+        transform: translateX(0);
+    }
+
+    to {
+        transform: translateX(calc(-100% - 18px));
+    }
+}
+
+.excell-applications-panel {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+    background: #102a43;
+    border-radius: 34px;
+    padding: 56px;
+}
+
+.excell-applications-panel h2 {
+    color: #ffffff;
+}
+
+.excell-applications-panel ul {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.excell-applications-panel li {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 18px;
+    color: #ffffff;
+    font-weight: 800;
+    padding: 18px;
+}
+
+.excell-contact-section {
+    background: #ffffff;
+}
+
+.excell-final-about-section {
+    background: #f7f9fc;
+    padding: 110px 0;
+}
+
+.excell-final-about-panel {
+    display: grid;
+    grid-template-columns: 1fr 0.92fr;
+    gap: 44px;
+    align-items: stretch;
+    background: #ffffff;
+    border-radius: 34px;
+    padding: 44px;
+    box-shadow: 0 24px 70px rgba(24, 59, 86, 0.08);
+    transition: box-shadow 260ms ease;
+}
+
+.excell-final-about-panel:hover {
+    box-shadow: 0 28px 82px rgba(24, 59, 86, 0.11);
+}
+
+.excell-final-about-copy {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.excell-final-about-copy h2 {
+    color: #183b56;
+    font-size: 48px;
+    font-weight: 800;
+    letter-spacing: -0.035em;
+    line-height: 1.08;
+    margin-bottom: 24px;
+}
+
+.excell-final-about-copy p {
+    color: #5a7184;
+    font-size: 18px;
+    line-height: 1.8;
+}
+
+.excell-final-about-copy p + p {
+    margin-top: 8px;
+}
+
+.excell-final-about-card {
+    overflow: hidden;
+    background: #102a43;
+    border-radius: 28px;
+    color: #ffffff;
+}
+
+.excell-final-about-card img {
+    display: block;
+    width: 100%;
+    height: 320px;
+    object-fit: cover;
+    transition: transform 700ms var(--motion-ease);
+}
+
+.excell-final-about-card:hover img {
+    transform: scale(1.025);
+}
+
+.excell-final-about-card div {
+    padding: 28px;
+}
+
+.excell-final-about-card strong {
+    display: block;
+    font-size: 22px;
+    margin-bottom: 18px;
+}
+
+.excell-final-about-card ul {
+    display: grid;
+    gap: 12px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.excell-final-about-card li {
+    color: rgba(255, 255, 255, 0.78);
+    font-weight: 700;
+    padding-left: 18px;
+    position: relative;
+}
+
+.excell-final-about-card li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 10px;
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: #ffffff;
+}
+
+.excell-contact-details {
+    display: grid;
+    gap: 14px;
+    margin-top: 30px;
+}
+
+.excell-contact-details div {
+    display: grid;
+    gap: 4px;
+    padding: 18px;
+    background: #f7f9fc;
+    border-radius: 18px;
+}
+
+.excell-contact-details strong {
+    color: #0169d1;
+}
+
+.excell-contact-details a,
+.excell-contact-details span {
+    color: #183b56;
+    font-weight: 700;
+}
+
+.excell-enquiry-form {
+    background: #102a43;
+    border-radius: 34px;
+    padding: 34px;
+}
+
+.excell-enquiry-form label {
+    color: #ffffff;
+    display: grid;
+    font-weight: 800;
+    gap: 9px;
+    margin-bottom: 18px;
+}
+
+.excell-enquiry-form input,
+.excell-enquiry-form select,
+.excell-enquiry-form textarea {
+    width: 100%;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.95);
+    color: #183b56;
+    min-height: 52px;
+    padding: 12px 14px;
+}
+
+.excell-enquiry-form textarea {
+    min-height: 140px;
+}
+
+.excell-enquiry-form button {
+    border: 0;
+    border-radius: 999px;
+    background: #0169d1;
+    color: #ffffff;
+    cursor: pointer;
+    font-weight: 900;
+    min-height: 54px;
+    padding: 0 28px;
+}
+
+.excell-enquiry-form button:disabled {
+    cursor: not-allowed;
+    opacity: 0.72;
+}
+
+.excell-honeypot {
+    height: 0;
+    left: -9999px;
+    overflow: hidden;
+    position: absolute;
+    width: 0;
+}
+
+.excell-form-status {
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 14px;
+    font-weight: 700;
+    margin: 14px 0 0;
+}
+
+.excell-form-status.is-success {
+    color: #b7f7d0;
+}
+
+.excell-form-status.is-error {
+    color: #ffd0d0;
+}
+
+.excell-footer {
+    background: #0b1f33;
+    color: rgba(255, 255, 255, 0.72);
+    padding: 60px 0 26px;
+}
+
+.excell-footer-logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.excell-footer-logo span,
+.excell-footer h5 {
+    color: #ffffff;
+}
+
+.excell-footer a,
+.excell-footer span {
+    color: rgba(255, 255, 255, 0.72);
+    display: block;
+    margin-bottom: 10px;
+}
+
+.excell-copyright {
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    margin-top: 42px;
+    padding-top: 24px;
+}
+
+@media (max-width: 991px) {
+    .excell-navbar .container {
+        position: relative;
+    }
+
+    .excell-navbar .navbar-collapse {
+        left: 0;
+        right: 0;
+        top: 0;
+        width: 100%;
+        background: #ffffff;
+        border-radius: 18px;
+        padding: 20px;
+        box-shadow: 0 18px 54px rgba(24, 59, 86, 0.18);
+    }
+
+    .excell-navbar .close-button {
+        display: flex;
+    }
+
+    .excell-navbar .navbar-nav {
+        align-items: stretch !important;
+    }
+
+    .excell-navbar .navbar-nav > .nav-item {
+        margin-left: 0 !important;
+        width: 100%;
+    }
+
+    .excell-navbar.navbar-white .navbar-nav > .nav-item > .nav-link {
+        border-bottom: 1px solid #eef2f7;
+        color: #183b56 !important;
+        display: flex;
+        min-height: 44px;
+        width: 100%;
+    }
+
+    .excell-navbar .navbar-nav > .nav-item .btn {
+        margin-top: 14px;
+        width: 100%;
+    }
+
+    .excell-hero-copy h1,
+    .excell-section-head h2,
+    .excell-capability-section h2,
+    .excell-process-section h2,
+    .excell-applications-panel h2,
+    .excell-contact-section h2 {
+        font-size: 42px;
+    }
+
+    .excell-hero-section {
+        background-position: 62% center;
+        min-height: 700px;
+        padding-top: 104px;
+    }
+
+    .excell-final-about-panel,
+    .excell-product-line,
+    .excell-facility-grid,
+    .excell-applications-panel {
+        grid-template-columns: 1fr;
+    }
+
+    .excell-product-line-reverse .excell-product-media {
+        order: 0;
+    }
+
+    .excell-process-image {
+        margin-top: 34px;
+    }
+}
+
+@media (max-width: 575px) {
+    .excell-brand span {
+        font-size: 16px;
+    }
+
+    .excell-hero-section,
+    .excell-final-about-section,
+    .excell-products-section,
+    .excell-capability-section,
+    .excell-facilities-section,
+    .excell-process-section,
+    .excell-applications-section,
+    .excell-clients-section,
+    .excell-contact-section {
+        padding: 70px 0;
+    }
+
+    .excell-hero-section {
+        background-image: linear-gradient(90deg, rgba(12, 31, 51, 0.95), rgba(12, 31, 51, 0.78)), url('../images/excell/hero.png');
+        background-position: 72% center;
+        min-height: auto;
+        padding-top: 72px;
+        padding-bottom: 22px;
+    }
+
+    .excell-hero-copy h1 {
+        font-size: 38px;
+        line-height: 1.08;
+        margin: 16px 0;
+    }
+
+    .excell-hero-copy p {
+        font-size: 16px;
+        line-height: 1.62;
+    }
+
+    .excell-hero-actions {
+        gap: 10px;
+        margin-top: 22px;
+    }
+
+    .excell-hero-actions .btn {
+        width: 100%;
+        min-height: 48px;
+    }
+
+    .excell-section-head {
+        margin-bottom: 28px;
+    }
+
+    .excell-section-head h2,
+    .excell-clients-head h2,
+    .excell-capability-section h2,
+    .excell-process-section h2,
+    .excell-applications-panel h2,
+    .excell-contact-section h2 {
+        font-size: 34px;
+        line-height: 1.12;
+    }
+
+    .excell-kicker {
+        font-size: 12px;
+        margin-bottom: 12px;
+    }
+
+    .excell-product-line + .excell-product-line {
+        margin-top: 18px;
+    }
+
+    .excell-product-content h3 {
+        font-size: 28px;
+        line-height: 1.15;
+    }
+
+    .excell-product-content p,
+    .excell-facility-cards p,
+    .excell-final-about-copy p,
+    .excell-contact-section p {
+        font-size: 16px;
+        line-height: 1.65;
+    }
+
+    .excell-product-content li {
+        font-size: 16px;
+        grid-template-columns: 12px 1fr;
+        min-height: 58px;
+        padding: 12px;
+    }
+
+    .excell-product-content li::before {
+        height: 8px;
+        width: 8px;
+    }
+
+    .excell-accordion {
+        margin-top: 22px;
+    }
+
+    .excell-accordion-item {
+        border-radius: 14px;
+    }
+
+    .excell-accordion-item button {
+        padding: 16px;
+    }
+
+    .excell-accordion-item p {
+        padding: 0 16px 16px;
+    }
+
+    .excell-facility-cards {
+        gap: 12px;
+        margin-top: 18px;
+    }
+
+    .excell-facility-cards div {
+        min-height: auto;
+        padding: 20px;
+        border-radius: 18px;
+    }
+
+    .excell-process-list {
+        margin-top: 20px;
+    }
+
+    .excell-process-list li {
+        align-items: flex-start;
+        font-size: 16px;
+        gap: 12px;
+        padding: 14px 0;
+    }
+
+    .excell-process-image {
+        margin-top: 24px;
+    }
+
+    .excell-applications-panel li {
+        border-radius: 14px;
+        font-size: 15px;
+        padding: 14px;
+    }
+
+    .excell-clients-head {
+        margin-bottom: 18px;
+        max-width: 320px;
+        padding-left: 2px;
+    }
+
+    .excell-clients-head h2 {
+        font-size: 27px;
+        line-height: 1.14;
+    }
+
+    .excell-client-marquee {
+        gap: 10px;
+        margin-left: -14px;
+        margin-right: -14px;
+        padding: 4px 0;
+    }
+
+    .excell-client-marquee::before,
+    .excell-client-marquee::after {
+        width: 42px;
+    }
+
+    .excell-client-track {
+        animation-duration: 30s;
+        gap: 10px;
+    }
+
+    .excell-client-logo {
+        border-radius: 14px;
+        height: 72px;
+        padding: 10px 14px;
+        width: 138px;
+    }
+
+    .excell-client-logo img {
+        max-height: 42px;
+        max-width: 108px;
+    }
+
+    .excell-final-about-card div {
+        padding: 20px;
+    }
+
+    .excell-final-about-card strong {
+        font-size: 20px;
+    }
+
+    .excell-final-about-card li {
+        font-size: 15px;
+        line-height: 1.45;
+    }
+
+    .excell-contact-details {
+        margin-bottom: 24px;
+    }
+
+    .excell-enquiry-form label {
+        font-size: 14px;
+        margin-bottom: 14px;
+    }
+
+    .excell-enquiry-form input,
+    .excell-enquiry-form select,
+    .excell-enquiry-form textarea {
+        min-height: 48px;
+    }
+
+    .excell-enquiry-form button {
+        width: 100%;
+    }
+
+    .excell-footer {
+        padding: 44px 0 22px;
+    }
+
+    .excell-footer .col-lg-4,
+    .excell-footer .col-lg-2 {
+        margin-bottom: 24px;
+    }
+
+    .excell-copyright {
+        margin-top: 14px;
+        padding-top: 18px;
+    }
+
+    .excell-product-media img,
+    .excell-final-about-card img,
+    .excell-capability-image img,
+    .excell-facility-image img,
+    .excell-process-image {
+        height: 300px;
+        min-height: 300px;
+    }
+
+    .excell-product-line,
+    .excell-applications-panel,
+    .excell-final-about-panel,
+    .excell-enquiry-form {
+        border-radius: 24px;
+        padding: 24px;
+    }
+
+    .excell-final-about-copy h2 {
+        font-size: 36px;
+    }
+
+    .excell-product-content ul,
+    .excell-applications-panel ul {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .text-reveal {
+        opacity: 1;
+        transform: none;
+        transition: none;
+    }
+
+    .excell-client-track {
+        animation: none;
+    }
+
+    .excell-client-marquee {
+        overflow-x: auto;
+    }
+}

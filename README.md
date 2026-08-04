@@ -70,7 +70,10 @@ SMTP_PASS=your_admin_mailbox_password
 SMTP_FROM_NAME=Excell Packaging
 SMTP_FROM_EMAIL=orders@excellpackaging.in
 SMTP_REPLY_TO=support@excellpackaging.in
+WEBSITE_ENQUIRY_TO=support@excellpackaging.in
 ```
+
+The public website enquiry form posts to the relay endpoint `/api/send-website-enquiry`. Set `WEBSITE_ENQUIRY_TO` to the mailbox that should receive public website enquiries.
 
 Frontend order-email calls are authorized with the current PocketBase `erp_users` auth token. `MAIL_API_KEY` is optional and should only be used for server-side curl/manual tests.
 
