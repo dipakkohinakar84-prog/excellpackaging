@@ -44,8 +44,9 @@ const Login: React.FC<{ onLogin: (user: User) => void; onNavigate?: (v: string) 
 
       // Set verified to false so the poll genuinely waits for the link click
       try {
-        const adminEmail = import.meta.env.VITE_POCKETBASE_ADMIN_EMAIL || 'finix8421@gmail.com';
-        const adminPass = import.meta.env.VITE_POCKETBASE_ADMIN_PASSWORD || '9822334020';
+        const adminEmail = import.meta.env.VITE_POCKETBASE_ADMIN_EMAIL;
+        const adminPass = import.meta.env.VITE_POCKETBASE_ADMIN_PASSWORD;
+        if (!adminEmail || !adminPass) throw new Error('PocketBase admin credentials are not configured.');
         await pb.admins.authWithPassword(adminEmail, adminPass);
         const record = await pb.collection('erp_users').getFirstListItem(
           `email = "${userEmail}"`,
@@ -150,8 +151,8 @@ const Login: React.FC<{ onLogin: (user: User) => void; onNavigate?: (v: string) 
 
     try {
       await pb.admins.authWithPassword(
-        import.meta.env.VITE_POCKETBASE_ADMIN_EMAIL || 'finix8421@gmail.com',
-        import.meta.env.VITE_POCKETBASE_ADMIN_PASSWORD || '9822334020'
+        import.meta.env.VITE_POCKETBASE_ADMIN_EMAIL,
+        import.meta.env.VITE_POCKETBASE_ADMIN_PASSWORD
       );
       const record = await pb.collection('erp_users').getFirstListItem(
         `email = "${email}"`,

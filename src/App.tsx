@@ -3533,6 +3533,11 @@ const CustomerManagement: React.FC<{ onError: () => void; editingId?: number }> 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [formData, setFormData] = useState({ name: '', proprietor: '', address: '', city: '', contact: '', email: '', gst: '', type: 'Direct', reference: '', remarks: '' });
+  const [expandedCustomerId, setExpandedCustomerId] = useState<number | null>(null);
+  const [portalAccounts, setPortalAccounts] = useState<Record<number, any[]>>({});
+  const [newPortalEmail, setNewPortalEmail] = useState('');
+  const [addingPortal, setAddingPortal] = useState(false);
+  const [panelLoading, setPanelLoading] = useState<number | null>(null);
 
   const fetchData = async () => {
     setLoading(true);
@@ -3607,24 +3612,74 @@ const CustomerManagement: React.FC<{ onError: () => void; editingId?: number }> 
     }
   };
 
-  const handleInvite = async (customer: Customer) => {
-    if (!customer.email) return;
+  const loadPortalAccounts = async (customerId: number) => {
+    setPanelLoading(customerId);
     try {
-      const existing = await pb.collection('client_portal_users').getFullList({ filter: `customer_id = ${customer.id}`, requestKey: null as any });
-      if (existing.length > 0) {
-        await pb.collection('client_portal_users').requestPasswordReset(customer.email);
-        alert('Password reset email sent to ' + customer.email);
-        return;
-      }
-
-      const randomPass = crypto.randomUUID();
-      await pb.collection('client_portal_users').create({ email: customer.email, emailVisibility: true, password: randomPass, passwordConfirm: randomPass, customer_id: customer.id, customer_name: customer.name, is_active: true });
-
-      await pb.collection('client_portal_users').requestPasswordReset(customer.email);
-      alert('Invitation sent to ' + customer.email);
+      const accounts = await pb.collection('client_portal_users').getFullList({ filter: `customer_id = ${customerId}`, requestKey: null as any });
+      setPortalAccounts(prev => ({ ...prev, [customerId]: accounts }));
     } catch (err: any) {
-      alert(err?.data?.message || err?.message || 'Failed to send invitation');
+      console.error('Failed to load portal accounts:', err);
     }
+    setPanelLoading(null);
+  };
+
+  const addPortalAccount = async (customer: Customer, email: string) => {
+    if (!email || !customer.id) return;
+    setAddingPortal(true);
+    try {
+      const randomPass = crypto.randomUUID();
+      await pb.collection('client_portal_users').create({
+        email, emailVisibility: true, password: randomPass, passwordConfirm: randomPass,
+        customer_id: customer.id, customer_name: customer.name, is_active: true,
+      });
+      await pb.collection('client_portal_users').requestPasswordReset(email);
+      setNewPortalEmail('');
+      await loadPortalAccounts(customer.id);
+      alert('Invitation sent to ' + email);
+    } catch (err: any) {
+      alert(err?.data?.message || err?.message || 'Failed to create account');
+    }
+    setAddingPortal(false);
+  };
+
+  const togglePortalAccount = async (account: any) => {
+    try {
+      await pb.collection('client_portal_users').update(account.id, { is_active: !account.is_active });
+      if (expandedCustomerId != null) await loadPortalAccounts(expandedCustomerId);
+    } catch (err: any) {
+      alert(err?.data?.message || err?.message || 'Failed to update account');
+    }
+  };
+
+  const deletePortalAccount = async (account: any) => {
+    if (!confirm(`Delete portal account ${account.email}?`)) return;
+    try {
+      await pb.collection('client_portal_users').delete(account.id);
+      if (expandedCustomerId != null) await loadPortalAccounts(expandedCustomerId);
+    } catch (err: any) {
+      alert(err?.data?.message || err?.message || 'Failed to delete account');
+    }
+  };
+
+  const sendPortalReset = async (account: any) => {
+    try {
+      await pb.collection('client_portal_users').requestPasswordReset(account.email);
+      alert('Password reset sent to ' + account.email);
+    } catch (err: any) {
+      alert(err?.data?.message || err?.message || 'Failed to send reset');
+    }
+  };
+
+  const handleInviteClick = async (customer: Customer) => {
+    if (!customer.email) return;
+    if (expandedCustomerId === customer.id) {
+      setExpandedCustomerId(null);
+      return;
+    }
+    if (portalAccounts[customer.id] === undefined) {
+      await loadPortalAccounts(customer.id);
+    }
+    setExpandedCustomerId(customer.id);
   };
 
   const deleteCustomer = async (customer: Customer) => {
@@ -3698,7 +3753,8 @@ const CustomerManagement: React.FC<{ onError: () => void; editingId?: number }> 
             </thead>
             <tbody className="divide-y">
               {data.map(c => (
-                <tr key={c.id} className="hover:bg-gray-50/80 transition-colors group">
+                <React.Fragment key={c.id}>
+                <tr className="hover:bg-gray-50/80 transition-colors group">
                   <td className="px-6 py-4 font-bold text-gray-800 sticky left-0 bg-white z-10">{c.name}</td>
                   <td className="px-6 py-4 text-gray-600">{c.city || '—'}</td>
                   <td className="px-6 py-4 text-gray-600">{c.contact || '—'}</td>
@@ -3708,28 +3764,123 @@ const CustomerManagement: React.FC<{ onError: () => void; editingId?: number }> 
                   <td className="px-6 py-4 text-right">
                     <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
                       <button onClick={() => { setEditingCustomer(c); setFormData({ name: c.name || '', proprietor: c.proprietor || '', address: c.address || '', city: c.city || '', contact: c.contact || '', email: c.email || '', gst: c.gst || '', type: c.type || 'Direct', reference: c.reference || '', remarks: c.remarks || '' }); setIsModalOpen(true); }} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg"><Edit size={15} /></button>
-                      {c.email && <button onClick={() => handleInvite(c)} className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg" title="Send portal invitation"><Mail size={15} /></button>}
+                      {c.email && (
+                        <button onClick={() => handleInviteClick(c)} className={`p-1.5 rounded-lg relative ${expandedCustomerId === c.id ? 'text-indigo-700 bg-indigo-100' : 'text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50'}`} title="Portal accounts">
+                          <Mail size={15} />
+                          {portalAccounts[c.id] && portalAccounts[c.id].length > 0 && (
+                            <span className="absolute -top-1 -right-1 w-4 h-4 bg-indigo-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center">{portalAccounts[c.id].length}</span>
+                          )}
+                        </button>
+                      )}
                       <button onClick={() => deleteCustomer(c)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={15} /></button>
                     </div>
                   </td>
                 </tr>
+                {expandedCustomerId === c.id && (
+                  <tr key={`portal-${c.id}`}>
+                    <td colSpan={7} className="px-6 py-4 bg-indigo-50/60 border-t border-indigo-100">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-sm font-bold text-gray-700">Portal Accounts for {c.name}</h4>
+                          {panelLoading === c.id && <Loader2 size={14} className="animate-spin text-indigo-500" />}
+                        </div>
+                        {portalAccounts[c.id] && portalAccounts[c.id].length > 0 ? (
+                          <div className="space-y-2">
+                            {portalAccounts[c.id].map((acc: any) => (
+                              <div key={acc.id} className="flex items-center justify-between bg-white rounded-lg px-4 py-2.5 border border-indigo-100 shadow-sm">
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${acc.is_active ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+                                  <span className="text-sm text-gray-700 truncate">{acc.email}</span>
+                                  {!acc.is_active && <span className="text-[10px] font-bold text-gray-400 uppercase">Disabled</span>}
+                                </div>
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  <button onClick={() => togglePortalAccount(acc)} className={`p-1.5 rounded-lg text-xs ${acc.is_active ? 'text-amber-600 hover:bg-amber-50' : 'text-emerald-600 hover:bg-emerald-50'}`} title={acc.is_active ? 'Disable' : 'Enable'}>
+                                    {acc.is_active ? <Lock size={13} /> : <Check size={13} />}
+                                  </button>
+                                  <button onClick={() => sendPortalReset(acc)} className="p-1.5 rounded-lg text-xs text-blue-500 hover:bg-blue-50" title="Send password reset"><RefreshCw size={13} /></button>
+                                  <button onClick={() => deletePortalAccount(acc)} className="p-1.5 rounded-lg text-xs text-red-400 hover:bg-red-50" title="Delete"><Trash2 size={13} /></button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-gray-400">No portal accounts yet.</p>
+                        )}
+                        <div className="flex gap-2">
+                          <input type="email" placeholder="person@company.com" value={expandedCustomerId === c.id ? newPortalEmail : ''} onChange={e => setNewPortalEmail(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && newPortalEmail.trim()) addPortalAccount(c, newPortalEmail.trim()); }} className="flex-1 px-3 py-2 text-sm bg-white border border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                          <button onClick={() => { if (newPortalEmail.trim()) addPortalAccount(c, newPortalEmail.trim()); }} disabled={addingPortal || !newPortalEmail.trim()} className="px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg font-bold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
+                            {addingPortal ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+                            Add
+                          </button>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
               ))}
             </tbody>
           </table>
         </div>
         <div className="block md:hidden divide-y">
           {data.map(c => (
-            <div key={c.id} className="px-4 py-3 space-y-1">
-              <div className="font-bold text-gray-800">{c.name}</div>
-              <div className="text-xs text-gray-500">{c.city || '—'} · {c.contact || '—'}</div>
-              <div className="flex justify-between items-center">
-                <Badge color="green">{c.type}</Badge>
-                <div className="flex gap-1">
-                  <button onClick={() => { setEditingCustomer(c); setFormData({ name: c.name || '', proprietor: c.proprietor || '', address: c.address || '', city: c.city || '', contact: c.contact || '', email: c.email || '', gst: c.gst || '', type: c.type || 'Direct', reference: c.reference || '', remarks: c.remarks || '' }); setIsModalOpen(true); }} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg"><Edit size={14} /></button>
-                  {c.email && <button onClick={() => handleInvite(c)} className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg" title="Send portal invitation"><Mail size={14} /></button>}
-                  <button onClick={() => deleteCustomer(c)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={14} /></button>
+            <div key={c.id}>
+              <div className="px-4 py-3 space-y-1">
+                <div className="font-bold text-gray-800">{c.name}</div>
+                <div className="text-xs text-gray-500">{c.city || '—'} · {c.contact || '—'}</div>
+                <div className="flex justify-between items-center">
+                  <Badge color="green">{c.type}</Badge>
+                  <div className="flex gap-1">
+                    <button onClick={() => { setEditingCustomer(c); setFormData({ name: c.name || '', proprietor: c.proprietor || '', address: c.address || '', city: c.city || '', contact: c.contact || '', email: c.email || '', gst: c.gst || '', type: c.type || 'Direct', reference: c.reference || '', remarks: c.remarks || '' }); setIsModalOpen(true); }} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg"><Edit size={14} /></button>
+                    {c.email && (
+                      <button onClick={() => handleInviteClick(c)} className={`p-1.5 rounded-lg relative ${expandedCustomerId === c.id ? 'text-indigo-700 bg-indigo-100' : 'text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50'}`} title="Portal accounts">
+                        <Mail size={14} />
+                        {portalAccounts[c.id] && portalAccounts[c.id].length > 0 && (
+                          <span className="absolute -top-1 -right-1 w-4 h-4 bg-indigo-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center">{portalAccounts[c.id].length}</span>
+                        )}
+                      </button>
+                    )}
+                    <button onClick={() => deleteCustomer(c)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={14} /></button>
+                  </div>
                 </div>
               </div>
+              {expandedCustomerId === c.id && (
+                <div className="px-4 pb-4 pt-2 bg-indigo-50/60 border-t border-indigo-100 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-bold text-gray-700">Portal Accounts</h4>
+                    {panelLoading === c.id && <Loader2 size={14} className="animate-spin text-indigo-500" />}
+                  </div>
+                  {portalAccounts[c.id] && portalAccounts[c.id].length > 0 ? (
+                    <div className="space-y-2">
+                      {portalAccounts[c.id].map((acc: any) => (
+                        <div key={acc.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-indigo-100 shadow-sm">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${acc.is_active ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+                            <span className="text-sm text-gray-700 truncate">{acc.email}</span>
+                            {!acc.is_active && <span className="text-[10px] font-bold text-gray-400 uppercase">Off</span>}
+                          </div>
+                          <div className="flex items-center gap-0.5 flex-shrink-0">
+                            <button onClick={() => togglePortalAccount(acc)} className={`p-1.5 rounded-lg text-xs ${acc.is_active ? 'text-amber-600 hover:bg-amber-50' : 'text-emerald-600 hover:bg-emerald-50'}`} title={acc.is_active ? 'Disable' : 'Enable'}>
+                              {acc.is_active ? <Lock size={12} /> : <Check size={12} />}
+                            </button>
+                            <button onClick={() => sendPortalReset(acc)} className="p-1.5 rounded-lg text-xs text-blue-500 hover:bg-blue-50" title="Password reset"><RefreshCw size={12} /></button>
+                            <button onClick={() => deletePortalAccount(acc)} className="p-1.5 rounded-lg text-xs text-red-400 hover:bg-red-50" title="Delete"><Trash2 size={12} /></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-400">No portal accounts yet.</p>
+                  )}
+                  <div className="flex gap-2">
+                    <input type="email" placeholder="person@company.com" value={expandedCustomerId === c.id ? newPortalEmail : ''} onChange={e => setNewPortalEmail(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && newPortalEmail.trim()) addPortalAccount(c, newPortalEmail.trim()); }} className="flex-1 px-3 py-2 text-sm bg-white border border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                    <button onClick={() => { if (newPortalEmail.trim()) addPortalAccount(c, newPortalEmail.trim()); }} disabled={addingPortal || !newPortalEmail.trim()} className="px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg font-bold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
+                      {addingPortal ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+                      Add
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -11561,6 +11712,9 @@ export default function App() {
   const [notificationEventsLoading, setNotificationEventsLoading] = useState(false);
   const [readIds, setReadIds] = useState<Set<number>>(new Set());
   const [toasts, setToasts] = useState<Array<{ id: number; title: string; body: string }>>([]);
+  const [pendingOrderCount, setPendingOrderCount] = useState(0);
+  const [badgeBlink, setBadgeBlink] = useState(false);
+  const pendingCountRef = useRef(0);
   const knownEventIdsRef = useRef<Set<number>>(new Set());
 
   // Load read notification IDs from localStorage when user changes
@@ -12322,7 +12476,6 @@ export default function App() {
           { id: 'dashboard' as AppView, label: 'Dashboard', icon: LayoutDashboard },
           { id: 'worker-dashboard' as AppView, label: 'My Jobs', icon: Hammer },
           { id: 'work-orders' as AppView, label: 'Orders', icon: ClipboardList },
-          { id: 'client-orders' as AppView, label: 'Client Orders', icon: ShoppingCart },
         ],
       },
       {
@@ -12377,6 +12530,13 @@ export default function App() {
             { id: 'expenses' as AppView, label: 'Expenses', icon: IndianRupee },
             { id: 'parties' as AppView, label: 'Parties', icon: Phone },
             { id: 'expense-report' as AppView, label: 'Reports', icon: FileText },
+          ],
+        },
+        {
+          key: 'client-orders-nav',
+          label: 'Client Orders',
+          items: [
+            { id: 'client-orders' as AppView, label: 'Client Orders', icon: ShoppingCart },
           ],
         },
      ]
@@ -12647,6 +12807,34 @@ export default function App() {
     });
   }, []);
 
+  useEffect(() => {
+    if (!loggedInUser) return;
+    const fetchPendingCount = async () => {
+      try {
+        const res = await supabase.from('client_orders').select('id', { count: 'exact', head: true }).eq('status', 'Pending');
+        const count = res.count || 0;
+        if (count > pendingCountRef.current) {
+          setBadgeBlink(true);
+          setTimeout(() => setBadgeBlink(false), 3000);
+          if (pendingCountRef.current > 0) {
+            setToasts(prev => {
+              const id = Date.now();
+              if (prev.some(t => t.id === id)) return prev;
+              const next = [...prev, { id, title: 'New Client Order', body: 'A new client order has been placed.' }];
+              setTimeout(() => setToasts(cur => cur.filter(t => t.id !== id)), 5000);
+              return next;
+            });
+          }
+        }
+        pendingCountRef.current = count;
+        setPendingOrderCount(count);
+      } catch (_e) { /* ignore */ }
+    };
+    fetchPendingCount();
+    const timer = window.setInterval(fetchPendingCount, 15000);
+    return () => window.clearInterval(timer);
+  }, [loggedInUser]);
+
   if (!dbReady) return <DatabaseSetup onRetry={() => setDbReady(true)} />;
 
   if (view === 'client-login') return <ClientPortal clientUser={clientUser} onLogin={handleClientLogin} onLogout={handleClientLogout} />;
@@ -12910,6 +13098,11 @@ export default function App() {
           }
         }
 
+        @keyframes badge-pulse {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.35); }
+        }
+
         @keyframes slideIn {
           from { transform: translateX(100%); opacity: 0; }
           to { transform: translateX(0); opacity: 1; }
@@ -12977,6 +13170,9 @@ export default function App() {
                           >
                             <item.icon size={18} className={view === item.id ? 'text-white' : item.highlight ? 'text-indigo-500' : 'liquid-muted-icon text-slate-500'} />
                             {item.label}
+                            {item.id === 'client-orders' && pendingOrderCount > 0 && (
+                              <span className={`ml-auto h-5 min-w-[20px] px-1 flex items-center justify-center rounded-full bg-red-500 text-[10px] font-black text-white ${badgeBlink ? 'animate-[badge-pulse_0.4s_ease-in-out_3]' : ''}`}>{pendingOrderCount}</span>
+                            )}
                           </button>
                         ))}
                       </div>
@@ -13033,6 +13229,9 @@ export default function App() {
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${isActive ? 'bg-white/15 text-white' : 'text-blue-100/80 hover:bg-white/10 hover:text-white'}`}
                     >
                       {group.label}
+                      {item.id === 'client-orders' && pendingOrderCount > 0 && (
+                        <span className={`ml-1 h-5 min-w-[20px] px-1 flex items-center justify-center rounded-full bg-red-500 text-[10px] font-black text-white ${badgeBlink ? 'animate-[badge-pulse_0.4s_ease-in-out_3]' : ''}`}>{pendingOrderCount}</span>
+                      )}
                     </button>
                   );
                 }
@@ -13321,15 +13520,18 @@ export default function App() {
             </div>
            </div>
            <nav className="lg:hidden fixed bottom-3 left-3 right-3 z-40 no-print border border-white/70 bg-white/82 backdrop-blur-2xl rounded-3xl px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-2xl shadow-slate-300/50">
-            <div className="grid grid-cols-5 gap-1">
-              {navGroups.flatMap(group => group.items).slice(0, 5).map(item => (
+            <div className="grid grid-cols-6 gap-1">
+              {navGroups.flatMap(group => group.items).slice(0, 6).map(item => (
                 <button
                   key={item.id}
                   onClick={() => handleNavClick(item.id as AppView)}
-                  className={`min-h-14 rounded-2xl flex flex-col items-center justify-center gap-1 text-[10px] font-semibold transition-colors ${view === item.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-200/80' : 'text-slate-500 hover:bg-white/80 hover:text-slate-900'}`}
+                  className={`min-h-14 rounded-2xl flex flex-col items-center justify-center gap-1 text-[10px] font-semibold transition-colors relative ${view === item.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-200/80' : 'text-slate-500 hover:bg-white/80 hover:text-slate-900'}`}
                 >
                   <item.icon size={18} />
                   <span className="truncate max-w-full px-1">{item.label}</span>
+                  {item.id === 'client-orders' && pendingOrderCount > 0 && (
+                    <span className={`absolute top-1 right-1 h-4 min-w-[16px] px-0.5 flex items-center justify-center rounded-full bg-red-500 text-[8px] font-black text-white ${badgeBlink ? 'animate-[badge-pulse_0.4s_ease-in-out_3]' : ''}`}>{pendingOrderCount}</span>
+                  )}
                 </button>
               ))}
             </div>

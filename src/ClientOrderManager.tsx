@@ -209,11 +209,12 @@ const ClientOrderManager: React.FC<Props> = ({ loggedInUser }) => {
       ) : (
         <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-left text-sm">
+            <table className="w-full min-w-[1100px] text-left text-sm">
               <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-500">
                 <tr>
                   <th className="px-4 py-3">Date</th>
                   <th className="px-4 py-3">Client Name</th>
+                  <th className="px-4 py-3">Sent By</th>
                   <th className="px-4 py-3">Item Name</th>
                   <th className="px-4 py-3 text-center">Qty</th>
                   <th className="px-4 py-3">ETD</th>
@@ -230,6 +231,7 @@ const ClientOrderManager: React.FC<Props> = ({ loggedInUser }) => {
                     <tr key={row.key} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 text-xs font-bold text-gray-500 whitespace-nowrap">{new Date(row.order.created_at).toLocaleString('en-GB')}</td>
                       <td className="px-4 py-3 font-bold text-gray-800">{row.order.customer_name}</td>
+                      <td className="px-4 py-3 text-xs text-gray-600 truncate max-w-[160px]" title={row.order.created_by || ''}>{row.order.created_by || '—'}</td>
                       <td className="px-4 py-3">
                         <p className="font-bold text-gray-800">{row.item.item_name}</p>
                         <p className="text-[10px] font-mono text-gray-400">Drawing: {row.item.drawing_no || '-'}</p>

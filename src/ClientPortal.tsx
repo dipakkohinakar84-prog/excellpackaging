@@ -397,11 +397,12 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
               <div className="p-8 text-center text-sm font-bold text-slate-400">No orders yet.</div>
             ) : (
               <div className="overflow-auto max-h-[calc(100vh-230px)]">
-                <table className="w-full min-w-[760px] text-left text-sm">
+                <table className="w-full min-w-[880px] text-left text-sm">
                   <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 sticky top-0 z-10">
                     <tr>
                       <th className="px-4 sm:px-6 py-3.5">ERP Order</th>
                       <th className="px-4 sm:px-6 py-3.5 cursor-pointer select-none hover:bg-slate-100 transition-colors" onClick={() => handleOrderSort('date')}>Date{orderSortLabel('date')}</th>
+                      <th className="px-4 sm:px-6 py-3.5">Sent By</th>
                       <th className="px-4 sm:px-6 py-3.5">Item</th>
                       <th className="px-4 sm:px-6 py-3.5 text-center">Qty</th>
                       <th className="px-4 sm:px-6 py-3.5 cursor-pointer select-none hover:bg-slate-100 transition-colors" onClick={() => handleOrderSort('etd')}>ETD{orderSortLabel('etd')}</th>
@@ -414,6 +415,7 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
                         <tr key={row.key} className="hover:bg-slate-50 transition-colors">
                           <td className="px-4 sm:px-6 py-3 font-black text-indigo-600">{row.item.work_order_id ? `#${row.item.work_order_id}` : '-'}</td>
                           <td className="px-4 sm:px-6 py-3 text-xs font-semibold text-slate-500 whitespace-nowrap">{new Date(row.order.created_at).toLocaleString('en-GB')}</td>
+                          <td className="px-4 sm:px-6 py-3 text-xs text-slate-500 truncate max-w-[140px]" title={row.order.created_by || ''}>{row.order.created_by || '—'}</td>
                           <td className="px-4 sm:px-6 py-3 font-bold text-slate-800">{row.item.item_name}</td>
                           <td className="px-4 sm:px-6 py-3 text-center font-black text-slate-700">{row.item.qty}</td>
                           <td className="px-4 sm:px-6 py-3 text-xs font-semibold text-slate-500 whitespace-nowrap">{row.item.etd || '-'}</td>

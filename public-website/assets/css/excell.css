@@ -4,7 +4,7 @@ html {
 
 :root {
     --motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
-    --motion-duration: 680ms;
+    --motion-duration: 420ms;
 }
 
 .excell-site {
@@ -16,12 +16,11 @@ html {
     max-width: 100%;
 }
 
-.text-reveal {
+.js .text-reveal {
     opacity: 0;
     transform: translateY(16px);
     transition: opacity var(--motion-duration) ease, transform var(--motion-duration) var(--motion-ease);
     transition-delay: var(--reveal-delay, 0ms);
-    will-change: opacity, transform;
 }
 
 .text-reveal.is-visible {
@@ -29,16 +28,45 @@ html {
     transform: translateY(0);
 }
 
+.excell-hero-copy .text-reveal {
+    opacity: 1;
+    transform: none;
+    animation: excellHeroReveal 420ms var(--motion-ease) backwards;
+}
+
+.excell-hero-copy .text-reveal:nth-child(2) {
+    animation-delay: 60ms;
+}
+
+.excell-hero-copy .text-reveal:nth-child(3) {
+    animation-delay: 120ms;
+}
+
+.excell-hero-copy .text-reveal:nth-child(4) {
+    animation-delay: 180ms;
+}
+
+@keyframes excellHeroReveal {
+    from {
+        opacity: 0;
+        transform: translateY(16px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
 .text-reveal:nth-child(2) {
-    --reveal-delay: 90ms;
+    --reveal-delay: 40ms;
 }
 
 .text-reveal:nth-child(3) {
-    --reveal-delay: 160ms;
+    --reveal-delay: 80ms;
 }
 
 .text-reveal:nth-child(4) {
-    --reveal-delay: 230ms;
+    --reveal-delay: 120ms;
 }
 
 .excell-navbar {
@@ -53,7 +81,7 @@ html {
     align-items: center;
     gap: 12px;
     color: #183b56;
-    font-weight: 800;
+    font-weight: 700;
 }
 
 .excell-brand img,
@@ -67,13 +95,13 @@ html {
 .excell-footer-logo span {
     color: #183b56;
     font-size: 18px;
-    font-weight: 800;
+    font-weight: 700;
     line-height: 1;
 }
 
 .excell-navbar.navbar-white .navbar-nav > .nav-item > .nav-link {
     color: #183b56;
-    font-weight: 700;
+    font-weight: 600;
     transition: color 220ms ease;
 }
 
@@ -119,7 +147,7 @@ html {
 .excell-applications-panel h2,
 .excell-contact-section h2 {
     color: #183b56;
-    font-weight: 800;
+    font-weight: 700;
     letter-spacing: -0.035em;
 }
 
@@ -164,7 +192,7 @@ html {
     display: inline-block;
     color: #0169d1;
     font-size: 13px;
-    font-weight: 800;
+    font-weight: 700;
     letter-spacing: 0.08em;
     margin-bottom: 18px;
     text-transform: uppercase;
@@ -191,7 +219,7 @@ html {
     display: inline-flex;
     align-items: center;
     gap: 10px;
-    font-weight: 800;
+    font-weight: 700;
 }
 
 .excell-section-head {
@@ -240,14 +268,14 @@ html {
 .excell-product-content > span {
     color: #0169d1;
     font-size: 14px;
-    font-weight: 900;
+    font-weight: 700;
     letter-spacing: 0.12em;
 }
 
 .excell-product-content h3 {
     color: #183b56;
     font-size: 38px;
-    font-weight: 800;
+    font-weight: 700;
     margin: 12px 0 14px;
 }
 
@@ -276,7 +304,7 @@ html {
     grid-template-columns: 12px 1fr;
     gap: 12px;
     font-size: 17px;
-    font-weight: 800;
+    font-weight: 700;
     line-height: 1.35;
     min-height: 64px;
     padding: 14px;
@@ -350,7 +378,7 @@ html {
     background: #ffffff;
     color: #183b56;
     cursor: pointer;
-    font-weight: 800;
+    font-weight: 700;
     padding: 20px 22px;
     text-align: left;
     transition: color 220ms ease, background-color 220ms ease;
@@ -399,7 +427,7 @@ html {
 .excell-facility-cards strong {
     color: #0169d1;
     font-size: 14px;
-    font-weight: 900;
+    font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
 }
@@ -427,7 +455,7 @@ html {
     border-bottom: 1px solid #e6edf4;
     color: #183b56;
     font-size: 18px;
-    font-weight: 800;
+    font-weight: 700;
     padding: 18px 0;
 }
 
@@ -459,7 +487,7 @@ html {
 .excell-clients-head h2 {
     color: #183b56;
     font-size: 42px;
-    font-weight: 800;
+    font-weight: 700;
     letter-spacing: -0.035em;
     line-height: 1.12;
 }
@@ -575,7 +603,7 @@ html {
     background: rgba(255, 255, 255, 0.08);
     border-radius: 18px;
     color: #ffffff;
-    font-weight: 800;
+    font-weight: 700;
     padding: 18px;
 }
 
@@ -613,7 +641,7 @@ html {
 .excell-final-about-copy h2 {
     color: #183b56;
     font-size: 48px;
-    font-weight: 800;
+    font-weight: 700;
     letter-spacing: -0.035em;
     line-height: 1.08;
     margin-bottom: 24px;
@@ -668,7 +696,7 @@ html {
 
 .excell-final-about-card li {
     color: rgba(255, 255, 255, 0.78);
-    font-weight: 700;
+    font-weight: 600;
     padding-left: 18px;
     position: relative;
 }
@@ -705,7 +733,7 @@ html {
 .excell-contact-details a,
 .excell-contact-details span {
     color: #183b56;
-    font-weight: 700;
+    font-weight: 600;
 }
 
 .excell-enquiry-form {
@@ -717,7 +745,7 @@ html {
 .excell-enquiry-form label {
     color: #ffffff;
     display: grid;
-    font-weight: 800;
+    font-weight: 700;
     gap: 9px;
     margin-bottom: 18px;
 }
@@ -744,7 +772,7 @@ html {
     background: #0169d1;
     color: #ffffff;
     cursor: pointer;
-    font-weight: 900;
+    font-weight: 700;
     min-height: 54px;
     padding: 0 28px;
 }
