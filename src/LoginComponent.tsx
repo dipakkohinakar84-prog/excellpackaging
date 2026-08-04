@@ -118,10 +118,23 @@ const Login: React.FC<{ onLogin: (user: User) => void; onNavigate?: (v: string) 
     setVerifyLoading(true);
     setVerifyError('');
 
-    const { data: userData, error: userErr } = await (supabase as any).from('erp_users')
+    let userData: any[] | null = null;
+    let userErr: any = null;
+
+    const byLogin = await (supabase as any).from('erp_users')
       .select('*')
-      .eq('email', trimmedEmail)
+      .eq('login_email', trimmedEmail)
       .limit(1);
+    if (!byLogin.error && byLogin.data && byLogin.data.length > 0) {
+      userData = byLogin.data;
+    } else {
+      const byEmail = await (supabase as any).from('erp_users')
+        .select('*')
+        .eq('email', trimmedEmail)
+        .limit(1);
+      userData = byEmail.data;
+      userErr = byEmail.error;
+    }
 
     if (userErr || !userData || userData.length === 0) {
       setVerifyError('No account found with this email.');
