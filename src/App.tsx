@@ -12202,6 +12202,12 @@ export default function App() {
         const recordId = pb.authStore.record?.id;
         if (recordId) {
           const record = await pb.collection('erp_users').getOne(recordId, { requestKey: null });
+          if (record.verified === false) {
+            logoutAuth();
+            localStorage.removeItem('excell_erp_user');
+            setLoggedInUser(null);
+            return;
+          }
           const fresh = mapAuthRecordToUser(record);
           if (fresh) {
             setLoggedInUser(fresh);

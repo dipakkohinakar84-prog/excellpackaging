@@ -66,6 +66,7 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
   const [loading, setLoading] = useState(true);
   const [customerName, setCustomerName] = useState('');
   const [portalTab, setPortalTab] = useState<'orders' | 'place-order'>('orders');
+  const [orderTab, setOrderTab] = useState<'products' | 'order'>('products');
   const [orderSortField, setOrderSortField] = useState<'date' | 'etd' | 'status'>('date');
   const [orderSortAsc, setOrderSortAsc] = useState(false);
 
@@ -455,72 +456,64 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
             )}
           </div>
         ) : (
-          <div className="grid xl:grid-cols-2 gap-6 items-start min-h-[calc(100vh-150px)]">
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden min-h-[calc(100vh-150px)]">
-              <div className="px-4 sm:px-6 py-4 border-b border-slate-100 flex items-center gap-3 flex-wrap">
-                <h2 className="text-sm font-black text-slate-800 flex items-center gap-2"><Box size={16} /> Our Products</h2>
-                <div className="relative flex-1 min-w-[180px] max-w-xs ml-auto">
-                  <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
-                  <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search products..." className="w-full pl-8 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-sky-500 transition-all" />
-                </div>
+          <>
+            {/* Mobile Tabbed Layout */}
+            <div className="xl:hidden space-y-4">
+              <div className="flex gap-1.5 rounded-2xl bg-white border border-slate-200 p-1 shadow-sm">
+                <button onClick={() => setOrderTab('products')} className={`flex-1 px-4 py-2.5 rounded-xl text-xs font-black transition-all ${orderTab === 'products' ? 'bg-sky-700 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>Products</button>
+                <button onClick={() => setOrderTab('order')} className={`flex-1 px-4 py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 ${orderTab === 'order' ? 'bg-sky-700 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
+                  Order
+                  {validCount > 0 && <span className="h-5 min-w-[20px] px-1 flex items-center justify-center rounded-full bg-white/25 text-[10px] font-black">{validCount}</span>}
+                </button>
               </div>
-              {loading ? (
-                <div className="p-8 text-center text-sm font-bold text-slate-500 flex items-center justify-center gap-2"><Loader2 size={16} className="animate-spin" /> Loading...</div>
-              ) : sortedItems.length === 0 ? (
-                <div className="p-8 text-center text-sm font-bold text-slate-500">No products available for your company.</div>
-              ) : (
-                <div className="overflow-auto max-h-[calc(100vh-230px)]">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50 text-xs font-black uppercase text-slate-500 sticky top-0 z-10">
-                      <tr>
-                        <th className="px-4 sm:px-6 py-3.5">Item Name</th>
-                        <th className="px-4 sm:px-6 py-3.5 text-right">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {sortedItems.map(item => (
-                        <tr key={item.id} className="hover:bg-sky-50/40 transition-colors">
-                          <td className="px-4 sm:px-6 py-3 font-bold text-slate-800">{item.name}</td>
-                          <td className="px-4 sm:px-6 py-3 text-right">
-                            <button onClick={() => addLineItem(item)} className="px-3 py-2 rounded-lg bg-sky-50 text-sky-700 text-xs font-bold hover:bg-sky-100 hover:text-sky-800 transition-colors active:scale-95 flex items-center gap-1 ml-auto">
-                              <Plus size={12} /> Add
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden min-h-[calc(100vh-150px)] flex flex-col">
-              <div className="px-4 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-                <h2 className="text-sm font-black text-slate-800 flex items-center gap-2"><ShoppingCart size={16} /> New Order</h2>
-                {lineItems.length > 0 && <button onClick={() => setLineItems([])} className="text-xs font-bold text-red-400 hover:text-red-600 transition-colors">Clear All</button>}
-              </div>
-              <div className="overflow-auto max-h-[calc(100vh-290px)] flex-1">
-                {/* Desktop Table */}
-                <table className="hidden md:table w-full text-left text-sm">
-                  <thead className="bg-slate-50 text-xs font-black uppercase text-slate-500 sticky top-0 z-10">
-                    <tr>
-                      <th className="px-4 sm:px-6 py-3.5">Item Name</th>
-                      <th className="px-4 sm:px-6 py-3.5 w-24">Qty</th>
-                      <th className="px-4 sm:px-6 py-3.5 w-40">ETD</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
+              {orderTab === 'products' ? (
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-3">
+                    <h2 className="text-sm font-black text-slate-800 flex items-center gap-2"><Box size={16} /> Our Products</h2>
+                    <div className="relative flex-1 ml-auto">
+                      <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+                      <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search..." className="w-full pl-8 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-sky-500 transition-all" />
+                    </div>
+                  </div>
+                  {loading ? (
+                    <div className="p-8 text-center text-sm font-bold text-slate-500 flex items-center justify-center gap-2"><Loader2 size={16} className="animate-spin" /> Loading...</div>
+                  ) : sortedItems.length === 0 ? (
+                    <div className="p-8 text-center text-sm font-bold text-slate-500">No products available.</div>
+                  ) : (
+                    <div className="divide-y divide-slate-100">
+                      {sortedItems.map(item => (
+                        <div key={item.id} className="flex items-center justify-between px-4 py-3 hover:bg-sky-50/40 transition-colors">
+                          <span className="font-bold text-slate-800 text-sm">{item.name}</span>
+                          <button onClick={() => { addLineItem(item); setOrderTab('order'); }} className="px-3 py-2 rounded-lg bg-sky-50 text-sky-700 text-xs font-bold hover:bg-sky-100 transition-colors active:scale-95 flex items-center gap-1 shrink-0 ml-3">
+                            <Plus size={12} /> Add
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                  <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                    <h2 className="text-sm font-black text-slate-800 flex items-center gap-2"><ShoppingCart size={16} /> Your Order</h2>
+                    {lineItems.length > 0 && <button onClick={() => setLineItems([])} className="text-xs font-bold text-red-400 hover:text-red-600 transition-colors">Clear All</button>}
+                  </div>
+                  <div className="p-3 space-y-3 flex-1">
                     {lineItems.length === 0 ? (
-                      <tr><td colSpan={3} className="px-4 sm:px-6 py-8 text-center text-sm font-bold text-slate-400">Add products from the table to start a new order.</td></tr>
+                      <div className="py-12 text-center text-sm font-bold text-slate-400">
+                        <ShoppingCart size={32} className="mx-auto mb-3 text-slate-300" />
+                        No items yet.<br />Switch to Products to add items.
+                      </div>
                     ) : lineItems.map(li => (
-                      <tr key={li.key} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-4 sm:px-6 py-2.5">
-                          <div className="flex items-center justify-between gap-2">
+                      <div key={li.key} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
                             {li.itemName ? (
-                              <span className="font-bold text-slate-800 text-sm">{li.itemName}</span>
+                              <p className="font-bold text-slate-800 text-sm truncate">{li.itemName}</p>
                             ) : (
-                              <div className="relative flex-1" ref={itemSearchRef}>
-                                <input value={itemSearch} onChange={e => { setItemSearch(e.target.value); setShowItemDropdown(true); }} onFocus={() => setShowItemDropdown(true)} placeholder="Search product..." className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-sky-500" />
+                              <div className="relative" ref={itemSearchRef}>
+                                <input value={itemSearch} onChange={e => { setItemSearch(e.target.value); setShowItemDropdown(true); }} onFocus={() => setShowItemDropdown(true)} placeholder="Search product..." className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-sky-500" />
                                 {showItemDropdown && filteredItemOptions.length > 0 && (
                                   <div className="absolute z-20 top-full mt-1 left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
                                     {filteredItemOptions.map(opt => (
@@ -530,64 +523,128 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
                                 )}
                               </div>
                             )}
-                            <button onClick={() => removeLineItem(li.key)} disabled={lineItems.length === 1} className="p-2.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"><X size={14} /></button>
                           </div>
-                        </td>
-                        <td className="px-4 sm:px-6 py-2.5"><input type="number" min="1" value={li.qty} onChange={e => updateLineQty(li.key, e.target.value)} className="w-20 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-center outline-none focus:ring-2 focus:ring-sky-500" /></td>
-                        <td className="px-4 sm:px-6 py-2.5"><input type="date" value={li.etd} onChange={e => updateLineEtd(li.key, e.target.value)} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-sky-500" /></td>
-                      </tr>
+                          <button onClick={() => removeLineItem(li.key)} disabled={lineItems.length === 1} className="p-2.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"><X size={16} /></button>
+                        </div>
+                        <div className="flex gap-3">
+                          <div className="flex-1">
+                            <label className="text-[10px] font-black uppercase text-slate-400 mb-1 block">Qty</label>
+                            <input type="number" min="1" value={li.qty} onChange={e => updateLineQty(li.key, e.target.value)} className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-center outline-none focus:ring-2 focus:ring-sky-500" />
+                          </div>
+                          <div className="flex-[2]">
+                            <label className="text-[10px] font-black uppercase text-slate-400 mb-1 block">ETD</label>
+                            <input type="date" value={li.etd} onChange={e => updateLineEtd(li.key, e.target.value)} className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-sky-500" />
+                          </div>
+                        </div>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
+                  </div>
+                  <div className="px-4 py-3 border-t border-slate-100 bg-white space-y-2.5">
+                    <button onClick={() => addLineItem()} className="w-full px-4 py-2.5 rounded-xl border-2 border-dashed border-slate-200 text-slate-500 text-xs font-bold hover:border-sky-300 hover:text-sky-600 hover:bg-sky-50 transition-colors flex items-center justify-center gap-1.5"><Plus size={14} /> Add Another Item</button>
+                    <button onClick={placeOrder} disabled={placing || validCount === 0} className="w-full px-6 py-3 bg-sky-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black hover:bg-sky-800 transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-2">
+                      {placing ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                      {placing ? 'Placing...' : `Place Order (${validCount})`}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
 
-                {/* Mobile Cards */}
-                <div className="md:hidden p-3 space-y-3">
-                  {lineItems.length === 0 ? (
-                    <div className="py-8 text-center text-sm font-bold text-slate-400">Add products from the table to start a new order.</div>
-                  ) : lineItems.map(li => (
-                    <div key={li.key} className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          {li.itemName ? (
-                            <p className="font-bold text-slate-800 text-sm truncate">{li.itemName}</p>
-                          ) : (
-                            <div className="relative" ref={itemSearchRef}>
-                              <input value={itemSearch} onChange={e => { setItemSearch(e.target.value); setShowItemDropdown(true); }} onFocus={() => setShowItemDropdown(true)} placeholder="Search product..." className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-sky-500" />
-                              {showItemDropdown && filteredItemOptions.length > 0 && (
-                                <div className="absolute z-20 top-full mt-1 left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
-                                  {filteredItemOptions.map(opt => (
-                                    <button key={opt.id} type="button" onClick={() => selectItemForLine(li.key, opt)} className="w-full text-left px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-sky-50 hover:text-sky-700 transition-colors border-b border-slate-50 last:border-b-0">{opt.name}</button>
-                                  ))}
+            {/* Desktop Two-Column Layout */}
+            <div className="hidden xl:grid xl:grid-cols-2 gap-6 items-start min-h-[calc(100vh-150px)]">
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden min-h-[calc(100vh-150px)]">
+                <div className="px-4 sm:px-6 py-4 border-b border-slate-100 flex items-center gap-3 flex-wrap">
+                  <h2 className="text-sm font-black text-slate-800 flex items-center gap-2"><Box size={16} /> Our Products</h2>
+                  <div className="relative flex-1 min-w-[180px] max-w-xs ml-auto">
+                    <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+                    <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search products..." className="w-full pl-8 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-sky-500 transition-all" />
+                  </div>
+                </div>
+                {loading ? (
+                  <div className="p-8 text-center text-sm font-bold text-slate-500 flex items-center justify-center gap-2"><Loader2 size={16} className="animate-spin" /> Loading...</div>
+                ) : sortedItems.length === 0 ? (
+                  <div className="p-8 text-center text-sm font-bold text-slate-500">No products available for your company.</div>
+                ) : (
+                  <div className="overflow-auto max-h-[calc(100vh-230px)]">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-slate-50 text-xs font-black uppercase text-slate-500 sticky top-0 z-10">
+                        <tr>
+                          <th className="px-4 sm:px-6 py-3.5">Item Name</th>
+                          <th className="px-4 sm:px-6 py-3.5 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {sortedItems.map(item => (
+                          <tr key={item.id} className="hover:bg-sky-50/40 transition-colors">
+                            <td className="px-4 sm:px-6 py-3 font-bold text-slate-800">{item.name}</td>
+                            <td className="px-4 sm:px-6 py-3 text-right">
+                              <button onClick={() => addLineItem(item)} className="px-3 py-2 rounded-lg bg-sky-50 text-sky-700 text-xs font-bold hover:bg-sky-100 hover:text-sky-800 transition-colors active:scale-95 flex items-center gap-1 ml-auto">
+                                <Plus size={12} /> Add
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden min-h-[calc(100vh-150px)] flex flex-col">
+                <div className="px-4 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                  <h2 className="text-sm font-black text-slate-800 flex items-center gap-2"><ShoppingCart size={16} /> New Order</h2>
+                  {lineItems.length > 0 && <button onClick={() => setLineItems([])} className="text-xs font-bold text-red-400 hover:text-red-600 transition-colors">Clear All</button>}
+                </div>
+                <div className="overflow-auto max-h-[calc(100vh-290px)] flex-1">
+                  <table className="hidden md:table w-full text-left text-sm">
+                    <thead className="bg-slate-50 text-xs font-black uppercase text-slate-500 sticky top-0 z-10">
+                      <tr>
+                        <th className="px-4 sm:px-6 py-3.5">Item Name</th>
+                        <th className="px-4 sm:px-6 py-3.5 w-24">Qty</th>
+                        <th className="px-4 sm:px-6 py-3.5 w-40">ETD</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {lineItems.length === 0 ? (
+                        <tr><td colSpan={3} className="px-4 sm:px-6 py-8 text-center text-sm font-bold text-slate-400">Add products from the table to start a new order.</td></tr>
+                      ) : lineItems.map(li => (
+                        <tr key={li.key} className="hover:bg-slate-50 transition-colors">
+                          <td className="px-4 sm:px-6 py-2.5">
+                            <div className="flex items-center justify-between gap-2">
+                              {li.itemName ? (
+                                <span className="font-bold text-slate-800 text-sm">{li.itemName}</span>
+                              ) : (
+                                <div className="relative flex-1" ref={itemSearchRef}>
+                                  <input value={itemSearch} onChange={e => { setItemSearch(e.target.value); setShowItemDropdown(true); }} onFocus={() => setShowItemDropdown(true)} placeholder="Search product..." className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-sky-500" />
+                                  {showItemDropdown && filteredItemOptions.length > 0 && (
+                                    <div className="absolute z-20 top-full mt-1 left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+                                      {filteredItemOptions.map(opt => (
+                                        <button key={opt.id} type="button" onClick={() => selectItemForLine(li.key, opt)} className="w-full text-left px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-sky-50 hover:text-sky-700 transition-colors border-b border-slate-50 last:border-b-0">{opt.name}</button>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
                               )}
+                              <button onClick={() => removeLineItem(li.key)} disabled={lineItems.length === 1} className="p-2.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"><X size={14} /></button>
                             </div>
-                          )}
-                        </div>
-                        <button onClick={() => removeLineItem(li.key)} disabled={lineItems.length === 1} className="p-2.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"><X size={16} /></button>
-                      </div>
-                      <div className="flex gap-3">
-                        <div className="flex-1">
-                          <label className="text-[10px] font-black uppercase text-slate-400 mb-1 block">Qty</label>
-                          <input type="number" min="1" value={li.qty} onChange={e => updateLineQty(li.key, e.target.value)} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-center outline-none focus:ring-2 focus:ring-sky-500" />
-                        </div>
-                        <div className="flex-[2]">
-                          <label className="text-[10px] font-black uppercase text-slate-400 mb-1 block">ETD</label>
-                          <input type="date" value={li.etd} onChange={e => updateLineEtd(li.key, e.target.value)} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-sky-500" />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                          </td>
+                          <td className="px-4 sm:px-6 py-2.5"><input type="number" min="1" value={li.qty} onChange={e => updateLineQty(li.key, e.target.value)} className="w-20 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-center outline-none focus:ring-2 focus:ring-sky-500" /></td>
+                          <td className="px-4 sm:px-6 py-2.5"><input type="date" value={li.etd} onChange={e => updateLineEtd(li.key, e.target.value)} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-sky-500" /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="px-4 sm:px-6 py-3 border-t border-slate-100 bg-white flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                  <button onClick={() => addLineItem()} className="px-4 py-2.5 rounded-xl border-2 border-dashed border-slate-200 text-slate-500 text-xs font-bold hover:border-sky-300 hover:text-sky-600 hover:bg-sky-50 transition-colors flex items-center justify-center gap-1.5"><Plus size={14} /> Add Another Item</button>
+                  <button onClick={placeOrder} disabled={placing || validCount === 0} className="sm:ml-auto px-6 py-3 bg-sky-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black hover:bg-sky-800 transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-2">
+                    {placing ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                    {placing ? 'Placing...' : `Place Order (${validCount})`}
+                  </button>
                 </div>
               </div>
-              <div className="px-4 sm:px-6 py-3 border-t border-slate-100 bg-white flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                <button onClick={() => addLineItem()} className="px-4 py-2.5 rounded-xl border-2 border-dashed border-slate-200 text-slate-500 text-xs font-bold hover:border-sky-300 hover:text-sky-600 hover:bg-sky-50 transition-colors flex items-center justify-center gap-1.5"><Plus size={14} /> Add Another Item</button>
-                <button onClick={placeOrder} disabled={placing || validCount === 0} className="sm:ml-auto px-6 py-3 bg-sky-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black hover:bg-sky-800 transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-2">
-                  {placing ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                  {placing ? 'Placing...' : `Place Order (${validCount})`}
-                </button>
-              </div>
             </div>
-          </div>
+          </>
         )}
       </div>
 
