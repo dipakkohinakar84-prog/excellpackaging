@@ -13,7 +13,7 @@ const Login: React.FC<{ onLogin: (user: User) => void; onNavigate?: (v: string) 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [step, setStep] = useState<'credentials' | 'check-email' | 'forgot-email' | 'forgot-reset'>('credentials');
+  const [step, setStep] = useState<'credentials' | 'check-email' | 'forgot-email' | 'forgot-verify' | 'forgot-reset'>('credentials');
   const [email, setEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
@@ -22,6 +22,7 @@ const Login: React.FC<{ onLogin: (user: User) => void; onNavigate?: (v: string) 
   const [verifyError, setVerifyError] = useState('');
   const [verifyMessage, setVerifyMessage] = useState('');
   const [polling, setPolling] = useState(false);
+  const [forgotPolling, setForgotPolling] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,6 +109,36 @@ const Login: React.FC<{ onLogin: (user: User) => void; onNavigate?: (v: string) 
     return () => clearInterval(timer);
   }, [polling]);
 
+  useEffect(() => {
+    if (!forgotPolling || !email) return;
+    const timer = setInterval(async () => {
+      try {
+        const record = await (supabase as any).from('erp_users')
+          .select('*')
+          .eq('email', email)
+          .limit(1);
+        const userRecord = record.data && record.data.length > 0 ? record.data[0] : null;
+        if (!userRecord) {
+          const byLogin = await (supabase as any).from('erp_users')
+            .select('*')
+            .eq('login_email', email)
+            .limit(1);
+          if (byLogin.data && byLogin.data.length > 0 && byLogin.data[0].verified) {
+            setForgotPolling(false);
+            setStep('forgot-reset');
+          }
+        } else if (userRecord.verified) {
+          setForgotPolling(false);
+          setStep('forgot-reset');
+        }
+      } catch {
+        // retry on next tick
+      }
+    }, 2000);
+
+    return () => clearInterval(timer);
+  }, [forgotPolling, email]);
+
   const handleForgotSubmit = async () => {
     const trimmedEmail = email.trim().toLowerCase();
     if (!trimmedEmail) {
@@ -146,7 +177,30 @@ const Login: React.FC<{ onLogin: (user: User) => void; onNavigate?: (v: string) 
     setEmail(trimmedEmail);
     setForgotMobile(userRecord.mobile || userRecord.username || '');
     setVerifyLoading(false);
-    setStep('forgot-reset');
+
+    try {
+      const adminEmail = import.meta.env.VITE_POCKETBASE_ADMIN_EMAIL;
+      const adminPass = import.meta.env.VITE_POCKETBASE_ADMIN_PASSWORD;
+      if (!adminEmail || !adminPass) throw new Error('PocketBase admin credentials are not configured.');
+      await pb.admins.authWithPassword(adminEmail, adminPass);
+      const record = await pb.collection('erp_users').getFirstListItem(
+        `email = "${trimmedEmail}" || login_email = "${trimmedEmail}"`,
+        { requestKey: null } as any
+      );
+      await pb.collection('erp_users').update(record.id, { verified: false }, { requestKey: null } as any);
+    } catch {
+      // proceed even if admin auth or reset fails
+    }
+
+    try {
+      await pb.collection('erp_users').requestVerification(trimmedEmail);
+      setVerifyMessage(`Verification email sent to ${trimmedEmail}`);
+    } catch {
+      setVerifyMessage('Verification email sent (if email exists on file).');
+    }
+
+    setStep('forgot-verify');
+    setForgotPolling(true);
   };
 
   const handleResetPassword = async () => {
@@ -167,10 +221,18 @@ const Login: React.FC<{ onLogin: (user: User) => void; onNavigate?: (v: string) 
         import.meta.env.VITE_POCKETBASE_ADMIN_EMAIL,
         import.meta.env.VITE_POCKETBASE_ADMIN_PASSWORD
       );
-      const record = await pb.collection('erp_users').getFirstListItem(
-        `email = "${email}"`,
-        { requestKey: null } as any
-      );
+      let record: any = null;
+      try {
+        record = await pb.collection('erp_users').getFirstListItem(
+          `login_email = "${email}"`,
+          { requestKey: null } as any
+        );
+      } catch {
+        record = await pb.collection('erp_users').getFirstListItem(
+          `email = "${email}"`,
+          { requestKey: null } as any
+        );
+      }
       await pb.collection('erp_users').update(record.id, {
         password: newPassword,
         passwordConfirm: newPassword,
@@ -387,6 +449,51 @@ const Login: React.FC<{ onLogin: (user: User) => void; onNavigate?: (v: string) 
     </>
   );
 
+  const forgotVerifyContent = () => (
+    <>
+      <div className="px-8 pb-8 pt-14 sm:px-10">
+        <div className="mx-auto flex h-[72px] w-[72px] items-center justify-center rounded-[24px] bg-[#0176d3] text-white shadow-lg shadow-blue-200">
+          <ShieldCheck size={38} strokeWidth={2.2} />
+        </div>
+        <h1 className="mt-8 text-center text-[28px] font-bold tracking-tight text-[#032d60]">Check Your Email</h1>
+        <p className="mt-2 text-center text-sm font-semibold text-slate-500">
+          A verification link was sent to <span className="font-bold text-slate-700">{email}</span>
+        </p>
+
+        <div className="mt-8 space-y-5">
+          {verifyError && (
+            <div className="flex items-center gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-700 animate-in fade-in">
+              <AlertCircle size={18} />
+              {verifyError}
+            </div>
+          )}
+
+          {forgotPolling && (
+            <div className="flex items-center justify-center gap-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-4 text-sm font-semibold text-blue-700 animate-in fade-in">
+              <Loader2 className="animate-spin" size={20} />
+              Waiting for you to click the link in the email...
+            </div>
+          )}
+
+          {!forgotPolling && verifyMessage && !verifyError && (
+            <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm font-semibold text-blue-700 animate-in fade-in">{verifyMessage}</div>
+          )}
+
+          <button
+            onClick={() => { setStep('forgot-email'); setForgotPolling(false); setVerifyError(''); }}
+            className="flex items-center justify-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors mx-auto"
+          >
+            <ChevronLeft size={16} /> Back
+          </button>
+        </div>
+      </div>
+
+      <div className="border-t border-slate-200 bg-slate-50 px-8 py-5 text-center sm:px-10">
+        <div className="text-xs font-semibold text-slate-500">Authorized Excell Packaging users only</div>
+      </div>
+    </>
+  );
+
   const forgotResetContent = () => (
     <>
       <div className="px-8 pb-8 pt-14 sm:px-10">
@@ -464,6 +571,7 @@ const Login: React.FC<{ onLogin: (user: User) => void; onNavigate?: (v: string) 
       case 'credentials': return credentialContent();
       case 'check-email': return checkEmailContent();
       case 'forgot-email': return forgotEmailContent();
+      case 'forgot-verify': return forgotVerifyContent();
       case 'forgot-reset': return forgotResetContent();
     }
   };

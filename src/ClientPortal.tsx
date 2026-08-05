@@ -271,7 +271,7 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
                     <button
                       type="button"
                       onClick={() => setShowPassword(prev => !prev)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-2.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
                       aria-label={showPassword ? 'Hide password' : 'Show password'}
                     >
                       {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
@@ -363,7 +363,7 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
           <div className="w-9 h-9 rounded-xl bg-white/15 text-white flex items-center justify-center"><Box size={20} /></div>
           <div>
             <h1 className="text-sm font-black text-white">{customerName}</h1>
-            <p className="text-[10px] text-sky-100 font-semibold">Excell Packaging — Client Portal</p>
+            <p className="text-[11px] text-sky-100 font-semibold">Excell Packaging — Client Portal</p>
           </div>
         </div>
         <nav className="order-3 sm:order-2 w-full sm:w-auto flex gap-1.5 rounded-2xl bg-white/12 border border-white/20 p-1">
@@ -389,43 +389,69 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden min-h-[calc(100vh-150px)]">
             <div className="px-4 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between">
               <h2 className="text-sm font-black text-slate-800 flex items-center gap-2"><PackageCheck size={16} /> Orders</h2>
-              <button onClick={loadData} className="p-2 rounded-xl bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors"><RefreshCw size={14} /></button>
+              <button onClick={loadData} className="p-2.5 rounded-xl bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors"><RefreshCw size={14} /></button>
             </div>
             {loading ? (
               <div className="p-8 text-center text-sm font-bold text-slate-500 flex items-center justify-center gap-2"><Loader2 size={16} className="animate-spin" /> Loading...</div>
             ) : orderRows.length === 0 ? (
               <div className="p-8 text-center text-sm font-bold text-slate-400">No orders yet.</div>
             ) : (
-              <div className="overflow-auto max-h-[calc(100vh-230px)]">
-                <table className="w-full min-w-[880px] text-left text-sm">
-                  <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 sticky top-0 z-10">
-                    <tr>
-                      <th className="px-4 sm:px-6 py-3.5">ERP Order</th>
-                      <th className="px-4 sm:px-6 py-3.5 cursor-pointer select-none hover:bg-slate-100 transition-colors" onClick={() => handleOrderSort('date')}>Date{orderSortLabel('date')}</th>
-                      <th className="px-4 sm:px-6 py-3.5">Sent By</th>
-                      <th className="px-4 sm:px-6 py-3.5">Item</th>
-                      <th className="px-4 sm:px-6 py-3.5 text-center">Qty</th>
-                      <th className="px-4 sm:px-6 py-3.5 cursor-pointer select-none hover:bg-slate-100 transition-colors" onClick={() => handleOrderSort('etd')}>ETD{orderSortLabel('etd')}</th>
-                      <th className="px-4 sm:px-6 py-3.5 cursor-pointer select-none hover:bg-slate-100 transition-colors" onClick={() => handleOrderSort('status')}>Status{orderSortLabel('status')}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {orderRows.map(row => {
-                      return (
-                        <tr key={row.key} className="hover:bg-slate-50 transition-colors">
-                          <td className="px-4 sm:px-6 py-3 font-black text-indigo-600">{row.item.work_order_id ? `#${row.item.work_order_id}` : '-'}</td>
-                          <td className="px-4 sm:px-6 py-3 text-xs font-semibold text-slate-500 whitespace-nowrap">{new Date(row.order.created_at).toLocaleString('en-GB')}</td>
-                          <td className="px-4 sm:px-6 py-3 text-xs text-slate-500 truncate max-w-[140px]" title={row.order.created_by || ''}>{row.order.created_by || '—'}</td>
-                          <td className="px-4 sm:px-6 py-3 font-bold text-slate-800">{row.item.item_name}</td>
-                          <td className="px-4 sm:px-6 py-3 text-center font-black text-slate-700">{row.item.qty}</td>
-                          <td className="px-4 sm:px-6 py-3 text-xs font-semibold text-slate-500 whitespace-nowrap">{row.item.etd || '-'}</td>
-                          <td className="px-4 sm:px-6 py-3"><PortalStatusBadge status={row.status} /></td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <>
+                {/* Desktop Table */}
+                <div className="hidden md:block overflow-auto max-h-[calc(100vh-230px)]">
+                  <table className="w-full min-w-[880px] text-left text-sm">
+                    <thead className="bg-slate-50 text-xs font-black uppercase text-slate-500 sticky top-0 z-10">
+                      <tr>
+                        <th className="px-4 sm:px-6 py-3.5">ERP Order</th>
+                        <th className="px-4 sm:px-6 py-3.5 cursor-pointer select-none hover:bg-slate-100 transition-colors" onClick={() => handleOrderSort('date')}>Date{orderSortLabel('date')}</th>
+                        <th className="px-4 sm:px-6 py-3.5">Sent By</th>
+                        <th className="px-4 sm:px-6 py-3.5">Item</th>
+                        <th className="px-4 sm:px-6 py-3.5 text-center">Qty</th>
+                        <th className="px-4 sm:px-6 py-3.5 cursor-pointer select-none hover:bg-slate-100 transition-colors" onClick={() => handleOrderSort('etd')}>ETD{orderSortLabel('etd')}</th>
+                        <th className="px-4 sm:px-6 py-3.5 cursor-pointer select-none hover:bg-slate-100 transition-colors" onClick={() => handleOrderSort('status')}>Status{orderSortLabel('status')}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {orderRows.map(row => {
+                        return (
+                          <tr key={row.key} className="hover:bg-slate-50 transition-colors">
+                            <td className="px-4 sm:px-6 py-3 font-black text-indigo-600">{row.item.work_order_id ? `#${row.item.work_order_id}` : '-'}</td>
+                            <td className="px-4 sm:px-6 py-3 text-xs font-semibold text-slate-500 whitespace-nowrap">{new Date(row.order.created_at).toLocaleString('en-GB')}</td>
+                            <td className="px-4 sm:px-6 py-3 text-xs text-slate-500 truncate max-w-[140px]" title={row.order.created_by || ''}>{row.order.created_by || '—'}</td>
+                            <td className="px-4 sm:px-6 py-3 font-bold text-slate-800">{row.item.item_name}</td>
+                            <td className="px-4 sm:px-6 py-3 text-center font-black text-slate-700">{row.item.qty}</td>
+                            <td className="px-4 sm:px-6 py-3 text-xs font-semibold text-slate-500 whitespace-nowrap">{row.item.etd || '-'}</td>
+                            <td className="px-4 sm:px-6 py-3"><PortalStatusBadge status={row.status} /></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile Cards */}
+                <div className="md:hidden overflow-auto max-h-[calc(100vh-230px)] p-3 space-y-3">
+                  {orderRows.map(row => (
+                    <div key={row.key} className="bg-white border border-slate-200 rounded-xl p-4 space-y-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-bold text-slate-800 text-sm truncate">{row.item.item_name}</p>
+                          <p className="text-[11px] font-semibold text-slate-400 mt-0.5">{new Date(row.order.created_at).toLocaleString('en-GB')}</p>
+                        </div>
+                        <PortalStatusBadge status={row.status} />
+                      </div>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-slate-600">
+                        <span className="font-black text-slate-700">Qty: {row.item.qty}</span>
+                        {row.item.etd && <span>ETD: {row.item.etd}</span>}
+                        {row.item.work_order_id && <span className="text-indigo-600 font-black">WO #{row.item.work_order_id}</span>}
+                      </div>
+                      {row.order.created_by && (
+                        <p className="text-[11px] font-semibold text-slate-400 truncate" title={row.order.created_by}>Sent by: {row.order.created_by}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         ) : (
@@ -435,7 +461,7 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
                 <h2 className="text-sm font-black text-slate-800 flex items-center gap-2"><Box size={16} /> Our Products</h2>
                 <div className="relative flex-1 min-w-[180px] max-w-xs ml-auto">
                   <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
-                  <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search products..." className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-sky-500 transition-all" />
+                  <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search products..." className="w-full pl-8 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-sky-500 transition-all" />
                 </div>
               </div>
               {loading ? (
@@ -444,8 +470,8 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
                 <div className="p-8 text-center text-sm font-bold text-slate-500">No products available for your company.</div>
               ) : (
                 <div className="overflow-auto max-h-[calc(100vh-230px)]">
-                  <table className="w-full min-w-[360px] text-left text-sm">
-                    <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 sticky top-0 z-10">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-50 text-xs font-black uppercase text-slate-500 sticky top-0 z-10">
                       <tr>
                         <th className="px-4 sm:px-6 py-3.5">Item Name</th>
                         <th className="px-4 sm:px-6 py-3.5 text-right">Action</th>
@@ -456,7 +482,7 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
                         <tr key={item.id} className="hover:bg-sky-50/40 transition-colors">
                           <td className="px-4 sm:px-6 py-3 font-bold text-slate-800">{item.name}</td>
                           <td className="px-4 sm:px-6 py-3 text-right">
-                            <button onClick={() => addLineItem(item)} className="px-3 py-1.5 rounded-lg bg-sky-50 text-sky-700 text-[10px] font-bold hover:bg-sky-100 hover:text-sky-800 transition-colors active:scale-95 flex items-center gap-1 ml-auto">
+                            <button onClick={() => addLineItem(item)} className="px-3 py-2 rounded-lg bg-sky-50 text-sky-700 text-xs font-bold hover:bg-sky-100 hover:text-sky-800 transition-colors active:scale-95 flex items-center gap-1 ml-auto">
                               <Plus size={12} /> Add
                             </button>
                           </td>
@@ -471,11 +497,12 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden min-h-[calc(100vh-150px)] flex flex-col">
               <div className="px-4 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                 <h2 className="text-sm font-black text-slate-800 flex items-center gap-2"><ShoppingCart size={16} /> New Order</h2>
-                {lineItems.length > 0 && <button onClick={() => setLineItems([])} className="text-[10px] font-bold text-red-400 hover:text-red-600 transition-colors">Clear All</button>}
+                {lineItems.length > 0 && <button onClick={() => setLineItems([])} className="text-xs font-bold text-red-400 hover:text-red-600 transition-colors">Clear All</button>}
               </div>
               <div className="overflow-auto max-h-[calc(100vh-290px)] flex-1">
-                <table className="w-full min-w-[520px] text-left text-sm">
-                  <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 sticky top-0 z-10">
+                {/* Desktop Table */}
+                <table className="hidden md:table w-full text-left text-sm">
+                  <thead className="bg-slate-50 text-xs font-black uppercase text-slate-500 sticky top-0 z-10">
                     <tr>
                       <th className="px-4 sm:px-6 py-3.5">Item Name</th>
                       <th className="px-4 sm:px-6 py-3.5 w-24">Qty</th>
@@ -493,7 +520,7 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
                               <span className="font-bold text-slate-800 text-sm">{li.itemName}</span>
                             ) : (
                               <div className="relative flex-1" ref={itemSearchRef}>
-                                <input value={itemSearch} onChange={e => { setItemSearch(e.target.value); setShowItemDropdown(true); }} onFocus={() => setShowItemDropdown(true)} placeholder="Search product..." className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-sky-500" />
+                                <input value={itemSearch} onChange={e => { setItemSearch(e.target.value); setShowItemDropdown(true); }} onFocus={() => setShowItemDropdown(true)} placeholder="Search product..." className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-sky-500" />
                                 {showItemDropdown && filteredItemOptions.length > 0 && (
                                   <div className="absolute z-20 top-full mt-1 left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
                                     {filteredItemOptions.map(opt => (
@@ -503,19 +530,58 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
                                 )}
                               </div>
                             )}
-                            <button onClick={() => removeLineItem(li.key)} disabled={lineItems.length === 1} className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"><X size={14} /></button>
+                            <button onClick={() => removeLineItem(li.key)} disabled={lineItems.length === 1} className="p-2.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"><X size={14} /></button>
                           </div>
                         </td>
-                        <td className="px-4 sm:px-6 py-2.5"><input type="number" min="1" value={li.qty} onChange={e => updateLineQty(li.key, e.target.value)} className="w-20 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-center outline-none focus:ring-2 focus:ring-sky-500" /></td>
-                        <td className="px-4 sm:px-6 py-2.5"><input type="date" value={li.etd} onChange={e => updateLineEtd(li.key, e.target.value)} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-sky-500" /></td>
+                        <td className="px-4 sm:px-6 py-2.5"><input type="number" min="1" value={li.qty} onChange={e => updateLineQty(li.key, e.target.value)} className="w-20 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-center outline-none focus:ring-2 focus:ring-sky-500" /></td>
+                        <td className="px-4 sm:px-6 py-2.5"><input type="date" value={li.etd} onChange={e => updateLineEtd(li.key, e.target.value)} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-sky-500" /></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+
+                {/* Mobile Cards */}
+                <div className="md:hidden p-3 space-y-3">
+                  {lineItems.length === 0 ? (
+                    <div className="py-8 text-center text-sm font-bold text-slate-400">Add products from the table to start a new order.</div>
+                  ) : lineItems.map(li => (
+                    <div key={li.key} className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          {li.itemName ? (
+                            <p className="font-bold text-slate-800 text-sm truncate">{li.itemName}</p>
+                          ) : (
+                            <div className="relative" ref={itemSearchRef}>
+                              <input value={itemSearch} onChange={e => { setItemSearch(e.target.value); setShowItemDropdown(true); }} onFocus={() => setShowItemDropdown(true)} placeholder="Search product..." className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-sky-500" />
+                              {showItemDropdown && filteredItemOptions.length > 0 && (
+                                <div className="absolute z-20 top-full mt-1 left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+                                  {filteredItemOptions.map(opt => (
+                                    <button key={opt.id} type="button" onClick={() => selectItemForLine(li.key, opt)} className="w-full text-left px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-sky-50 hover:text-sky-700 transition-colors border-b border-slate-50 last:border-b-0">{opt.name}</button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <button onClick={() => removeLineItem(li.key)} disabled={lineItems.length === 1} className="p-2.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"><X size={16} /></button>
+                      </div>
+                      <div className="flex gap-3">
+                        <div className="flex-1">
+                          <label className="text-[10px] font-black uppercase text-slate-400 mb-1 block">Qty</label>
+                          <input type="number" min="1" value={li.qty} onChange={e => updateLineQty(li.key, e.target.value)} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-center outline-none focus:ring-2 focus:ring-sky-500" />
+                        </div>
+                        <div className="flex-[2]">
+                          <label className="text-[10px] font-black uppercase text-slate-400 mb-1 block">ETD</label>
+                          <input type="date" value={li.etd} onChange={e => updateLineEtd(li.key, e.target.value)} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-sky-500" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
               <div className="px-4 sm:px-6 py-3 border-t border-slate-100 bg-white flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                <button onClick={() => addLineItem()} className="px-4 py-2 rounded-xl border-2 border-dashed border-slate-200 text-slate-500 text-[11px] font-bold hover:border-sky-300 hover:text-sky-600 hover:bg-sky-50 transition-colors flex items-center justify-center gap-1.5"><Plus size={14} /> Add Another Item</button>
-                <button onClick={placeOrder} disabled={placing || validCount === 0} className="sm:ml-auto px-6 py-2.5 bg-sky-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black hover:bg-sky-800 transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-2">
+                <button onClick={() => addLineItem()} className="px-4 py-2.5 rounded-xl border-2 border-dashed border-slate-200 text-slate-500 text-xs font-bold hover:border-sky-300 hover:text-sky-600 hover:bg-sky-50 transition-colors flex items-center justify-center gap-1.5"><Plus size={14} /> Add Another Item</button>
+                <button onClick={placeOrder} disabled={placing || validCount === 0} className="sm:ml-auto px-6 py-3 bg-sky-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black hover:bg-sky-800 transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-2">
                   {placing ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
                   {placing ? 'Placing...' : `Place Order (${validCount})`}
                 </button>
@@ -543,11 +609,11 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
                 <div key={li.key} className="rounded-2xl border border-slate-200 p-4 flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <h4 className="font-black text-slate-800 text-sm truncate">{li.itemName}</h4>
-                    <p className="text-[10px] font-mono text-slate-400 mt-1">Drawing: {li.drawingNo || '-'}</p>
+                    <p className="text-[11px] font-mono text-slate-400 mt-1">Drawing: {li.drawingNo || '-'}</p>
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-xs font-black text-slate-800">Qty {li.qty}</p>
-                    <p className="text-[10px] font-semibold text-slate-500 mt-1">ETD: {li.etd || 'Not specified'}</p>
+                    <p className="text-[11px] font-semibold text-slate-500 mt-1">ETD: {li.etd || 'Not specified'}</p>
                   </div>
                 </div>
               ))}

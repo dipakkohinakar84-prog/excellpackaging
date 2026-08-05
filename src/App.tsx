@@ -13477,6 +13477,9 @@ export default function App() {
              <div className="flex items-center gap-2">
                <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-900/40"><Package size={16}/></div>
                <span className="font-black tracking-widest text-lg text-white">EXCELL</span>
+               {pendingOrderCount > 0 && (
+                 <span className={`h-5 min-w-[20px] px-1 flex items-center justify-center rounded-full bg-red-500 text-[10px] font-black text-white ${badgeBlink ? 'animate-[badge-pulse_0.4s_ease-in-out_3]' : ''}`}>{pendingOrderCount}</span>
+               )}
              </div>
               <button onClick={handleAppRefresh} className="p-2 text-white hover:bg-white/15 rounded-xl transition-colors" aria-label="Refresh app data" title="Refresh data">
                 <RefreshCw size={20} />
@@ -13529,9 +13532,6 @@ export default function App() {
                 >
                   <item.icon size={18} />
                   <span className="truncate max-w-full px-1">{item.label}</span>
-                  {item.id === 'client-orders' && pendingOrderCount > 0 && (
-                    <span className={`absolute top-1 right-1 h-4 min-w-[16px] px-0.5 flex items-center justify-center rounded-full bg-red-500 text-[8px] font-black text-white ${badgeBlink ? 'animate-[badge-pulse_0.4s_ease-in-out_3]' : ''}`}>{pendingOrderCount}</span>
-                  )}
                 </button>
               ))}
             </div>

@@ -207,68 +207,135 @@ const ClientOrderManager: React.FC<Props> = ({ loggedInUser }) => {
       ) : rows.length === 0 ? (
         <div className="text-center py-10 text-sm font-bold text-gray-500">No {tab.toLowerCase()} items.</div>
       ) : (
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1100px] text-left text-sm">
-              <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-500">
-                <tr>
-                  <th className="px-4 py-3">Date</th>
-                  <th className="px-4 py-3">Client Name</th>
-                  <th className="px-4 py-3">Sent By</th>
-                  <th className="px-4 py-3">Item Name</th>
-                  <th className="px-4 py-3 text-center">Qty</th>
-                  <th className="px-4 py-3">ETD</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">ERP WO</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {rows.map(row => {
-                  const editedEtd = etdEdits[row.key] ?? row.item.etd ?? '';
-                  const etdChanged = editedEtd !== (row.item.etd ?? '');
-                  return (
-                    <tr key={row.key} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 text-xs font-bold text-gray-500 whitespace-nowrap">{new Date(row.order.created_at).toLocaleString('en-GB')}</td>
-                      <td className="px-4 py-3 font-bold text-gray-800">{row.order.customer_name}</td>
-                      <td className="px-4 py-3 text-xs text-gray-600 truncate max-w-[160px]" title={row.order.created_by || ''}>{row.order.created_by || '—'}</td>
-                      <td className="px-4 py-3">
-                        <p className="font-bold text-gray-800">{row.item.item_name}</p>
-                        <p className="text-[10px] font-mono text-gray-400">Drawing: {row.item.drawing_no || '-'}</p>
-                        {row.status === 'Rejected' && row.item.rejection_reason && <p className="text-[10px] font-semibold text-red-500 mt-1">{row.item.rejection_reason}</p>}
-                      </td>
-                      <td className="px-4 py-3 text-center font-black text-gray-700">{row.item.qty}</td>
-                      <td className="px-4 py-3">
-                        <input type="date" value={editedEtd} onChange={e => setEtdEdits(prev => ({ ...prev, [row.key]: e.target.value }))} disabled={row.status === 'Accepted' || row.status === 'Dispatched' || row.status === 'Cancelled'} className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs font-semibold outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60" />
-                      </td>
-                      <td className="px-4 py-3"><OrderStatusBadge status={row.status} /></td>
-                      <td className="px-4 py-3 font-black text-indigo-600">{row.item.work_order_id ? `#${row.item.work_order_id}` : '-'}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-1.5 justify-end">
-                          {row.status === 'Pending' && etdChanged && (
-                            <button onClick={() => handleSaveEtd(row)} disabled={actionLoading === row.key} className="px-3 py-2 rounded-lg bg-blue-50 text-blue-600 text-xs font-bold hover:bg-blue-100 transition-colors disabled:opacity-50 flex items-center gap-1">
-                              <Save size={14}/> Save ETD
-                            </button>
-                          )}
-                          {row.status === 'Pending' && (
-                            <>
-                              <button onClick={() => handleAccept(row)} disabled={actionLoading === row.key} className="px-3 py-2 rounded-lg bg-green-50 text-green-600 text-xs font-bold hover:bg-green-100 transition-colors disabled:opacity-50 flex items-center gap-1">
-                                <CheckCircle size={14}/> {actionLoading === row.key ? '...' : 'Accept'}
+        <>
+          {/* Desktop Table */}
+          <div className="hidden md:block bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1100px] text-left text-sm">
+                <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-500">
+                  <tr>
+                    <th className="px-4 py-3">Date</th>
+                    <th className="px-4 py-3">Client Name</th>
+                    <th className="px-4 py-3">Sent By</th>
+                    <th className="px-4 py-3">Item Name</th>
+                    <th className="px-4 py-3 text-center">Qty</th>
+                    <th className="px-4 py-3">ETD</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">ERP WO</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {rows.map(row => {
+                    const editedEtd = etdEdits[row.key] ?? row.item.etd ?? '';
+                    const etdChanged = editedEtd !== (row.item.etd ?? '');
+                    return (
+                      <tr key={row.key} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-3 text-xs font-bold text-gray-500 whitespace-nowrap">{new Date(row.order.created_at).toLocaleString('en-GB')}</td>
+                        <td className="px-4 py-3 font-bold text-gray-800">{row.order.customer_name}</td>
+                        <td className="px-4 py-3 text-xs text-gray-600 truncate max-w-[160px]" title={row.order.created_by || ''}>{row.order.created_by || '—'}</td>
+                        <td className="px-4 py-3">
+                          <p className="font-bold text-gray-800">{row.item.item_name}</p>
+                          <p className="text-[10px] font-mono text-gray-400">Drawing: {row.item.drawing_no || '-'}</p>
+                          {row.status === 'Rejected' && row.item.rejection_reason && <p className="text-[10px] font-semibold text-red-500 mt-1">{row.item.rejection_reason}</p>}
+                        </td>
+                        <td className="px-4 py-3 text-center font-black text-gray-700">{row.item.qty}</td>
+                        <td className="px-4 py-3">
+                          <input type="date" value={editedEtd} onChange={e => setEtdEdits(prev => ({ ...prev, [row.key]: e.target.value }))} disabled={row.status === 'Accepted' || row.status === 'Dispatched' || row.status === 'Cancelled'} className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs font-semibold outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60" />
+                        </td>
+                        <td className="px-4 py-3"><OrderStatusBadge status={row.status} /></td>
+                        <td className="px-4 py-3 font-black text-indigo-600">{row.item.work_order_id ? `#${row.item.work_order_id}` : '-'}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-1.5 justify-end">
+                            {row.status === 'Pending' && etdChanged && (
+                              <button onClick={() => handleSaveEtd(row)} disabled={actionLoading === row.key} className="px-3 py-2 rounded-lg bg-blue-50 text-blue-600 text-xs font-bold hover:bg-blue-100 transition-colors disabled:opacity-50 flex items-center gap-1">
+                                <Save size={14}/> Save ETD
                               </button>
-                              <button onClick={() => setRejectModal({ orderId: row.order.id, itemIndex: row.itemIndex, itemName: row.item.item_name, reason: '' })} disabled={actionLoading === row.key} className="px-3 py-2 rounded-lg bg-red-50 text-red-600 text-xs font-bold hover:bg-red-100 transition-colors disabled:opacity-50 flex items-center gap-1">
-                                <XCircle size={14}/> Reject
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                            )}
+                            {row.status === 'Pending' && (
+                              <>
+                                <button onClick={() => handleAccept(row)} disabled={actionLoading === row.key} className="px-3 py-2 rounded-lg bg-green-50 text-green-600 text-xs font-bold hover:bg-green-100 transition-colors disabled:opacity-50 flex items-center gap-1">
+                                  <CheckCircle size={14}/> {actionLoading === row.key ? '...' : 'Accept'}
+                                </button>
+                                <button onClick={() => setRejectModal({ orderId: row.order.id, itemIndex: row.itemIndex, itemName: row.item.item_name, reason: '' })} disabled={actionLoading === row.key} className="px-3 py-2 rounded-lg bg-red-50 text-red-600 text-xs font-bold hover:bg-red-100 transition-colors disabled:opacity-50 flex items-center gap-1">
+                                  <XCircle size={14}/> Reject
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+
+          {/* Mobile Cards */}
+          <div className="md:hidden space-y-3">
+            {rows.map(row => {
+              const editedEtd = etdEdits[row.key] ?? row.item.etd ?? '';
+              const etdChanged = editedEtd !== (row.item.etd ?? '');
+              const isActionable = row.status === 'Pending';
+              return (
+                <div key={row.key} className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-black text-gray-900 text-sm truncate">{row.order.customer_name}</p>
+                      <p className="text-[11px] font-semibold text-gray-400 mt-0.5">{new Date(row.order.created_at).toLocaleString('en-GB')}</p>
+                    </div>
+                    <OrderStatusBadge status={row.status} />
+                  </div>
+
+                  <div className="border-t border-gray-100 pt-3 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-bold text-gray-800 text-sm leading-snug">{row.item.item_name}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-semibold text-gray-500">
+                      <span>Drawing: {row.item.drawing_no || '-'}</span>
+                      <span className="font-black text-gray-700 text-xs">Qty: {row.item.qty}</span>
+                      {row.item.work_order_id && <span className="text-indigo-600 font-black">WO #{row.item.work_order_id}</span>}
+                    </div>
+                    {row.order.created_by && (
+                      <p className="text-[11px] font-semibold text-gray-400 truncate" title={row.order.created_by}>Sent by: {row.order.created_by}</p>
+                    )}
+                    {row.status === 'Rejected' && row.item.rejection_reason && (
+                      <p className="text-[11px] font-semibold text-red-500 bg-red-50 rounded-lg px-2.5 py-1.5">{row.item.rejection_reason}</p>
+                    )}
+                  </div>
+
+                  <div className="border-t border-gray-100 pt-3">
+                    <label className="text-[10px] font-black uppercase text-gray-400 mb-1 block">ETD</label>
+                    <input
+                      type="date"
+                      value={editedEtd}
+                      onChange={e => setEtdEdits(prev => ({ ...prev, [row.key]: e.target.value }))}
+                      disabled={!isActionable}
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs font-semibold outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
+                    />
+                  </div>
+
+                  {isActionable && (
+                    <div className="flex gap-2 pt-1">
+                      {etdChanged && (
+                        <button onClick={() => handleSaveEtd(row)} disabled={actionLoading === row.key} className="flex-1 py-2.5 rounded-xl bg-blue-50 text-blue-600 text-xs font-bold hover:bg-blue-100 transition-colors disabled:opacity-50 flex items-center justify-center gap-1">
+                          <Save size={14}/> Save ETD
+                        </button>
+                      )}
+                      <button onClick={() => handleAccept(row)} disabled={actionLoading === row.key} className="flex-1 py-2.5 rounded-xl bg-green-50 text-green-600 text-xs font-bold hover:bg-green-100 transition-colors disabled:opacity-50 flex items-center justify-center gap-1">
+                        <CheckCircle size={14}/> {actionLoading === row.key ? '...' : 'Accept'}
+                      </button>
+                      <button onClick={() => setRejectModal({ orderId: row.order.id, itemIndex: row.itemIndex, itemName: row.item.item_name, reason: '' })} disabled={actionLoading === row.key} className="flex-1 py-2.5 rounded-xl bg-red-50 text-red-600 text-xs font-bold hover:bg-red-100 transition-colors disabled:opacity-50 flex items-center justify-center gap-1">
+                        <XCircle size={14}/> Reject
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {rejectModal && (
