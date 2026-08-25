@@ -69,6 +69,8 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
   const [orderTab, setOrderTab] = useState<'products' | 'order'>('products');
   const [orderSortField, setOrderSortField] = useState<'date' | 'etd' | 'status'>('date');
   const [orderSortAsc, setOrderSortAsc] = useState(false);
+  const [orderSearch, setOrderSearch] = useState('');
+  const [orderStatusFilter, setOrderStatusFilter] = useState<string>('All');
 
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -344,18 +346,37 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
     }
   };
   const orderSortLabel = (field: 'date' | 'etd' | 'status') => orderSortField === field ? (orderSortAsc ? ' ↑' : ' ↓') : '';
-  const orderRows = orders.flatMap(order => (order.items || []).map((item: any, index: number) => ({
+  const allOrderRows = orders.flatMap(order => (order.items || []).map((item: any, index: number) => ({
     key: `${order.id}-${index}`,
     order,
     item,
     status: getPortalItemStatus(order, item),
-  }))).sort((a, b) => {
-    let cmp = 0;
-    if (orderSortField === 'date') cmp = new Date(a.order.created_at).getTime() - new Date(b.order.created_at).getTime();
-    else if (orderSortField === 'etd') cmp = (a.item.etd || '').localeCompare(b.item.etd || '');
-    else cmp = getPortalStatusLabel(a.status).localeCompare(getPortalStatusLabel(b.status));
-    return orderSortAsc ? cmp : -cmp;
-  });
+  })));
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = { All: allOrderRows.length };
+    for (const row of allOrderRows) { counts[row.status] = (counts[row.status] || 0) + 1; }
+    return counts;
+  }, [allOrderRows]);
+  const orderRows = useMemo(() => {
+    let rows = allOrderRows;
+    if (orderStatusFilter !== 'All') rows = rows.filter(r => r.status === orderStatusFilter);
+    if (orderSearch.trim()) {
+      const q = orderSearch.toLowerCase();
+      rows = rows.filter(r =>
+        (r.item.item_name || '').toLowerCase().includes(q) ||
+        String(r.item.work_order_id || '').includes(q) ||
+        (r.order.created_by || '').toLowerCase().includes(q) ||
+        (r.item.drawing_no || '').toLowerCase().includes(q)
+      );
+    }
+    return rows.sort((a, b) => {
+      let cmp = 0;
+      if (orderSortField === 'date') cmp = new Date(a.order.created_at).getTime() - new Date(b.order.created_at).getTime();
+      else if (orderSortField === 'etd') cmp = (a.item.etd || '').localeCompare(b.item.etd || '');
+      else cmp = getPortalStatusLabel(a.status).localeCompare(getPortalStatusLabel(b.status));
+      return orderSortAsc ? cmp : -cmp;
+    });
+  }, [allOrderRows, orderStatusFilter, orderSearch, orderSortField, orderSortAsc]);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -392,10 +413,43 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
               <h2 className="text-sm font-black text-slate-800 flex items-center gap-2"><PackageCheck size={16} /> Orders</h2>
               <button onClick={loadData} className="p-2.5 rounded-xl bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors"><RefreshCw size={14} /></button>
             </div>
+            {allOrderRows.length > 0 && (
+              <div className="px-4 sm:px-6 py-3 border-b border-slate-100 space-y-3">
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    value={orderSearch}
+                    onChange={e => setOrderSearch(e.target.value)}
+                    placeholder="Search by item, WO #, sent by..."
+                    className="w-full pl-8 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-400 transition-all placeholder:text-slate-400"
+                  />
+                  {orderSearch && (
+                    <button onClick={() => setOrderSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {(['All', ...Object.keys(statusCounts).filter(s => s !== 'All')] as const).map(status => (
+                    <button
+                      key={status}
+                      onClick={() => setOrderStatusFilter(status)}
+                      className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
+                        orderStatusFilter === status
+                          ? 'bg-sky-700 text-white shadow-sm'
+                          : 'bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700'
+                      }`}
+                    >
+                      {status} {statusCounts[status] !== undefined && <span className={`ml-1 ${orderStatusFilter === status ? 'text-sky-200' : 'text-slate-400'}`}>({statusCounts[status]})</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {loading ? (
               <div className="p-8 text-center text-sm font-bold text-slate-500 flex items-center justify-center gap-2"><Loader2 size={16} className="animate-spin" /> Loading...</div>
             ) : orderRows.length === 0 ? (
-              <div className="p-8 text-center text-sm font-bold text-slate-400">No orders yet.</div>
+              <div className="p-8 text-center text-sm font-bold text-slate-400">{allOrderRows.length === 0 ? 'No orders yet.' : 'No orders match your search.'}</div>
             ) : (
               <>
                 {/* Desktop Table */}
