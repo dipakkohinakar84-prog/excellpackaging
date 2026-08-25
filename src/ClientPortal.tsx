@@ -70,7 +70,7 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
   const [orderSortField, setOrderSortField] = useState<'date' | 'etd' | 'status'>('date');
   const [orderSortAsc, setOrderSortAsc] = useState(false);
   const [orderSearch, setOrderSearch] = useState('');
-  const [orderStatusFilter, setOrderStatusFilter] = useState<string>('All');
+  const [orderStatusFilter, setOrderStatusFilter] = useState<string>('Pending');
 
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -108,6 +108,38 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const allOrderRows = orders.flatMap(order => (order.items || []).map((item: any, index: number) => ({
+    key: `${order.id}-${index}`,
+    order,
+    item,
+    status: getPortalItemStatus(order, item),
+  })));
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = { All: allOrderRows.length };
+    for (const row of allOrderRows) { counts[row.status] = (counts[row.status] || 0) + 1; }
+    return counts;
+  }, [allOrderRows]);
+  const orderRows = useMemo(() => {
+    let rows = allOrderRows;
+    if (orderStatusFilter !== 'All') rows = rows.filter(r => r.status === orderStatusFilter);
+    if (orderSearch.trim()) {
+      const q = orderSearch.toLowerCase();
+      rows = rows.filter(r =>
+        (r.item.item_name || '').toLowerCase().includes(q) ||
+        String(r.item.work_order_id || '').includes(q) ||
+        (r.order.created_by || '').toLowerCase().includes(q) ||
+        (r.item.drawing_no || '').toLowerCase().includes(q)
+      );
+    }
+    return rows.sort((a, b) => {
+      let cmp = 0;
+      if (orderSortField === 'date') cmp = new Date(a.order.created_at).getTime() - new Date(b.order.created_at).getTime();
+      else if (orderSortField === 'etd') cmp = (a.item.etd || '').localeCompare(b.item.etd || '');
+      else cmp = getPortalStatusLabel(a.status).localeCompare(getPortalStatusLabel(b.status));
+      return orderSortAsc ? cmp : -cmp;
+    });
+  }, [allOrderRows, orderStatusFilter, orderSearch, orderSortField, orderSortAsc]);
+
   const handleLogin = async () => {
     setLoginError('');
     setLoggingIn(true);
@@ -129,6 +161,14 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
     if (!clientUser) return;
     loadData();
   }, [clientUser]);
+
+  useEffect(() => {
+    if (orderStatusFilter !== 'Pending' || orders.length === 0) return;
+    const hasPending = orders.some(order =>
+      (order.items || []).some((item: any) => getPortalItemStatus(order, item) === 'Pending')
+    );
+    if (!hasPending) setOrderStatusFilter('All');
+  }, [orders]);
 
   const loadData = async () => {
     if (!clientUser) return;
@@ -346,37 +386,6 @@ const ClientPortal: React.FC<Props> = ({ clientUser, onLogin, onLogout }) => {
     }
   };
   const orderSortLabel = (field: 'date' | 'etd' | 'status') => orderSortField === field ? (orderSortAsc ? ' ↑' : ' ↓') : '';
-  const allOrderRows = orders.flatMap(order => (order.items || []).map((item: any, index: number) => ({
-    key: `${order.id}-${index}`,
-    order,
-    item,
-    status: getPortalItemStatus(order, item),
-  })));
-  const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = { All: allOrderRows.length };
-    for (const row of allOrderRows) { counts[row.status] = (counts[row.status] || 0) + 1; }
-    return counts;
-  }, [allOrderRows]);
-  const orderRows = useMemo(() => {
-    let rows = allOrderRows;
-    if (orderStatusFilter !== 'All') rows = rows.filter(r => r.status === orderStatusFilter);
-    if (orderSearch.trim()) {
-      const q = orderSearch.toLowerCase();
-      rows = rows.filter(r =>
-        (r.item.item_name || '').toLowerCase().includes(q) ||
-        String(r.item.work_order_id || '').includes(q) ||
-        (r.order.created_by || '').toLowerCase().includes(q) ||
-        (r.item.drawing_no || '').toLowerCase().includes(q)
-      );
-    }
-    return rows.sort((a, b) => {
-      let cmp = 0;
-      if (orderSortField === 'date') cmp = new Date(a.order.created_at).getTime() - new Date(b.order.created_at).getTime();
-      else if (orderSortField === 'etd') cmp = (a.item.etd || '').localeCompare(b.item.etd || '');
-      else cmp = getPortalStatusLabel(a.status).localeCompare(getPortalStatusLabel(b.status));
-      return orderSortAsc ? cmp : -cmp;
-    });
-  }, [allOrderRows, orderStatusFilter, orderSearch, orderSortField, orderSortAsc]);
 
   return (
     <div className="min-h-screen bg-slate-50">
