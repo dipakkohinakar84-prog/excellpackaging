@@ -1,4 +1,5 @@
 ﻿import React, { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue, Fragment } from 'react';
+import DrawingPdfPreview from './DrawingPdfPreview';
 import { 
   Users, 
   Building2, 
@@ -4551,10 +4552,10 @@ const ItemList: React.FC<{ onError: () => void; editingId?: number }> = ({ onErr
         </form>
       </Modal>
 
-      <Modal isOpen={isImageModalOpen} onClose={() => setIsImageModalOpen(false)} title="Drawing PDF Preview" maxWidthClassName="max-w-6xl">
+       <Modal isOpen={isImageModalOpen} onClose={() => setIsImageModalOpen(false)} title="Drawing PDF Preview" maxWidthClassName="max-w-6xl">
          {selectedItem?.drawing_image_url ? (
             <div className="flex flex-col items-center gap-4">
-               <iframe src={selectedItem.drawing_image_url} title="Drawing PDF" className="w-full h-[70vh] rounded-xl border shadow-xl bg-white" />
+               <DrawingPdfPreview url={selectedItem.drawing_image_url} />
                <a href={selectedItem.drawing_image_url} target="_blank" rel="noreferrer" className="text-xs font-black text-blue-600 hover:text-blue-700 uppercase tracking-wider">Open PDF in new tab</a>
                <p className="text-sm font-bold text-gray-500 uppercase tracking-widest">{selectedItem.name} ({selectedItem.drawing_no})</p>
             </div>
@@ -5617,20 +5618,20 @@ const WorkerDashboard: React.FC<{ onError: () => void; onView: (id: number) => v
 
       <Modal isOpen={isImageModalOpen} onClose={() => setIsImageModalOpen(false)} title="Drawing PDF Preview" maxWidthClassName="max-w-6xl">
          <div className="flex flex-col items-center">
-            {selectedImageUrl ? (
-               <div className="w-full space-y-3">
-                 <iframe src={selectedImageUrl} title="Drawing PDF" className="w-full h-[55vh] sm:h-[70vh] rounded-xl border shadow-xl bg-white" />
-                 <div className="flex justify-center">
-                   <a href={selectedImageUrl} target="_blank" rel="noreferrer" className="text-xs font-black text-blue-600 hover:text-blue-700 uppercase tracking-wider">Open PDF in new tab</a>
-                 </div>
-               </div>
-            ) : (
-               <p className="text-gray-500 italic font-semibold py-10">No drawing PDF available.</p>
-            )}
-         </div>
-      </Modal>
+             {selectedImageUrl ? (
+                <div className="w-full space-y-3">
+                  <DrawingPdfPreview url={selectedImageUrl} className="w-full h-[55vh] sm:h-[70vh] rounded-xl border shadow-xl bg-white" />
+                  <div className="flex justify-center">
+                    <a href={selectedImageUrl} target="_blank" rel="noreferrer" className="text-xs font-black text-blue-600 hover:text-blue-700 uppercase tracking-wider">Open PDF in new tab</a>
+                  </div>
+                </div>
+             ) : (
+                <p className="text-gray-500 italic font-semibold py-10">No drawing PDF available.</p>
+             )}
+          </div>
+       </Modal>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-3">
+       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-3">
         {paginatedOrders.map(wo => (
           <div 
             key={wo.id} 
@@ -6639,7 +6640,7 @@ const WorkOrderList: React.FC<{ onError: () => void; onView: (id: number) => voi
          <div className="flex flex-col items-center">
             {selectedImageUrl ? (
                <div className="w-full space-y-3">
-                 <iframe src={selectedImageUrl} title="Drawing PDF" className="w-full h-[55vh] sm:h-[70vh] rounded-xl border shadow-xl bg-white" />
+                  <DrawingPdfPreview url={selectedImageUrl} className="w-full h-[55vh] sm:h-[70vh] rounded-xl border shadow-xl bg-white" />
                  <div className="flex justify-center">
                    <a href={selectedImageUrl} target="_blank" rel="noreferrer" className="text-xs font-black text-blue-600 hover:text-blue-700 uppercase tracking-wider">Open PDF in new tab</a>
                  </div>
